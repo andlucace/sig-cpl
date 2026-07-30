@@ -440,9 +440,10 @@ VPS Hostinger:
   (reaproveitada — não foi criada uma chave nova), configurada em
   `~/.ssh/config` como host `rh-nepen-hostinger`. **Não foi usado nenhum
   mecanismo de deploy automático do Hostinger** (o `VPS_createNewProjectV1`
-  do MCP aceita URL/repo GitHub, mas exigiria um repositório público — como
-  o projeto ainda não tem `git init`, optei por replicar o que já havia sido
-  feito manualmente para o `rh-nepen`: copiar os arquivos direto pra VPS).
+  do MCP aceita URL/repo GitHub, mas exigiria um repositório público — o
+  projeto tem `git init` local desde uma sessão seguinte à do deploy, mas
+  sem remoto no GitHub, então o deploy continua replicando o que já havia
+  sido feito manualmente para o `rh-nepen`: copiar os arquivos direto pra VPS).
 - **Arquivos em produção**: `/opt/sigcpl/` na VPS — cópia dos arquivos do
   projeto (via `tar` piped por `ssh`, excluindo `.venv/`, `uploads/`,
   `__pycache__/`, `.env`) + `.env.prod` com os segredos de produção (criado
@@ -499,9 +500,10 @@ de novo enquanto existir pelo menos um administrador.
 - Sem backup automático do volume `pgdata`/`uploads` configurado ainda
   (RNF-005 — pendente).
 - Sem CI/CD — reimplantação é manual (comandos acima).
-- `git init` ainda não foi feito neste projeto — a implantação não depende
-  disso (foi feita por cópia direta de arquivo, replicando como o
-  `rh-nepen` já funcionava), mas segue como boa prática pendente.
+- O projeto tem repositório git local (sem remoto/GitHub ainda) — a
+  implantação não depende dele (é feita por cópia direta de arquivo,
+  replicando como o `rh-nepen` já funcionava). Nada impede de configurar um
+  remoto depois se for útil (ex.: para revisão de código ou CI/CD futuro).
 
 ## Próximos passos sugeridos
 

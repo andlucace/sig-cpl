@@ -29,10 +29,13 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   ver seção própria abaixo, "Deploy em produção", com todos os detalhes de
   como foi feito e como reimplantar).
 - **Local do projeto:** `C:\Users\andlu\sig-cpl`
-- **Não é um repositório git** — nenhum `git init` foi feito. Isso não
-  bloqueou o deploy (feito por cópia direta de arquivo via SSH, não por
-  git), mas se for inicializar, cuidado para não commitar `.env`/`.env.prod`
-  (já estão no `.gitignore`).
+- **É um repositório git** desde esta sessão (`git init` + commit inicial
+  `e94d011`, branch `master`, sem remoto configurado — não foi criado
+  nenhum repositório no GitHub/GitLab). `.env`/`.env.prod` estão no
+  `.gitignore`, nunca foram commitados. O deploy em si não depende deste
+  repositório (foi feito por cópia direta de arquivo via SSH, ver seção
+  "Deploy em produção") — o `git init` foi um pedido separado do usuário,
+  não um pré-requisito técnico do deploy.
 - **Postgres:** container Docker `sigcpl_db`, porta **5433** (não 5432 —
   a 5432 padrão está ocupada por outro projeto do usuário, `rh_nepen_db`).
   Sobe com `docker compose up -d` na raiz do projeto.
@@ -329,8 +332,10 @@ um novo):
    (`openssl s_client` — `issuer=Let's Encrypt`, não self-signed).
 
 **Onde as coisas vivem na VPS:**
-- Código: `/opt/sigcpl/` (cópia de arquivo, não é um clone git — o projeto
-  local também não é um repositório git, ver nota no topo deste arquivo).
+- Código: `/opt/sigcpl/` — cópia de arquivo via `tar`+`ssh`, não é um clone
+  git (o repositório local existe desde esta sessão, mas não tem remoto, e
+  o deploy não passa por ele — reimplantar continua sendo o mesmo comando
+  de cópia de arquivo, não um `git pull` na VPS).
 - Segredos: `/opt/sigcpl/.env.prod` (só na VPS, `chmod 600`, nunca esteve
   neste repositório nem em texto puro no disco local).
 - Volumes Docker nomeados: `sigcpl_pgdata` (dados do Postgres) e
