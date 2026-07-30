@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}SIG-CPL — Atualização enviada{% endblock %}
+{% block nav %}{% endblock %}
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-6">
+            <div class="card text-center">
+                <div class="card-body py-5">
+                    <i class="bi bi-check-circle-fill text-success display-4"></i>
+                    <h1 class="h4 mt-3">Obrigado!</h1>
+                    <p class="text-body-secondary">
+                        O cadastro de <strong>{{ entidade.razao_social }}</strong> foi atualizado com sucesso.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

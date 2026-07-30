@@ -1,0 +1,59 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — {{ campanha.titulo }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/cadastro" class="link-secondary text-decoration-none">Cadastro e dados</a>
+    <i class="bi bi-chevron-right small mx-1"></i>{{ campanha.titulo }}
+{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1"><i class="bi bi-megaphone text-primary me-2"></i>{{ campanha.titulo }}</h1>
+    {% if campanha.descricao %}<p>{{ campanha.descricao }}</p>{% endif %}
+    <p class="text-body-secondary small">
+        {% if campanha.data_inicio %}Início: {{ campanha.data_inicio.strftime('%d/%m/%Y') }}{% endif %}
+        {% if campanha.data_fim %} — Fim: {{ campanha.data_fim.strftime('%d/%m/%Y') }}{% endif %}
+    </p>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-envelope me-2"></i>Convites enviados
+                </div>
+                <div class="list-group list-group-flush" id="lista-convites">
+                    {% for convite in convites %}
+                        {% include "restrito/cadastro/fragments/convite_item.html" %}
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhuma entidade convidada ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Convidar entidade
+                </div>
+                <div class="card-body">
+                    {% if entidades_convidaveis %}
+                        <form hx-post="/painel/cadastro/campanhas/{{ campanha.id }}/convites"
+                              hx-target="#lista-convites" hx-swap="afterbegin">
+                            <div class="mb-3">
+                                <select class="form-select" name="entidade_id" required>
+                                    {% for entidade in entidades_convidaveis %}
+                                        <option value="{{ entidade.id }}">{{ entidade.razao_social }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-send me-1"></i>Convidar
+                            </button>
+                        </form>
+                    {% else %}
+                        <p class="text-body-secondary small mb-0">
+                            Todas as entidades vinculadas à CPL já foram convidadas nesta campanha.
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

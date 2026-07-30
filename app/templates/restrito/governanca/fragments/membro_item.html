@@ -1,0 +1,8 @@
+<div class="list-group-item" id="membro-{{ membro.id }}">
+    <i class="bi bi-person-fill text-primary me-2"></i>
+    <strong>{{ membro.pessoa.nome }}</strong> — {{ membro.funcao }}
+    <small class="text-body-secondary d-block ms-4">
+        Desde {{ membro.data_inicio.strftime('%d/%m/%Y') }}
+        {% if membro.data_fim %} até {{ membro.data_fim.strftime('%d/%m/%Y') }}{% endif %}
+    </small>
+</div>

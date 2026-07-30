@@ -1,0 +1,56 @@
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.core.deps import get_current_user
+from app.core.rbac import PAPEIS_GESTAO, PAPEIS_GOVERNANCA_LEITURA, verificar_papel
+from app.db.session import get_db
+from app.models.pessoa import Pessoa
+from app.models.usuario import Usuario
+from app.schemas.pessoa import PessoaCreate, PessoaRead
+
+router = APIRouter(prefix="/pessoas", tags=["Cadastro e cadeia"])
+
+
+@router.post("", response_model=PessoaRead, status_code=status.HTTP_201_CREATED)
+def criar_pessoa(
+    dados: PessoaCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Pessoa:
+    """RF-007: cadastra pessoa física — representante, contato ou membro,
+    que poderá ser vinculada a entidades, CPLs e órgãos de governança.
+
+    Nota de escopo do RBAC: assim como Entidade, Pessoa não carrega um
+    `cpl_id` próprio — a checagem é só por papel, sem escopo de CPL."""
+
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO)
+
+    pessoa = Pessoa(**dados.model_dump())
+    db.add(pessoa)
+    db.commit()
+    db.refresh(pessoa)
+    return pessoa
+
+
+@router.get("", response_model=list[PessoaRead])
+def listar_pessoas(
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[Pessoa]:
+    verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_LEITURA)
+    return db.query(Pessoa).order_by(Pessoa.nome).all()
+
+
+@router.get("/{pessoa_id}", response_model=PessoaRead)
+def obter_pessoa(
+    pessoa_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Pessoa:
+    verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_LEITURA)
+    pessoa = db.get(Pessoa, pessoa_id)
+    if pessoa is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pessoa não encontrada.")
+    return pessoa

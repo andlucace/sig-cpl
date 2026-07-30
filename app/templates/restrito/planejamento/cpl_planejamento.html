@@ -1,0 +1,54 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Planejamento — {{ cpl.nome }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/planejamento" class="link-secondary text-decoration-none">Planejamento</a>
+    <i class="bi bi-chevron-right small mx-1"></i>{{ cpl.nome }}
+{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-3">Planejamento Estratégico — {{ cpl.nome }}</h1>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-compass text-primary me-2"></i>Ciclos de planejamento
+                </div>
+                <div class="list-group list-group-flush" id="lista-planejamentos">
+                    {% for planejamento in planejamentos %}
+                        {% include "restrito/planejamento/fragments/planejamento_item.html" %}
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhum ciclo de planejamento criado ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Novo ciclo
+                </div>
+                <div class="card-body">
+                    <form hx-post="/painel/planejamento/cpls/{{ cpl.id }}"
+                          hx-target="#lista-planejamentos" hx-swap="afterbegin">
+                        <div class="mb-3">
+                            <label class="form-label">Ciclo</label>
+                            <input type="text" class="form-control" name="ciclo" placeholder="ex.: 2026-2027" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Caracterização</label>
+                            <textarea class="form-control" name="caracterizacao" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Histórico</label>
+                            <textarea class="form-control" name="historico" rows="3"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-plus-lg me-1"></i>Criar ciclo
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

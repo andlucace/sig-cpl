@@ -1,0 +1,35 @@
+[project]
+name = "sig-cpl"
+version = "0.1.0"
+description = "Sistema Integrado de Gestão de Cadeia Produtiva Local (SIG-CPL) — referência Programa SP Produz"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",
+    "alembic>=1.13",
+    "pydantic[email]>=2.8",
+    "pydantic-settings>=2.4",
+    "python-jose[cryptography]>=3.3",
+    "bcrypt>=4.1",
+    "python-multipart>=0.0.9",
+    "jinja2>=3.1",
+    "itsdangerous>=2.2",
+    "openpyxl>=3.1",
+    "fpdf2>=2.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

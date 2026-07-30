@@ -1,0 +1,25 @@
+<div class="list-group-item" id="iniciativa-{{ iniciativa.id }}">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div>
+            <i class="bi bi-rocket-takeoff-fill text-primary me-2"></i><strong>{{ iniciativa.titulo }}</strong>
+            <small class="text-body-secondary d-block ms-4">
+                {% if iniciativa.prazo %}Prazo: {{ iniciativa.prazo.strftime('%d/%m/%Y') }}{% endif %}
+                {% if iniciativa.responsavel %} — Responsável: {{ iniciativa.responsavel.nome }}{% endif %}
+            </small>
+            {% if iniciativa.descricao %}
+                <small class="text-body-secondary d-block ms-4">{{ iniciativa.descricao }}</small>
+            {% endif %}
+        </div>
+        <select class="form-select form-select-sm w-auto" name="status"
+                hx-post="/painel/planejamento/iniciativas/{{ iniciativa.id }}/status"
+                hx-trigger="change"
+                hx-target="#iniciativa-{{ iniciativa.id }}"
+                hx-swap="outerHTML">
+            {% for opcao in status_opcoes %}
+                <option value="{{ opcao.value }}" {% if opcao == iniciativa.status %}selected{% endif %}>
+                    {{ opcao.value.replace('_', ' ') }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+</div>

@@ -1,0 +1,63 @@
+from app.models.auditoria import RegistroAuditoria
+from app.models.cadastro_dinamico import (
+    CampanhaCadastral,
+    CampanhaConvite,
+    DiagnosticoCadastral,
+    ImportacaoLinha,
+    ImportacaoLote,
+)
+from app.models.cpl import CPL
+from app.models.documento import Documento
+from app.models.entidade import Entidade, EntidadeCPL, EntidadeElo
+from app.models.governanca import (
+    DeclaracaoImpedimento,
+    Deliberacao,
+    MembroOrgao,
+    OrgaoGovernanca,
+    Presenca,
+    Reuniao,
+    TarefaGovernanca,
+    VotoRegistro,
+)
+from app.models.pessoa import Pessoa, PessoaVinculo
+from app.models.planejamento import (
+    DiagnosticoItem,
+    IndicadorEstrategico,
+    IniciativaEstrategica,
+    MetaEstrategica,
+    ObjetivoEstrategico,
+    PlanejamentoEstrategico,
+)
+from app.models.usuario import Usuario, UsuarioPapel
+
+__all__ = [
+    "CPL",
+    "Entidade",
+    "EntidadeCPL",
+    "EntidadeElo",
+    "Pessoa",
+    "PessoaVinculo",
+    "Usuario",
+    "UsuarioPapel",
+    "OrgaoGovernanca",
+    "MembroOrgao",
+    "Reuniao",
+    "Presenca",
+    "Deliberacao",
+    "VotoRegistro",
+    "TarefaGovernanca",
+    "DeclaracaoImpedimento",
+    "PlanejamentoEstrategico",
+    "DiagnosticoItem",
+    "ObjetivoEstrategico",
+    "MetaEstrategica",
+    "IniciativaEstrategica",
+    "IndicadorEstrategico",
+    "DiagnosticoCadastral",
+    "CampanhaCadastral",
+    "CampanhaConvite",
+    "ImportacaoLote",
+    "ImportacaoLinha",
+    "Documento",
+    "RegistroAuditoria",
+]

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}SIG-CPL — Atualização cadastral{% endblock %}
+{% block nav %}{% endblock %}
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-8">
+            <div class="mb-4">
+                <h1 class="h4 mb-1"><i class="bi bi-megaphone text-primary me-2"></i>{{ campanha.titulo }}</h1>
+                {% if campanha.descricao %}<p class="text-body-secondary">{{ campanha.descricao }}</p>{% endif %}
+                <p class="text-body-secondary small">
+                    Atualização cadastral de <strong>{{ entidade.razao_social }}</strong>. Não é
+                    necessário login — este link é pessoal e intransferível.
+                </p>
+            </div>
+
+            <form method="post" action="/atualizacao/{{ convite.token }}" class="card">
+                <div class="card-body">
+                    <h2 class="h6 text-body-secondary text-uppercase">Dados cadastrais</h2>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label">Razão social</label>
+                            <input type="text" class="form-control" name="razao_social" value="{{ entidade.razao_social }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Nome fantasia</label>
+                            <input type="text" class="form-control" name="nome_fantasia" value="{{ entidade.nome_fantasia or '' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Município</label>
+                            <input type="text" class="form-control" name="municipio" value="{{ entidade.municipio or '' }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">UF</label>
+                            <input type="text" class="form-control" name="uf" maxlength="2" value="{{ entidade.uf or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Endereço</label>
+                            <input type="text" class="form-control" name="endereco" value="{{ entidade.endereco or '' }}">
+                        </div>
+                    </div>
+
+                    <h2 class="h6 text-body-secondary text-uppercase">Diagnóstico</h2>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Atividades e produtos</label>
+                            <textarea class="form-control" name="atividades_produtos" rows="2">{{ (diagnostico.atividades_produtos or '') if diagnostico else '' }}</textarea>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Diferenciais competitivos</label>
+                            <textarea class="form-control" name="diferenciais_competitivos" rows="2">{{ (diagnostico.diferenciais_competitivos or '') if diagnostico else '' }}</textarea>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Faixa de faturamento</label>
+                            <input type="text" class="form-control" name="faturamento_faixa" value="{{ (diagnostico.faturamento_faixa or '') if diagnostico else '' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Empregos diretos</label>
+                            <input type="number" min="0" class="form-control" name="empregos_diretos" value="{{ (diagnostico.empregos_diretos if diagnostico.empregos_diretos is not none else '') if diagnostico else '' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Empregos indiretos</label>
+                            <input type="number" min="0" class="form-control" name="empregos_indiretos" value="{{ (diagnostico.empregos_indiretos if diagnostico.empregos_indiretos is not none else '') if diagnostico else '' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Realiza inovação?</label>
+                            <select class="form-select" name="realiza_inovacao">
+                                <option value="nao" {% if diagnostico and not diagnostico.realiza_inovacao %}selected{% endif %}>Não</option>
+                                <option value="sim" {% if diagnostico and diagnostico.realiza_inovacao %}selected{% endif %}>Sim</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Realiza P&D?</label>
+                            <select class="form-select" name="realiza_pd">
+                                <option value="nao" {% if diagnostico and not diagnostico.realiza_pd %}selected{% endif %}>Não</option>
+                                <option value="sim" {% if diagnostico and diagnostico.realiza_pd %}selected{% endif %}>Sim</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Exporta?</label>
+                            <select class="form-select" name="exporta">
+                                <option value="nao" {% if diagnostico and not diagnostico.exporta %}selected{% endif %}>Não</option>
+                                <option value="sim" {% if diagnostico and diagnostico.exporta %}selected{% endif %}>Sim</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Descrição da inovação</label>
+                            <textarea class="form-control" name="descricao_inovacao" rows="2">{{ (diagnostico.descricao_inovacao or '') if diagnostico else '' }}</textarea>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Mercados de exportação</label>
+                            <input type="text" class="form-control" name="mercados_exportacao" value="{{ (diagnostico.mercados_exportacao or '') if diagnostico else '' }}">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Interesse em comissões temáticas</label>
+                            <input type="text" class="form-control" name="interesse_comissoes" value="{{ (diagnostico.interesse_comissoes or '') if diagnostico else '' }}">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary mt-4">
+                        <i class="bi bi-check-lg me-1"></i>Enviar atualização
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock %}

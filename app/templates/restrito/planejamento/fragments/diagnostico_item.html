@@ -1,0 +1,11 @@
+<div class="list-group-item" id="diagnostico-{{ item.id }}">
+    <span class="badge
+        {% if item.tipo.value == 'forca' %}text-bg-success
+        {% elif item.tipo.value in ['fraqueza', 'ameaca'] %}text-bg-danger
+        {% elif item.tipo.value == 'oportunidade' %}text-bg-info
+        {% else %}text-bg-secondary{% endif %} me-2">{{ item.tipo.value.replace('_', ' ') }}</span>
+    {{ item.descricao }}
+    {% if item.elo_relacionado %}
+        <small class="text-body-secondary d-block ms-1">Elo: {{ item.elo_relacionado.value.replace('_', ' ') }}</small>
+    {% endif %}
+</div>

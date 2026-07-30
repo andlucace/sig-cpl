@@ -1,0 +1,37 @@
+<div class="card mb-4" id="deliberacao-resultado-{{ deliberacao.id }}">
+    <div class="card-body">
+        <p class="mb-2">
+            <i class="bi bi-info-circle me-1"></i>Resultado atual:
+            <span class="badge
+                {% if deliberacao.resultado.value == 'aprovada' %}text-bg-success
+                {% elif deliberacao.resultado.value in ['rejeitada', 'sem_quorum'] %}text-bg-danger
+                {% else %}text-bg-warning{% endif %}">{{ deliberacao.resultado.value.replace('_', ' ') }}</span>
+        </p>
+        {% if deliberacao.evidencia_execucao %}
+            <p class="text-body-secondary small">Evidência de execução: {{ deliberacao.evidencia_execucao }}</p>
+        {% endif %}
+
+        <form class="row g-3" hx-post="/painel/governanca/deliberacoes/{{ deliberacao.id }}/resultado"
+              hx-target="#deliberacao-resultado-{{ deliberacao.id }}" hx-swap="outerHTML">
+            <div class="col-md-4">
+                <label class="form-label">Resultado</label>
+                <select class="form-select" name="resultado">
+                    {% for opcao in resultado_opcoes %}
+                        <option value="{{ opcao.value }}" {% if opcao == deliberacao.resultado %}selected{% endif %}>
+                            {{ opcao.value.replace('_', ' ') }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12">
+                <label class="form-label">Evidência de execução</label>
+                <textarea class="form-control" name="evidencia_execucao" rows="2">{{ deliberacao.evidencia_execucao or '' }}</textarea>
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-save me-1"></i>Registrar resultado
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

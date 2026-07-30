@@ -1,0 +1,164 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Planejamento {{ planejamento.ciclo }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/planejamento" class="link-secondary text-decoration-none">Planejamento</a>
+    <i class="bi bi-chevron-right small mx-1"></i>
+    <a href="/painel/planejamento/cpls/{{ cpl.id }}" class="link-secondary text-decoration-none">{{ cpl.nome }}</a>
+    <i class="bi bi-chevron-right small mx-1"></i>ciclo {{ planejamento.ciclo }}
+{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-3"><i class="bi bi-compass text-primary me-2"></i>Planejamento Estratégico — ciclo {{ planejamento.ciclo }}</h1>
+
+    {% include "restrito/planejamento/fragments/planejamento_status.html" %}
+
+    <div class="card mb-4">
+        <div class="card-header bg-transparent fw-semibold">
+            <i class="bi bi-file-text me-2"></i>Caracterização e contexto (RF-021)
+        </div>
+        <div class="card-body">
+            <form method="post" action="/painel/planejamento/{{ planejamento.id }}/narrativa">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Caracterização</label>
+                        <textarea class="form-control" name="caracterizacao" rows="3">{{ planejamento.caracterizacao or '' }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Histórico</label>
+                        <textarea class="form-control" name="historico" rows="3">{{ planejamento.historico or '' }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Mercado e competitividade</label>
+                        <textarea class="form-control" name="mercado" rows="3">{{ planejamento.mercado or '' }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Inovação e tecnologia</label>
+                        <textarea class="form-control" name="inovacao" rows="3">{{ planejamento.inovacao or '' }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Impactos socioambientais</label>
+                        <textarea class="form-control" name="impactos" rows="3">{{ planejamento.impactos or '' }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Internacionalização</label>
+                        <textarea class="form-control" name="internacionalizacao" rows="3">{{ planejamento.internacionalizacao or '' }}</textarea>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-outline-primary mt-3">
+                    <i class="bi bi-save me-1"></i>Salvar seções
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-clipboard-data me-2"></i>Diagnóstico (SWOT e lacunas)
+                </div>
+                <div class="list-group list-group-flush" id="lista-diagnosticos">
+                    {% for item in diagnosticos %}
+                        {% include "restrito/planejamento/fragments/diagnostico_item.html" %}
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhum item de diagnóstico registrado ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-bullseye me-2"></i>Objetivos estratégicos
+                </div>
+                <div class="list-group list-group-flush" id="lista-objetivos">
+                    {% for objetivo in objetivos %}
+                        {% with status_opcoes = status_opcoes_objetivo %}
+                            {% include "restrito/planejamento/fragments/objetivo_item.html" %}
+                        {% endwith %}
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhum objetivo cadastrado ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Novo item de diagnóstico
+                </div>
+                <div class="card-body">
+                    <form hx-post="/painel/planejamento/{{ planejamento.id }}/diagnosticos"
+                          hx-target="#lista-diagnosticos" hx-swap="afterbegin">
+                        <div class="mb-3">
+                            <label class="form-label">Tipo</label>
+                            <select class="form-select" name="tipo" required>
+                                {% for tipo in tipos_diagnostico %}
+                                    <option value="{{ tipo.value }}">{{ tipo.value.replace('_', ' ') }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="2" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Elo relacionado (se aplicável)</label>
+                            <select class="form-select" name="elo_relacionado">
+                                <option value="">—</option>
+                                {% for elo in elos %}
+                                    <option value="{{ elo.value }}">{{ elo.value.replace('_', ' ') }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Prioridade (1 a 5)</label>
+                            <input type="number" min="1" max="5" class="form-control" name="prioridade">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-plus-lg me-1"></i>Adicionar
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Novo objetivo
+                </div>
+                <div class="card-body">
+                    <form hx-post="/painel/planejamento/{{ planejamento.id }}/objetivos"
+                          hx-target="#lista-objetivos" hx-swap="afterbegin">
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="2" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Prazo</label>
+                            <select class="form-select" name="prazo" required>
+                                {% for prazo in prazos_objetivo %}
+                                    <option value="{{ prazo.value }}">{{ prazo.value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Responsável</label>
+                            <select class="form-select" name="responsavel_id">
+                                <option value="">—</option>
+                                {% for pessoa in pessoas %}
+                                    <option value="{{ pessoa.id }}">{{ pessoa.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Orçamento estimado (R$)</label>
+                            <input type="number" step="0.01" min="0" class="form-control" name="orcamento_estimado">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-plus-lg me-1"></i>Criar objetivo
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

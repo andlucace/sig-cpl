@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="d-flex" style="min-height: 100vh;">
+    <aside class="sidebar d-flex flex-column p-3 text-white">
+        <a href="/painel" class="d-flex align-items-center gap-2 mb-4 text-white text-decoration-none">
+            <i class="bi bi-diagram-3-fill fs-4"></i>
+            <span class="fs-5 fw-semibold">SIG-CPL</span>
+        </a>
+        <nav class="nav nav-pills flex-column gap-1">
+            <a class="nav-link text-white d-flex align-items-center gap-2 {% if pagina_ativa == 'painel' %}active{% endif %}" href="/painel">
+                <i class="bi bi-speedometer2"></i> Painel
+            </a>
+            <a class="nav-link text-white d-flex align-items-center gap-2 {% if pagina_ativa == 'governanca' %}active{% endif %}" href="/painel/governanca">
+                <i class="bi bi-people-fill"></i> Governança
+            </a>
+            <a class="nav-link text-white d-flex align-items-center gap-2 {% if pagina_ativa == 'planejamento' %}active{% endif %}" href="/painel/planejamento">
+                <i class="bi bi-compass"></i> Planejamento
+            </a>
+            <a class="nav-link text-white d-flex align-items-center gap-2 {% if pagina_ativa == 'cadastro' %}active{% endif %}" href="/painel/cadastro">
+                <i class="bi bi-ui-checks-grid"></i> Cadastro e dados
+            </a>
+            <a class="nav-link text-white d-flex align-items-center gap-2 {% if pagina_ativa == 'documentos' %}active{% endif %}" href="/painel/documentos">
+                <i class="bi bi-file-earmark-text"></i> Documentos
+            </a>
+            <a class="nav-link text-white d-flex align-items-center gap-2 {% if pagina_ativa == 'auditoria' %}active{% endif %}" href="/painel/auditoria">
+                <i class="bi bi-shield-check"></i> Auditoria
+            </a>
+            <a class="nav-link text-white-50 d-flex align-items-center gap-2" href="/docs" target="_blank" rel="noopener">
+                <i class="bi bi-code-slash"></i> API (docs)
+            </a>
+            <a class="nav-link text-white-50 d-flex align-items-center gap-2" href="/" target="_blank" rel="noopener">
+                <i class="bi bi-globe2"></i> Portal público
+            </a>
+        </nav>
+        <div class="mt-auto pt-3 border-top border-secondary-subtle">
+            <div class="small text-white-50 mb-2 text-truncate">
+                <i class="bi bi-person-circle me-1"></i>{{ usuario.email if usuario else "" }}
+            </div>
+            <a class="nav-link text-white-50 d-flex align-items-center gap-2 p-0" href="/logout">
+                <i class="bi bi-box-arrow-right"></i> Sair
+            </a>
+        </div>
+    </aside>
+
+    <div class="flex-grow-1 d-flex flex-column">
+        <header class="navbar bg-body-tertiary border-bottom px-3">
+            <span class="navbar-text small text-body-secondary">{% block subtitulo %}{% endblock %}</span>
+        </header>
+        <main class="container-fluid py-4 flex-grow-1">
+            {% block conteudo %}{% endblock %}
+        </main>
+        <footer class="text-center text-body-secondary small py-3">
+            Sistema Integrado de Gestão de Cadeia Produtiva Local — versão de desenvolvimento.
+        </footer>
+    </div>
+</div>
+{% endblock %}

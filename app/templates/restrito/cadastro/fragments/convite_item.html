@@ -1,0 +1,16 @@
+<div class="list-group-item" id="convite-{{ convite.id }}">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span>
+            <i class="bi bi-envelope me-2"></i>{{ convite.entidade.razao_social }}
+            <span class="badge {{ 'text-bg-success' if convite.respondido else 'text-bg-warning' }} ms-2">
+                {{ 'respondido' if convite.respondido else 'pendente' }}
+            </span>
+        </span>
+        {% if not convite.respondido %}
+            <div class="input-group input-group-sm" style="max-width: 380px;">
+                <input type="text" class="form-control" readonly
+                       value="{{ request.url_for('form_atualizacao', token=convite.token) if request else '/atualizacao/' + convite.token }}">
+            </div>
+        {% endif %}
+    </div>
+</div>

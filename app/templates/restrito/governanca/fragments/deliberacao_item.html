@@ -1,0 +1,14 @@
+<a href="/painel/governanca/deliberacoes/{{ deliberacao.id }}"
+   id="deliberacao-{{ deliberacao.id }}"
+   class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+    <span>
+        <i class="bi bi-clipboard-check-fill text-primary me-2"></i>{{ deliberacao.descricao }}
+        {% if deliberacao.prazo_execucao %}
+            <small class="text-body-secondary d-block ms-4">Prazo de execução: {{ deliberacao.prazo_execucao.strftime('%d/%m/%Y') }}</small>
+        {% endif %}
+    </span>
+    <span class="badge
+        {% if deliberacao.resultado.value == 'aprovada' %}text-bg-success
+        {% elif deliberacao.resultado.value in ['rejeitada', 'sem_quorum'] %}text-bg-danger
+        {% else %}text-bg-warning{% endif %}">{{ deliberacao.resultado.value.replace('_', ' ') }}</span>
+</a>

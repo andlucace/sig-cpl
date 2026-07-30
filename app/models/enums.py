@@ -1,0 +1,168 @@
+import enum
+
+
+class NivelMaturidade(str, enum.Enum):
+    """RN-004: quatro níveis parametrizáveis pelo Programa SP Produz."""
+
+    AGLOMERADO_PRODUTIVO = "aglomerado_produtivo"
+    CPL_EM_DESENVOLVIMENTO = "cpl_em_desenvolvimento"
+    CPL_CONSOLIDADA = "cpl_consolidada"
+    CPL_MADURA = "cpl_madura"
+
+
+class TipoEntidade(str, enum.Enum):
+    """RF-006: tipos de ator cadastráveis na cadeia e no ecossistema de apoio."""
+
+    EMPRESA = "empresa"
+    ORGAO_PUBLICO = "orgao_publico"
+    UNIVERSIDADE = "universidade"
+    ICT = "ict"
+    ASSOCIACAO = "associacao"
+    PRESTADOR = "prestador"
+    AMBIENTE_INOVACAO = "ambiente_inovacao"
+
+
+class Elo(str, enum.Enum):
+    """RF-009: elos da cadeia produtiva; um ator pode ocupar múltiplos elos."""
+
+    INSUMOS = "insumos"
+    PRODUCAO = "producao"
+    TRANSFORMACAO = "transformacao"
+    COMERCIALIZACAO_DISTRIBUICAO = "comercializacao_distribuicao"
+    APOIO_INSTITUCIONAL = "apoio_institucional"
+
+
+class Papel(str, enum.Enum):
+    """Seção 6: perfis de acesso e responsabilidades previstos no documento."""
+
+    ADMINISTRADOR_PLATAFORMA = "administrador_plataforma"
+    ENTIDADE_GESTORA = "entidade_gestora"
+    DIRIGENTE_ENTIDADE_GESTORA = "dirigente_entidade_gestora"
+    CONSELHO_COMITE = "conselho_comite"
+    COMISSAO_TEMATICA = "comissao_tematica"
+    EMPRESA_MEMBRO = "empresa_membro"
+    INSTITUICAO_ENSINO_ICT_SPAI = "instituicao_ensino_ict_spai"
+    ANALISTA_AVALIADOR = "analista_avaliador"
+    GESTOR_PROJETO = "gestor_projeto"
+    AUDITORIA_CONTROLE = "auditoria_controle"
+    PUBLICO_EXTERNO = "publico_externo"
+
+
+class TipoOrgao(str, enum.Enum):
+    """RF-016: conselhos, câmaras, grupos e comissões temáticas da governança."""
+
+    CONSELHO = "conselho"
+    CAMARA = "camara"
+    COMISSAO_TEMATICA = "comissao_tematica"
+    GRUPO_TRABALHO = "grupo_trabalho"
+
+
+class StatusReuniao(str, enum.Enum):
+    """RF-017: ciclo de vida de uma reunião convocada."""
+
+    AGENDADA = "agendada"
+    REALIZADA = "realizada"
+    CANCELADA = "cancelada"
+
+
+class ResultadoDeliberacao(str, enum.Enum):
+    """RF-018: resultado registrado para uma deliberação após votação/quórum."""
+
+    PENDENTE = "pendente"
+    APROVADA = "aprovada"
+    REJEITADA = "rejeitada"
+    ADIADA = "adiada"
+    SEM_QUORUM = "sem_quorum"
+
+
+class TipoVoto(str, enum.Enum):
+    """RF-018/RF-020: registro de voto, incluindo impedimento por conflito de interesses."""
+
+    A_FAVOR = "a_favor"
+    CONTRA = "contra"
+    ABSTENCAO = "abstencao"
+    IMPEDIDO = "impedido"
+
+
+class StatusTarefa(str, enum.Enum):
+    """RF-019: status de tarefas e planos de ação decorrentes de decisões.
+    Reaproveitado também pelo módulo de Planejamento Estratégico (RF-023)
+    para o status de objetivos/metas/iniciativas — mesmo ciclo de vida."""
+
+    PENDENTE = "pendente"
+    EM_ANDAMENTO = "em_andamento"
+    CONCLUIDA = "concluida"
+    ATRASADA = "atrasada"
+    CANCELADA = "cancelada"
+
+
+class StatusPlanejamento(str, enum.Enum):
+    """RF-021: ciclo de vida do Planejamento Estratégico de Negócios (PEN)."""
+
+    RASCUNHO = "rascunho"
+    EM_ELABORACAO = "em_elaboracao"
+    APROVADO = "aprovado"
+
+
+class TipoDiagnostico(str, enum.Enum):
+    """RF-022: categorias do diagnóstico (SWOT + achados complementares)."""
+
+    FORCA = "forca"
+    FRAQUEZA = "fraqueza"
+    OPORTUNIDADE = "oportunidade"
+    AMEACA = "ameaca"
+    PROBLEMA_PRIORITARIO = "problema_prioritario"
+    DEMANDA = "demanda"
+    LACUNA_ELO = "lacuna_elo"
+
+
+class PrazoObjetivo(str, enum.Enum):
+    """RF-023: horizonte temporal do objetivo estratégico."""
+
+    CURTO = "curto"
+    MEDIO = "medio"
+    LONGO = "longo"
+
+
+class StatusLinhaImportacao(str, enum.Enum):
+    """RF-013: resultado do processamento de cada linha de uma planilha
+    importada — dá a "trilha de origem" exigida pelo requisito."""
+
+    CRIADA = "criada"
+    ATUALIZADA = "atualizada"
+    ERRO = "erro"
+
+
+class CategoriaDocumento(str, enum.Enum):
+    """RF-042: classificação do documento no repositório."""
+
+    ATA = "ata"
+    PLANO_TRABALHO = "plano_trabalho"
+    DECLARACAO = "declaracao"
+    COMPROVANTE = "comprovante"
+    RELATORIO = "relatorio"
+    OUTRO = "outro"
+
+
+class ConfidencialidadeDocumento(str, enum.Enum):
+    """RNF-002/RN-014: classificação de sigilo — controla quem pode ler o
+    documento, além do papel de gestão que sempre pode."""
+
+    PUBLICO = "publico"
+    INTERNO = "interno"
+    CONFIDENCIAL = "confidencial"
+
+
+class AcaoAuditoria(str, enum.Enum):
+    """RF-056/RNF-003: tipo de evento registrado na trilha de auditoria.
+    CRIACAO/ATUALIZACAO/EXCLUSAO são capturados automaticamente por um
+    listener de ORM (ver app/services/auditoria.py); os demais são
+    eventos que não correspondem a uma escrita de linha rastreável pelo
+    ORM e por isso são registrados explicitamente nos endpoints."""
+
+    CRIACAO = "criacao"
+    ATUALIZACAO = "atualizacao"
+    EXCLUSAO = "exclusao"
+    LOGIN_SUCESSO = "login_sucesso"
+    LOGIN_FALHA = "login_falha"
+    DOWNLOAD = "download"

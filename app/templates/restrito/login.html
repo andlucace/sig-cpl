@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}SIG-CPL — Entrar{% endblock %}
+{% block nav %}
+    <a href="/" class="link-secondary text-decoration-none small">
+        <i class="bi bi-globe2 me-1"></i>Portal público
+    </a>
+{% endblock %}
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-12 col-sm-8 col-md-5 col-lg-4">
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <div class="text-center mb-4">
+                        <i class="bi bi-diagram-3-fill text-primary fs-1"></i>
+                        <h1 class="h4 mt-2 mb-0">Entrar</h1>
+                        <p class="text-body-secondary small">Área restrita do SIG-CPL</p>
+                    </div>
+                    {% if erro %}
+                        <div class="alert alert-danger py-2 small" role="alert">{{ erro }}</div>
+                    {% endif %}
+                    <form method="post" action="/login">
+                        <div class="mb-3">
+                            <label class="form-label" for="email">E-mail</label>
+                            <input type="email" class="form-control" id="email" name="email" required autofocus>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="password">Senha</label>
+                            <input type="password" class="form-control" id="password" name="password" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-box-arrow-in-right me-1"></i>Entrar
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

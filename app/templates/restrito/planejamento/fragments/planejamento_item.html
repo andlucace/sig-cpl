@@ -1,0 +1,9 @@
+<a href="/painel/planejamento/{{ planejamento.id }}"
+   id="planejamento-{{ planejamento.id }}"
+   class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-compass text-primary me-2"></i>Ciclo {{ planejamento.ciclo }}</span>
+    <span class="badge
+        {% if planejamento.status.value == 'aprovado' %}text-bg-success
+        {% elif planejamento.status.value == 'em_elaboracao' %}text-bg-warning
+        {% else %}text-bg-secondary{% endif %}">{{ planejamento.status.value.replace('_', ' ') }}</span>
+</a>

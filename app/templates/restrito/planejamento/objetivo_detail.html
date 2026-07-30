@@ -1,0 +1,169 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Objetivo estratégico{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/planejamento" class="link-secondary text-decoration-none">Planejamento</a>
+    <i class="bi bi-chevron-right small mx-1"></i>
+    <a href="/painel/planejamento/{{ objetivo.planejamento.id }}" class="link-secondary text-decoration-none">ciclo {{ objetivo.planejamento.ciclo }}</a>
+    <i class="bi bi-chevron-right small mx-1"></i>objetivo
+{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1"><i class="bi bi-bullseye text-primary me-2"></i>{{ objetivo.descricao }}</h1>
+    <p class="text-body-secondary">
+        Prazo {{ objetivo.prazo.value }}
+        {% if objetivo.orcamento_estimado %} — Orçamento estimado: R$ {{ "%.2f"|format(objetivo.orcamento_estimado) }}{% endif %}
+        {% if objetivo.responsavel %} — Responsável: {{ objetivo.responsavel.nome }}{% endif %}
+    </p>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-flag-fill me-2"></i>Metas
+                </div>
+                <div class="list-group list-group-flush" id="lista-metas">
+                    {% for meta in metas %}
+                        {% include "restrito/planejamento/fragments/meta_item.html" %}
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhuma meta cadastrada ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-rocket-takeoff-fill me-2"></i>Iniciativas
+                </div>
+                <div class="list-group list-group-flush" id="lista-iniciativas">
+                    {% for iniciativa in iniciativas %}
+                        {% include "restrito/planejamento/fragments/iniciativa_item.html" %}
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhuma iniciativa cadastrada ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-graph-up me-2"></i>Indicadores
+                </div>
+                <div class="list-group list-group-flush" id="lista-indicadores">
+                    {% for indicador in indicadores %}
+                        {% include "restrito/planejamento/fragments/indicador_item.html" %}
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhum indicador cadastrado ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Nova meta
+                </div>
+                <div class="card-body">
+                    <form hx-post="/painel/planejamento/objetivos/{{ objetivo.id }}/metas"
+                          hx-target="#lista-metas" hx-swap="afterbegin">
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="2" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Valor-alvo</label>
+                            <input type="text" class="form-control" name="valor_alvo" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Método de aferição</label>
+                            <input type="text" class="form-control" name="metodo_afericao">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Prazo</label>
+                            <input type="date" class="form-control" name="prazo">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Responsável</label>
+                            <select class="form-select" name="responsavel_id">
+                                <option value="">—</option>
+                                {% for pessoa in pessoas %}
+                                    <option value="{{ pessoa.id }}">{{ pessoa.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-plus-lg me-1"></i>Adicionar meta
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Nova iniciativa
+                </div>
+                <div class="card-body">
+                    <form hx-post="/painel/planejamento/objetivos/{{ objetivo.id }}/iniciativas"
+                          hx-target="#lista-iniciativas" hx-swap="afterbegin">
+                        <div class="mb-3">
+                            <label class="form-label">Título</label>
+                            <input type="text" class="form-control" name="titulo" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="2"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Responsável</label>
+                            <select class="form-select" name="responsavel_id">
+                                <option value="">—</option>
+                                {% for pessoa in pessoas %}
+                                    <option value="{{ pessoa.id }}">{{ pessoa.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Prazo</label>
+                            <input type="date" class="form-control" name="prazo">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-plus-lg me-1"></i>Adicionar iniciativa
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Novo indicador
+                </div>
+                <div class="card-body">
+                    <form hx-post="/painel/planejamento/objetivos/{{ objetivo.id }}/indicadores"
+                          hx-target="#lista-indicadores" hx-swap="afterbegin">
+                        <div class="mb-3">
+                            <label class="form-label">Nome</label>
+                            <input type="text" class="form-control" name="nome" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Fórmula</label>
+                            <input type="text" class="form-control" name="formula">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Unidade</label>
+                            <input type="text" class="form-control" name="unidade" placeholder="ex.: %, un., R$">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Meta</label>
+                            <input type="text" class="form-control" name="meta_valor">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Periodicidade</label>
+                            <input type="text" class="form-control" name="periodicidade" placeholder="ex.: trimestral">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-plus-lg me-1"></i>Adicionar indicador
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

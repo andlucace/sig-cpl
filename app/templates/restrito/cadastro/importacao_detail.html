@@ -1,0 +1,45 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Importação {{ lote.nome_arquivo }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/cadastro" class="link-secondary text-decoration-none">Cadastro e dados</a>
+    <i class="bi bi-chevron-right small mx-1"></i>importação
+{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1"><i class="bi bi-file-earmark-spreadsheet text-primary me-2"></i>{{ lote.nome_arquivo }}</h1>
+    <p class="text-body-secondary">
+        {{ lote.total_linhas }} linha(s) processada(s) —
+        <span class="badge text-bg-success">{{ lote.total_criadas }} criadas</span>
+        <span class="badge text-bg-info">{{ lote.total_atualizadas }} atualizadas</span>
+        <span class="badge {{ 'text-bg-danger' if lote.total_erros else 'text-bg-secondary' }}">{{ lote.total_erros }} erros</span>
+    </p>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-sm mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>Linha</th>
+                        <th>Status</th>
+                        <th>Mensagem</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for linha in lote.linhas|sort(attribute='numero_linha') %}
+                        <tr>
+                            <td>{{ linha.numero_linha }}</td>
+                            <td>
+                                <span class="badge
+                                    {% if linha.status.value == 'criada' %}text-bg-success
+                                    {% elif linha.status.value == 'atualizada' %}text-bg-info
+                                    {% else %}text-bg-danger{% endif %}">{{ linha.status.value }}</span>
+                            </td>
+                            <td>{{ linha.mensagem or '—' }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="3" class="text-body-secondary">Nenhuma linha processada.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}

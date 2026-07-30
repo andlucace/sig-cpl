@@ -1,0 +1,130 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — {{ reuniao.titulo }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/governanca" class="link-secondary text-decoration-none">Governança</a>
+    <i class="bi bi-chevron-right small mx-1"></i>
+    <a href="/painel/governanca/orgaos/{{ reuniao.orgao.id }}" class="link-secondary text-decoration-none">{{ reuniao.orgao.nome }}</a>
+    <i class="bi bi-chevron-right small mx-1"></i>{{ reuniao.titulo }}
+{% endblock %}
+{% block conteudo %}
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div>
+            <h1 class="h3 mb-1"><i class="bi bi-calendar-event-fill text-primary me-2"></i>{{ reuniao.titulo }}</h1>
+            <p class="text-body-secondary mb-1">
+                {{ reuniao.data_hora.strftime('%d/%m/%Y %H:%M') }}{% if reuniao.local %} — {{ reuniao.local }}{% endif %}
+            </p>
+        </div>
+        <form method="post" action="/painel/documentos/reunioes/{{ reuniao.id }}/ata-pdf">
+            <button type="submit" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-file-earmark-pdf me-1"></i>Gerar ata em PDF
+            </button>
+        </form>
+    </div>
+    {% if reuniao.pauta %}<p><strong>Pauta:</strong> {{ reuniao.pauta }}</p>{% endif %}
+
+    {% include "restrito/governanca/fragments/reuniao_status.html" %}
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-person-check me-2"></i>Presença
+                </div>
+                <div class="list-group list-group-flush" id="lista-presencas">
+                    {% for presenca in presencas %}
+                        {% include "restrito/governanca/fragments/presenca_item.html" %}
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhuma presença registrada ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-clipboard-check-fill me-2"></i>Deliberações
+                </div>
+                <div class="list-group list-group-flush" id="lista-deliberacoes">
+                    {% for deliberacao in deliberacoes %}
+                        {% include "restrito/governanca/fragments/deliberacao_item.html" %}
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhuma deliberação registrada ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-person-check me-2"></i>Registrar presença
+                </div>
+                <div class="card-body">
+                    {% if membros %}
+                        <form hx-post="/painel/governanca/reunioes/{{ reuniao.id }}/presencas"
+                              hx-target="#lista-presencas" hx-swap="afterbegin">
+                            <div class="mb-3">
+                                <label class="form-label">Membro</label>
+                                <select class="form-select" name="pessoa_id" required>
+                                    {% for membro in membros %}
+                                        <option value="{{ membro.pessoa_id }}">{{ membro.pessoa.nome }} ({{ membro.funcao }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Presente?</label>
+                                <select class="form-select" name="presente">
+                                    <option value="sim">Sim</option>
+                                    <option value="nao">Não</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Justificativa (se ausente)</label>
+                                <input type="text" class="form-control" name="justificativa_ausencia">
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-plus-lg me-1"></i>Registrar
+                            </button>
+                        </form>
+                    {% else %}
+                        <p class="text-body-secondary small mb-0">Este órgão ainda não tem membros ativos.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-clipboard-plus me-2"></i>Nova deliberação
+                </div>
+                <div class="card-body">
+                    <form hx-post="/painel/governanca/reunioes/{{ reuniao.id }}/deliberacoes"
+                          hx-target="#lista-deliberacoes" hx-swap="afterbegin">
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="2" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Quórum necessário (%)</label>
+                            <input type="number" step="0.1" min="0" max="100" class="form-control" name="quorum_necessario_percentual">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Responsável pela execução</label>
+                            <select class="form-select" name="responsavel_id">
+                                <option value="">—</option>
+                                {% for membro in membros %}
+                                    <option value="{{ membro.pessoa_id }}">{{ membro.pessoa.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Prazo de execução</label>
+                            <input type="date" class="form-control" name="prazo_execucao">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-plus-lg me-1"></i>Registrar deliberação
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

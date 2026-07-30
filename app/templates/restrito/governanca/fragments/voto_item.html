@@ -1,0 +1,15 @@
+<div class="list-group-item" id="voto-{{ voto.id }}">
+    <i class="bi
+        {% if voto.voto.value == 'a_favor' %}bi-hand-thumbs-up-fill text-success
+        {% elif voto.voto.value == 'contra' %}bi-hand-thumbs-down-fill text-danger
+        {% elif voto.voto.value == 'impedido' %}bi-shield-exclamation text-danger
+        {% else %}bi-dash-circle-fill text-warning{% endif %} me-2"></i>
+    <strong>{{ voto.pessoa.nome }}</strong>
+    <span class="badge
+        {% if voto.voto.value == 'a_favor' %}text-bg-success
+        {% elif voto.voto.value in ['contra', 'impedido'] %}text-bg-danger
+        {% else %}text-bg-warning{% endif %}">{{ voto.voto.value.replace('_', ' ') }}</span>
+    {% if voto.motivo_impedimento %}
+        <small class="text-body-secondary d-block ms-4">Motivo do impedimento: {{ voto.motivo_impedimento }}</small>
+    {% endif %}
+</div>

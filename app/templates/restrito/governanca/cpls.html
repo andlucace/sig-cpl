@@ -1,0 +1,32 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Governança{% endblock %}
+{% block subtitulo %}Governança{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1">Governança</h1>
+    <p class="text-body-secondary">Selecione a CPL para gerenciar órgãos, reuniões e deliberações.</p>
+
+    {% if cpls %}
+        <div class="card">
+            <div class="list-group list-group-flush">
+                {% for cpl in cpls %}
+                    <a href="/painel/governanca/cpls/{{ cpl.id }}"
+                       class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-geo-alt-fill text-primary me-2"></i>{{ cpl.nome }}</span>
+                        <span class="badge text-bg-secondary">{{ cpl.sigla }}</span>
+                    </a>
+                {% endfor %}
+            </div>
+        </div>
+    {% else %}
+        <div class="alert alert-light border d-flex gap-2" role="alert">
+            <i class="bi bi-info-circle"></i>
+            <div>
+                Nenhuma CPL cadastrada ainda (ou vinculada ao seu usuário). O cadastro de CPL
+                (RF-001) ainda não tem tela própria neste esqueleto — use
+                <a href="/docs#/Plataforma%20e%20configura%C3%A7%C3%A3o/criar_cpl_api_cpls_post">
+                    POST /api/cpls
+                </a> para criar uma.
+            </div>
+        </div>
+    {% endif %}
+{% endblock %}

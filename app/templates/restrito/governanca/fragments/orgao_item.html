@@ -1,0 +1,11 @@
+<a href="/painel/governanca/orgaos/{{ orgao.id }}"
+   id="orgao-{{ orgao.id }}"
+   class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+    <span>
+        <i class="bi bi-people-fill text-primary me-2"></i>{{ orgao.nome }}
+        {% if orgao.periodicidade %}
+            <small class="text-body-secondary d-block ms-4">Periodicidade: {{ orgao.periodicidade }}</small>
+        {% endif %}
+    </span>
+    <span class="badge text-bg-secondary">{{ orgao.tipo.value.replace('_', ' ') }}</span>
+</a>

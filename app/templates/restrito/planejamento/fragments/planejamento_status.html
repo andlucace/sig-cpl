@@ -1,0 +1,36 @@
+<div class="card mb-4" id="planejamento-status-{{ planejamento.id }}">
+    <div class="card-body">
+        <p class="mb-2">
+            <i class="bi bi-info-circle me-1"></i>Status atual:
+            <span class="badge
+                {% if planejamento.status.value == 'aprovado' %}text-bg-success
+                {% elif planejamento.status.value == 'em_elaboracao' %}text-bg-warning
+                {% else %}text-bg-secondary{% endif %}">{{ planejamento.status.value.replace('_', ' ') }}</span>
+            {% if planejamento.data_aprovacao %}
+                <span class="text-body-secondary small">aprovado em {{ planejamento.data_aprovacao.strftime('%d/%m/%Y') }}</span>
+            {% endif %}
+        </p>
+        <form class="row g-3" hx-post="/painel/planejamento/{{ planejamento.id }}/status"
+              hx-target="#planejamento-status-{{ planejamento.id }}" hx-swap="outerHTML">
+            <div class="col-md-4">
+                <label class="form-label">Status</label>
+                <select class="form-select" name="status">
+                    {% for opcao in status_opcoes %}
+                        <option value="{{ opcao.value }}" {% if opcao == planejamento.status %}selected{% endif %}>
+                            {{ opcao.value.replace('_', ' ') }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Data de aprovação</label>
+                <input type="date" class="form-control" name="data_aprovacao" value="{{ planejamento.data_aprovacao or '' }}">
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-save me-1"></i>Salvar status
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

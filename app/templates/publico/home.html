@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}SIG-CPL — Portal público{% endblock %}
+{% block nav %}
+    <a href="/login" class="btn btn-primary btn-sm">
+        <i class="bi bi-box-arrow-in-right me-1"></i>Área restrita
+    </a>
+{% endblock %}
+{% block content %}
+    <div class="p-4 p-md-5 mb-4 bg-body-tertiary rounded-3 border">
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <i class="bi bi-diagram-3-fill text-primary display-5"></i>
+            <h1 class="h2 mb-0">Cadeia Produtiva Local de Autopeças de Atibaia/SP</h1>
+        </div>
+        <p class="col-lg-9 fs-6">
+            Este portal centraliza informações públicas de governança, agenda e resultados
+            da CPL, no âmbito do Programa Estadual de Desenvolvimento das Cadeias
+            Produtivas Locais — SP Produz.
+        </p>
+        <div class="alert alert-light border d-flex gap-2 mb-0" role="alert">
+            <i class="bi bi-info-circle"></i>
+            <div>
+                Portal em construção (Fase 1 do roadmap). Indicadores agregados e conteúdos de
+                transparência (RF-055) serão publicados nas próximas fases.
+            </div>
+        </div>
+    </div>
+{% endblock %}

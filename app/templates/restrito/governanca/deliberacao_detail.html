@@ -1,0 +1,126 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Deliberação{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/governanca" class="link-secondary text-decoration-none">Governança</a>
+    <i class="bi bi-chevron-right small mx-1"></i>
+    <a href="/painel/governanca/orgaos/{{ deliberacao.reuniao.orgao.id }}" class="link-secondary text-decoration-none">{{ deliberacao.reuniao.orgao.nome }}</a>
+    <i class="bi bi-chevron-right small mx-1"></i>
+    <a href="/painel/governanca/reunioes/{{ deliberacao.reuniao.id }}" class="link-secondary text-decoration-none">{{ deliberacao.reuniao.titulo }}</a>
+    <i class="bi bi-chevron-right small mx-1"></i>deliberação
+{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1"><i class="bi bi-clipboard-check-fill text-primary me-2"></i>{{ deliberacao.descricao }}</h1>
+    {% if deliberacao.responsavel %}
+        <p class="text-body-secondary mb-1">Responsável pela execução: {{ deliberacao.responsavel.nome }}</p>
+    {% endif %}
+    {% if deliberacao.prazo_execucao %}
+        <p class="text-body-secondary">Prazo de execução: {{ deliberacao.prazo_execucao.strftime('%d/%m/%Y') }}</p>
+    {% endif %}
+
+    {% include "restrito/governanca/fragments/deliberacao_resultado.html" %}
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-hand-thumbs-up me-2"></i>Votos
+                </div>
+                <div class="list-group list-group-flush" id="lista-votos">
+                    {% for voto in votos %}
+                        {% include "restrito/governanca/fragments/voto_item.html" %}
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhum voto registrado ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-list-task me-2"></i>Tarefas decorrentes
+                </div>
+                <div class="list-group list-group-flush" id="lista-tarefas">
+                    {% for tarefa in tarefas %}
+                        {% include "restrito/governanca/fragments/tarefa_item.html" %}
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhuma tarefa criada ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-hand-thumbs-up me-2"></i>Registrar voto
+                </div>
+                <div class="card-body">
+                    {% if membros %}
+                        <form hx-post="/painel/governanca/deliberacoes/{{ deliberacao.id }}/votos"
+                              hx-target="#lista-votos" hx-swap="afterbegin">
+                            <div class="mb-3">
+                                <label class="form-label">Membro</label>
+                                <select class="form-select" name="pessoa_id" required>
+                                    {% for membro in membros %}
+                                        <option value="{{ membro.pessoa_id }}">{{ membro.pessoa.nome }} ({{ membro.funcao }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Voto</label>
+                                <select class="form-select" name="voto" required>
+                                    {% for opcao in voto_opcoes %}
+                                        <option value="{{ opcao.value }}">{{ opcao.value.replace('_', ' ') }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Motivo do impedimento (se aplicável — RF-020)</label>
+                                <input type="text" class="form-control" name="motivo_impedimento">
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-plus-lg me-1"></i>Registrar voto
+                            </button>
+                        </form>
+                    {% else %}
+                        <p class="text-body-secondary small mb-0">Este órgão ainda não tem membros ativos.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Nova tarefa
+                </div>
+                <div class="card-body">
+                    <form hx-post="/painel/governanca/deliberacoes/{{ deliberacao.id }}/tarefas"
+                          hx-target="#lista-tarefas" hx-swap="afterbegin">
+                        <div class="mb-3">
+                            <label class="form-label">Título</label>
+                            <input type="text" class="form-control" name="titulo" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="2"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Responsável</label>
+                            <select class="form-select" name="responsavel_id">
+                                <option value="">—</option>
+                                {% for membro in membros %}
+                                    <option value="{{ membro.pessoa_id }}">{{ membro.pessoa.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Prazo</label>
+                            <input type="date" class="form-control" name="prazo">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-plus-lg me-1"></i>Criar tarefa
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

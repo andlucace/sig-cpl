@@ -1,0 +1,49 @@
+<div class="card mb-4" id="reuniao-status-{{ reuniao.id }}">
+    <div class="card-body">
+        <p class="mb-2">
+            <i class="bi bi-info-circle me-1"></i>Status atual:
+            <span class="badge
+                {% if reuniao.status.value == 'realizada' %}text-bg-success
+                {% elif reuniao.status.value == 'cancelada' %}text-bg-danger
+                {% else %}text-bg-warning{% endif %}">{{ reuniao.status.value }}</span>
+            {% if reuniao.quorum_atingido is not none %}
+                <span class="badge {{ 'text-bg-success' if reuniao.quorum_atingido else 'text-bg-danger' }}">
+                    {{ 'quórum atingido' if reuniao.quorum_atingido else 'sem quórum' }}
+                </span>
+            {% endif %}
+        </p>
+        {% if reuniao.ata %}
+            <p class="text-body-secondary small">Ata: {{ reuniao.ata }}</p>
+        {% endif %}
+
+        <form class="row g-3" hx-post="/painel/governanca/reunioes/{{ reuniao.id }}/ata"
+              hx-target="#reuniao-status-{{ reuniao.id }}" hx-swap="outerHTML">
+            <div class="col-md-4">
+                <label class="form-label">Status</label>
+                <select class="form-select" name="status">
+                    {% for opcao in status_opcoes %}
+                        <option value="{{ opcao.value }}" {% if opcao == reuniao.status %}selected{% endif %}>
+                            {{ opcao.value.replace('_', ' ') }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Quórum atingido?</label>
+                <select class="form-select" name="quorum_atingido">
+                    <option value="sim" {% if reuniao.quorum_atingido %}selected{% endif %}>Sim</option>
+                    <option value="nao" {% if reuniao.quorum_atingido == false %}selected{% endif %}>Não</option>
+                </select>
+            </div>
+            <div class="col-12">
+                <label class="form-label">Ata</label>
+                <textarea class="form-control" name="ata" rows="3">{{ reuniao.ata or '' }}</textarea>
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-save me-1"></i>Salvar ata e encerrar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
