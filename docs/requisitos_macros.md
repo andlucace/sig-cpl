@@ -187,16 +187,16 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 
 | ID | Requisito macro | Pri. | Status no repo |
 |---|---|---|---|
-| RF-024 | Manter matriz de critérios de maturidade por edição do edital e nível de classificação. | M | ❌ Pendente (Fase 2 — depende do Planejamento Estratégico, que já existe) |
-| RF-025 | Associar evidências documentais e dados quantitativos a cada critério, com validade, autoria e versão. | M | ❌ Pendente |
-| RF-026 | Calcular pontuação, simular cenários e indicar lacunas, sem substituir a decisão humana. | M | ❌ Pendente |
+| RF-024 | Manter matriz de critérios de maturidade por edição do edital e nível de classificação. | M | ✅ Implementado — `Edital` (global, gerido só por `ADMINISTRADOR_PLATAFORMA`, RN-006) + `CriterioMaturidade` (dimensão, peso, nota de corte, por edital) |
+| RF-025 | Associar evidências documentais e dados quantitativos a cada critério, com validade, autoria e versão. | M | ⚠️ Parcial — `AvaliacaoCriterio` liga nota + evidência (reaproveita `Documento`, RF-042) + observação por critério. "Validade" e "versão" da evidência em si não são modeladas — dependem do versionamento do `Documento` já existente, não algo novo aqui |
+| RF-026 | Calcular pontuação, simular cenários e indicar lacunas, sem substituir a decisão humana. | M | ⚠️ Parcial — pontuação (média ponderada) e lacunas (nota abaixo do corte do critério) calculadas automaticamente ao concluir a avaliação; nível **sugerido** também é calculado, mas só vira o nível oficial da CPL com decisão humana explícita (RN-016, `Avaliacao.nivel_decidido`). "Simular cenários" (interativo, ver efeito de mudar uma nota antes de salvar) não foi construído — recorte de escopo deliberado |
 
 ### Reconhecimento
 
 | ID | Requisito macro | Pri. | Status no repo |
 |---|---|---|---|
-| RF-027 | Gerenciar fluxo de habilitação jurídica, planejamento estratégico, avaliação de maturidade, resultados e recursos. | M | ❌ Pendente |
-| RF-028 | Controlar prazo de validade do reconhecimento e processo de recadastramento bienal, com alertas antecipados. | M | ❌ Pendente |
+| RF-027 | Gerenciar fluxo de habilitação jurídica, planejamento estratégico, avaliação de maturidade, resultados e recursos. | M | ⚠️ Parcial — avaliação de maturidade (`Avaliacao`/`AvaliacaoCriterio`), resultado (nível sugerido/decidido) e recursos (`RecursoAvaliacao`, decidido por administrador) implementados. "Habilitação jurídica" não tem modelo próprio — poderia reaproveitar o repositório de Documentos (RF-042) como checklist, mas não foi formalizado como etapa do fluxo. Planejamento estratégico já existe como módulo próprio (RF-021 a RF-023) |
+| RF-028 | Controlar prazo de validade do reconhecimento e processo de recadastramento bienal, com alertas antecipados. | M | ✅ Implementado — decidir o nível de uma avaliação renova `CPL.data_validade_reconhecimento` por um ciclo bienal (RN-005) automaticamente; `GET /api/maturidade/cpls/vencimento-proximo` e o banner em `/painel/maturidade` alertam CPLs com reconhecimento vencendo ou vencido |
 
 ### Editais
 
@@ -340,10 +340,18 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 > (tipo/valor-alvo/prazo/responsável/método/evidência). RN-011 também está
 > implementada: `IndicadorEstrategico` liga indicador a objetivo (via
 > `objetivo_id`, que por sua vez liga a metas/etapas) e a fonte de dados
-> (`fonte`, novo campo).
-> As demais (RN-002, RN-005, RN-006, RN-008, RN-009, RN-012 a RN-016)
-> dependem de módulos ainda não construídos (Maturidade, Editais, Projetos,
-> Portal público avançado).
+> (`fonte`, novo campo). RN-005 e RN-006 também estão implementadas: o
+> reconhecimento tem validade e recadastro bienal automático (`Avaliacao`
+> → `CPL.data_validade_reconhecimento`), e `Edital`/`CriterioMaturidade`
+> são versionados por edição, cada um com seus próprios pesos/notas de
+> corte. RN-016 (decisão de maturidade não pode ser só algorítmica) é
+> reforçada em código, não só em política: `concluir_avaliacao()` calcula
+> um nível *sugerido*, mas só `decidir_nivel()` — que exige uma chamada
+> humana explícita separada — atualiza `CPL.nivel_maturidade` de verdade.
+> As demais (RN-002, RN-008, RN-009, RN-012 a RN-015; RN-016 também
+> cobre "habilitação" e "priorização", que ainda não têm fluxo próprio)
+> dependem de módulos ainda não construídos (Projetos, Portal público
+> avançado).
 
 ## 10. Modelo conceitual de dados
 
@@ -355,22 +363,22 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 | Elo e oferta | Elo da cadeia, produto, serviço, tecnologia, competência, certificação e capacidade. | ⚠️ Elo ok (`EntidadeElo`); produto/serviço/competência (RF-010) pendente |
 | Governança | Órgão, comissão, mandato, reunião, presença, votação, decisão e tarefa. | ✅ Completo (módulo Governança) |
 | Planejamento | Diagnóstico, objetivo, meta, iniciativa, indicador e risco. | ⚠️ Completo exceto "risco" (não modelado ainda) |
-| Maturidade | Edital, critério, peso, evidência, avaliação, nota, parecer e nível. | ❌ Pendente |
+| Maturidade | Edital, critério, peso, evidência, avaliação, nota, parecer e nível. | ✅ `Edital`, `CriterioMaturidade`, `Avaliacao`, `AvaliacaoCriterio`, `RecursoAvaliacao` |
 | Projeto | Demanda, proposta, eixo, plano de trabalho, equipe, etapa, atividade, entrega e resultado. | ❌ Pendente |
 | Financeiro do projeto | Item, cotação, fornecedor, fonte, contrapartida, desembolso, comprovante e saldo. | ❌ Pendente |
 | Documento | Tipo, arquivo, metadados, validade, versão, aprovação, assinatura e confidencialidade. | ✅ `Documento` |
 | Evento e comunicação | Evento, inscrição, presença, notícia, aviso, notificação e campanha. | ❌ Pendente |
-| Auditoria | Evento de sistema, usuário, data, objeto, ação, valor anterior e valor posterior. | ❌ Pendente |
+| Auditoria | Evento de sistema, usuário, data, objeto, ação, valor anterior e valor posterior. | ✅ `RegistroAuditoria` |
 
 ## 11. Fluxos de negócio prioritários
 
 | Fluxo | Etapas principais | Status no repo |
 |---|---|---|
 | F01 – Adesão de membro | Convite/solicitação → cadastro → consentimento → validação → vínculo à CPL → classificação de elo → ativação. | ❌ Pendente (hoje cadastro é feito diretamente por quem tem papel de gestão, sem fluxo de autoatendimento) |
-| F02 – Atualização diagnóstica | Criação de campanha → envio de formulário → resposta → validação → consolidação → indicadores. | ⚠️ Parcial — campanha → convite (link/token) → resposta pública funcionam ponta a ponta; falta consolidação automática em indicadores (RF-044/045) |
+| F02 – Atualização diagnóstica | Criação de campanha → envio de formulário → resposta → validação → consolidação → indicadores. | ✅ **Implementado ponta a ponta** — campanha → convite (link/token) → resposta pública → consolidação em `resumo_cadastral()` (RF-046/047), exibida em `/painel/indicadores` |
 | F03 – Reunião e decisão | Convocação → pauta → presença/quórum → deliberação → ata → tarefas → acompanhamento. | ✅ **Implementado ponta a ponta** (API + UI HTMX) |
 | F04 – Planejamento estratégico | Diagnóstico → priorização → objetivos → metas → indicadores → aprovação → monitoramento. | ✅ **Implementado ponta a ponta** (API + UI HTMX) |
-| F05 – Reconhecimento/recadastro | Edital → habilitação → PEN → evidências de maturidade → avaliação → submissão → resultado → recurso. | ❌ Pendente (Fase 2) |
+| F05 – Reconhecimento/recadastro | Edital → habilitação → PEN → evidências de maturidade → avaliação → submissão → resultado → recurso. | ⚠️ Parcial — edital → PEN (já existe) → evidências → avaliação → resultado (sugerido + decidido) → recurso todos implementados; "habilitação jurídica" e "submissão" formal não têm etapa própria no fluxo ainda |
 | F06 – Projeto de fomento | Oportunidade → priorização → plano de trabalho → orçamento/cotações → aprovação → submissão → parceria. | ❌ Pendente |
 | F07 – Execução do projeto | Kickoff → atividades → desembolsos → entregas → metas/indicadores → riscos → relatórios → encerramento. | ❌ Pendente |
 | F08 – Prestação de contas | Consolidação física → consolidação financeira → validação → relatório → aprovação → protocolo → diligências. | ❌ Pendente |
@@ -444,7 +452,7 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 | Camada | Componentes | Equivalente no SIG-CPL |
 |---|---|---|
 | Camada de experiência | Portal web responsivo, área restrita, portal público e formulários externos. | Jinja2 + HTMX + Bootstrap 5 (`app/templates`, `app/web`) |
-| Camada de aplicação | Serviços de cadastro, governança, estratégia, maturidade, projetos, financeiro, documentos e comunicação. | `app/api/routes/*` (parcial — só cadastro, governança, estratégia) |
+| Camada de aplicação | Serviços de cadastro, governança, estratégia, maturidade, projetos, financeiro, documentos e comunicação. | `app/api/routes/*` (parcial — cadastro, governança, estratégia, maturidade e documentos prontos; projetos, financeiro e comunicação pendentes) |
 | Camada de dados | Banco relacional, repositório de documentos, mecanismo de busca e base analítica. | PostgreSQL (`app/models`); sem repositório de documentos/busca/base analítica ainda |
 | Identidade e segurança | IAM, MFA, RBAC/ABAC, criptografia, consentimento e auditoria. | JWT + bcrypt + RBAC (`app/core/security.py`, `app/core/rbac.py`) + trilha de auditoria (`app/models/auditoria.py`, `app/services/auditoria.py`); sem MFA/consentimento |
 | Integração | API gateway, conectores, importação/exportação e filas de processamento. | FastAPI expõe REST direto; sem gateway, filas ou conectores externos |
@@ -457,7 +465,7 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 |---|---|---|
 | Fase 0 – Descoberta (4–6 semanas) | Validação de processos, matriz de perfis, dicionário de dados, protótipos, integração da planilha atual e backlog detalhado. | Pulado — este projeto começou direto na construção técnica |
 | Fase 1 – MVP (3–4 meses) | Identidade, cadastro, cadeia, formulários, governança, planejamento, documentos, tarefas, indicadores básicos, relatórios e auditoria. | ✅ **Completa** (com recortes de escopo documentados por requisito). Feito: identidade, cadastro (parcial) + campanhas/importação, governança, planejamento, documentos (repositório + ata em PDF), tarefas (dentro de governança), catálogo de indicadores com série histórica (RF-044), painéis consolidados (RF-045, parcial), resumo cadastral (RF-046/047, parcial), relatório executivo em PDF (RF-048, parcial), trilha de auditoria (RF-056). |
-| Fase 2 – Conformidade SP Produz (2–3 meses) | Maturidade, reconhecimento/recadastro, editais, plano de trabalho, orçamento, cotações, submissões e alertas. | ❌ Não iniciado |
+| Fase 2 – Conformidade SP Produz (2–3 meses) | Maturidade, reconhecimento/recadastro, editais, plano de trabalho, orçamento, cotações, submissões e alertas. | ⚠️ **Iniciada.** Feito: maturidade, editais/critérios, avaliação com nota/evidência/lacunas, decisão de nível (RN-016), recadastro bienal com alertas (RF-024 a RF-028). Falta: plano de trabalho, orçamento, cotações e submissões — todos dependem do módulo de Projetos (ainda não iniciado). |
 | Fase 3 – Execução e fomento (2–3 meses) | Execução física/financeira, prestação de contas, riscos, bens, relatórios e portal de transparência. | ❌ Não iniciado |
 | Fase 4 – Ecossistema e inovação | Matchmaking, catálogo de competências, integração SPAI/ICTs, mapas de rede, IA assistiva e análises avançadas. | ❌ Não iniciado |
 

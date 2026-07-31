@@ -1,0 +1,109 @@
+"""RF-024 a RF-028: cálculo de pontuação/nível sugerido e identificação de
+lacunas de uma avaliação de maturidade, decisão final de nível (RN-016: só
+humana, nunca automática) e alertas de vencimento do reconhecimento
+(RF-028, recadastro bienal — RN-005)."""
+
+import uuid
+from datetime import date, timedelta
+
+from sqlalchemy.orm import Session
+
+from app.models.cpl import CPL
+from app.models.enums import NivelMaturidade, StatusAvaliacao
+from app.models.maturidade import Avaliacao, AvaliacaoCriterio, CriterioMaturidade, Edital
+
+VALIDADE_RECONHECIMENTO_DIAS = 365 * 2  # RN-005: recadastramento bienal
+
+
+def calcular_pontuacao(avaliacao: Avaliacao) -> float | None:
+    """Média ponderada das notas (0-100) pelo peso do critério."""
+
+    notas = avaliacao.notas
+    if not notas:
+        return None
+    soma_pesos = sum(n.criterio.peso for n in notas)
+    if not soma_pesos:
+        return None
+    return round(sum(n.nota * n.criterio.peso for n in notas) / soma_pesos, 2)
+
+
+def sugerir_nivel(edital: Edital, pontuacao: float | None) -> NivelMaturidade | None:
+    """RF-026: sugestão automática — nunca grava direto em `CPL`, é só um
+    insumo para a decisão humana (`decidir_nivel`)."""
+
+    if pontuacao is None:
+        return None
+    limiares = (edital.limiar_cpl_em_desenvolvimento, edital.limiar_cpl_consolidada, edital.limiar_cpl_madura)
+    if all(limiar is None for limiar in limiares):
+        return None  # edital sem limiares configurados — não há base pra sugerir nada
+    if edital.limiar_cpl_madura is not None and pontuacao >= edital.limiar_cpl_madura:
+        return NivelMaturidade.CPL_MADURA
+    if edital.limiar_cpl_consolidada is not None and pontuacao >= edital.limiar_cpl_consolidada:
+        return NivelMaturidade.CPL_CONSOLIDADA
+    if edital.limiar_cpl_em_desenvolvimento is not None and pontuacao >= edital.limiar_cpl_em_desenvolvimento:
+        return NivelMaturidade.CPL_EM_DESENVOLVIMENTO
+    return NivelMaturidade.AGLOMERADO_PRODUTIVO
+
+
+def lacunas(avaliacao: Avaliacao) -> list[AvaliacaoCriterio]:
+    """RF-026 ("indicar lacunas"): critérios cuja nota ficou abaixo da
+    nota de corte definida para eles."""
+
+    return [
+        nota
+        for nota in avaliacao.notas
+        if nota.criterio.nota_corte is not None and nota.nota < nota.criterio.nota_corte
+    ]
+
+
+def concluir_avaliacao(db: Session, avaliacao: Avaliacao) -> Avaliacao:
+    avaliacao.pontuacao_calculada = calcular_pontuacao(avaliacao)
+    avaliacao.nivel_sugerido = sugerir_nivel(avaliacao.edital, avaliacao.pontuacao_calculada)
+    avaliacao.status = StatusAvaliacao.CONCLUIDA
+    db.commit()
+    db.refresh(avaliacao)
+    return avaliacao
+
+
+def decidir_nivel(
+    db: Session,
+    avaliacao: Avaliacao,
+    nivel_decidido: NivelMaturidade,
+    parecer: str | None,
+    decidido_por_id: uuid.UUID | None,
+) -> Avaliacao:
+    """RN-016: só este passo — nunca `concluir_avaliacao` — atualiza o
+    nível "oficial" da CPL. RF-028: renova a validade do reconhecimento
+    por mais um ciclo bienal a partir de hoje."""
+
+    hoje = date.today()
+    avaliacao.nivel_decidido = nivel_decidido
+    avaliacao.parecer = parecer
+    avaliacao.decidido_por_id = decidido_por_id
+    avaliacao.data_decisao = hoje
+
+    cpl = db.get(CPL, avaliacao.cpl_id)
+    cpl.nivel_maturidade = nivel_decidido
+    cpl.data_reconhecimento = hoje
+    cpl.data_validade_reconhecimento = hoje + timedelta(days=VALIDADE_RECONHECIMENTO_DIAS)
+
+    db.commit()
+    db.refresh(avaliacao)
+    return avaliacao
+
+
+def cpls_com_vencimento_proximo(db: Session, dias: int = 90) -> list[CPL]:
+    """RF-028: alerta antecipado de recadastramento — CPLs cujo
+    reconhecimento vence dentro da janela ou já venceu."""
+
+    limite = date.today() + timedelta(days=dias)
+    return (
+        db.query(CPL)
+        .filter(
+            CPL.ativo.is_(True),
+            CPL.data_validade_reconhecimento.is_not(None),
+            CPL.data_validade_reconhecimento <= limite,
+        )
+        .order_by(CPL.data_validade_reconhecimento)
+        .all()
+    )

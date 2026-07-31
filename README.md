@@ -4,16 +4,17 @@ Esqueleto inicial da plataforma descrita no *Documento de Requisitos Macros*
 (referência: Programa SP Produz; projeto de referência: CPL Autopeças de
 Atibaia/SP — a transcrição completa do documento, com status de
 implementação por requisito, está em `docs/requisitos_macros.md`). Este
-repositório cobre **100% da Fase 1 (MVP)** do roadmap (com recortes de
-escopo documentados requisito a requisito): fundação técnica, modelos de
-dados centrais, e os módulos de Identidade e Acesso, Governança,
-Planejamento Estratégico, Cadastro dinâmico (campanhas + importação de
-planilha), Documentos (repositório + geração de ata em PDF), Trilha de
-auditoria e Indicadores e relatórios (catálogo com série histórica,
-painéis consolidados, relatório executivo em PDF) funcionando.
-Maturidade/Reconhecimento (Fase 2), Projetos/fomento, Comunicação e
-Integrações existem como routers-stub, prontos para receber implementação
-incremental.
+repositório cobre **100% da Fase 1 (MVP)** e o início da **Fase 2** do
+roadmap (com recortes de escopo documentados requisito a requisito):
+fundação técnica, modelos de dados centrais, e os módulos de Identidade e
+Acesso, Governança, Planejamento Estratégico, Cadastro dinâmico (campanhas
++ importação de planilha), Documentos (repositório + geração de ata em
+PDF), Trilha de auditoria, Indicadores e relatórios (catálogo com série
+histórica, painéis consolidados, relatório executivo em PDF) e Maturidade
+e reconhecimento (editais/critérios, avaliação com evidências e lacunas,
+decisão de nível, recadastro bienal com alertas) funcionando.
+Projetos/fomento, Comunicação e Integrações existem como routers-stub,
+prontos para receber implementação incremental.
 
 ## Stack
 
@@ -318,6 +319,54 @@ os outros módulos já coletam:
   objetivo/meta/iniciativa, estendida ao indicador agora que ele também
   tem `responsavel_id`.
 
+O bloco **Maturidade e reconhecimento** (RF-024 a RF-028, Fase 2 do
+roadmap) foi implementado com escopo alinhado com o usuário via
+`AskUserQuestion` antes de começar — em especial, se o fluxo de recursos
+(apelação) entraria já nesta etapa (sim) e se edital/critérios são
+compartilhados entre CPLs em vez de configuração por CPL (sim, RN-006):
+
+- `Edital` + `CriterioMaturidade` (RF-024/RN-006) — **globais**, geridos só
+  por `ADMINISTRADOR_PLATAFORMA` (chamado com `cpl_id=None` no
+  `verificar_papel`, já que não há CPL nenhuma envolvida em criar/editar
+  um edital). Critério tem dimensão (organização/governança/planejamento/
+  dimensão/diversidade/impacto, enum `DimensaoMaturidade`), peso e nota de
+  corte próprios.
+- `Avaliacao` + `AvaliacaoCriterio` (RF-025/026) — avaliação de uma CPL
+  contra um edital; nota e evidência por critério (evidência reaproveita
+  o repositório de Documentos, RF-042, em vez de um mecanismo de anexo
+  próprio). Ao **concluir** uma avaliação, `pontuacao_calculada` (média
+  ponderada das notas) e `nivel_sugerido` (comparado aos limiares do
+  edital) são calculados automaticamente; **lacunas** são os critérios
+  cuja nota ficou abaixo da própria nota de corte.
+- **RN-016 é reforçada em código, não só em política**: concluir a
+  avaliação nunca muda `CPL.nivel_maturidade` — só um `nivel_sugerido`.
+  Um segundo passo, `POST /api/maturidade/avaliacoes/{id}/decidir`,
+  separado e restrito a `PAPEIS_GESTAO` (mais restrito que quem pode
+  avaliar), registra a decisão humana (`nivel_decidido`, `parecer`,
+  `decidido_por_id`) e só *esse* passo atualiza `CPL.nivel_maturidade`.
+- **RF-028** — decidir o nível também renova `CPL.data_validade_reconhecimento`
+  por um ciclo bienal a partir de hoje (RN-005). `GET
+  /api/maturidade/cpls/vencimento-proximo` e um banner em
+  `/painel/maturidade` alertam CPLs com reconhecimento vencendo ou já
+  vencido, escopados às CPLs visíveis pelo usuário.
+- **Recursos** (RF-027, apelação contra o resultado) — `RecursoAvaliacao`,
+  um por avaliação (`UniqueConstraint`), solicitado por quem gere a CPL
+  (`PAPEIS_GESTAO`) e decidido por quem gere os editais
+  (`PAPEIS_EDITAL_GESTAO` — administrador da plataforma), autoridade
+  deliberadamente diferente de quem avaliou/decidiu originalmente, por ser
+  uma contestação.
+- **Limitações conhecidas**: "habilitação jurídica" (RF-027) não tem
+  modelo/etapa própria — poderia reaproveitar Documentos como checklist,
+  mas não foi formalizado; "simular cenários" (RF-026, ver efeito de uma
+  nota hipotética antes de salvar) não foi construído, só o cálculo real
+  ao concluir; validade/versão de evidência (RF-025) dependem do
+  versionamento que `Documento` já tem, não algo modelado à parte aqui.
+- UI web em `/painel/maturidade` (editais + seleção de CPL) →
+  `/painel/maturidade/editais/{id}` (critérios + limiares, edição só pra
+  administrador) → `/painel/maturidade/cpls/{id}` (avaliações da CPL) →
+  `/painel/maturidade/avaliacoes/{id}` (notas por critério com lacunas
+  destacadas, conclusão, decisão de nível, recurso).
+
 ## Como rodar localmente
 
 1. Suba o Postgres de desenvolvimento:
@@ -351,6 +400,7 @@ os outros módulos já coletam:
    - Documentos (HTMX): http://127.0.0.1:8000/painel/documentos
    - Trilha de auditoria (HTMX): http://127.0.0.1:8000/painel/auditoria
    - Indicadores e relatórios (HTMX): http://127.0.0.1:8000/painel/indicadores
+   - Maturidade e reconhecimento (HTMX): http://127.0.0.1:8000/painel/maturidade
    - Documentação da API: http://127.0.0.1:8000/docs
 
 Para criar o primeiro usuário administrativo:
@@ -590,8 +640,8 @@ de novo enquanto existir pelo menos um administrador.
 
 ## Próximos passos sugeridos
 
-Seguindo o roadmap (seção 17 do documento). **A Fase 1/MVP está completa.**
-O que resta é polimento e a Fase 2:
+Seguindo o roadmap (seção 17 do documento). **A Fase 1/MVP está completa**
+e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
 
 1. Fechar as limitações conhecidas do RBAC (escopo por órgão/comissão via
    `MembroOrgao`, escopo de CPL para Entidade/Pessoa, página 403 amigável).
@@ -602,18 +652,20 @@ O que resta é polimento e a Fase 2:
    casamento automático por nome de cabeçalho; se a planilha real "CPLS -
    FORMS.xlsx" for anexada, calibrar os aliases em
    `app/services/importacao_entidades.py` contra ela.
-4. Matriz de maturidade e reconhecimento/recadastro (RF-024 a RF-028,
-   Fase 2) — depende do Planejamento Estratégico existir, que agora está
-   pronto.
-5. Visão "global" da trilha de auditoria (eventos sem CPL resolvível, hoje
+4. Visão "global" da trilha de auditoria (eventos sem CPL resolvível, hoje
    invisíveis na UI por-CPL) e paginação de verdade (hoje é um limite fixo
    de 200 registros mais recentes).
-6. Ampliar o resumo cadastral (RF-046/047) e os painéis (RF-045) conforme
+5. Ampliar o resumo cadastral (RF-046/047) e os painéis (RF-045) conforme
    novos campos/módulos forem existindo: qualificação, novos empregos
    (variação no tempo), sustentabilidade, certificações, contatos
-   internacionais, digitalização, e painéis de maturidade/projetos/
-   finanças/impacto territorial quando esses módulos forem construídos.
-7. Outros tipos de relatório do RF-048 (anual, recadastramento, comissão,
+   internacionais, digitalização, e painéis de projetos/finanças/impacto
+   territorial quando esses módulos forem construídos.
+6. Outros tipos de relatório do RF-048 (anual, recadastramento, comissão,
    projeto, impacto) — hoje só o executivo existe; os demais não têm
    formato definido no documento de requisitos e alguns dependem de
    módulos ainda não construídos.
+7. Restante da Fase 2 — plano de trabalho, orçamento, cotações e
+   submissões (RF-029 em diante) — depende do módulo de Projetos, ainda
+   não iniciado. "Simular cenários" (RF-026) e "habilitação jurídica"
+   (RF-027) também ficaram de fora do que foi construído em Maturidade
+   (ver seção do módulo acima).

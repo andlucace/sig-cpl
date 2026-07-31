@@ -168,6 +168,32 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
    indicador ganhou a mesma exceção de "responsável pessoal" que
    objetivo/meta/iniciativa já tinham (`_pode_executar`), agora que ele
    também tem `responsavel_id`.
+10. **Maturidade e reconhecimento** (RF-024 a RF-028) — primeiro módulo da
+    **Fase 2** (o usuário pediu "seguir para a próxima fase" depois de
+    confirmar, via `AskUserQuestion`, que "próxima fase" significava Fase
+    2 e não algo que ainda faltasse da Fase 1). Maior módulo novo desde
+    Governança: `Edital`, `CriterioMaturidade`, `Avaliacao`,
+    `AvaliacaoCriterio`, `RecursoAvaliacao`. Duas decisões perguntadas ao
+    usuário antes de implementar (`AskUserQuestion`), porque eram
+    genuinamente dele: (a) construir o fluxo de recursos/apelação (RF-027)
+    já nesta etapa ou deixar pra depois — escolheu construir já; (b)
+    confirmar que edital/critérios são configuração **global**
+    (compartilhada entre CPLs, gerida só por `ADMINISTRADOR_PLATAFORMA`)
+    e não algo que cada CPL cria pra si — confirmou que sim, é o que
+    RN-006 já sugeria. Ponto de design mais importante: **RN-016**
+    ("decisão de maturidade não pode ser só algorítmica") foi implementada
+    como uma separação real de dois passos, não só documentada — concluir
+    uma avaliação (`concluir_avaliacao`) só calcula um `nivel_sugerido`;
+    nenhum código atualiza `CPL.nivel_maturidade` até uma chamada humana
+    explícita e separada (`decidir_nivel`, endpoint próprio, RBAC mais
+    restrito que quem avalia). Reaproveitou o gotcha já documentado de
+    enum reutilizado entre migrações (`NivelMaturidade`, que já existia
+    desde a migração base do `CPL`) — a migração autogerada precisou do
+    mesmo ajuste manual (`postgresql.ENUM(..., create_type=False)`) que já
+    tinha sido feito outras vezes. Bônus de validação: a trilha de
+    auditoria (item 8) capturou as mudanças de `Avaliacao` automaticamente
+    sem nenhum código novo — confirma que o listener genérico realmente
+    cobre modelos futuros, não só os que existiam quando foi construído.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -303,9 +329,9 @@ só porque é um módulo novo).
 
 Ver `docs/requisitos_macros.md` para o texto completo de cada requisito e
 `README.md` (seção "Próximos passos sugeridos") para a lista mais atual.
-**A Fase 1/MVP está completa** — indicadores e relatórios (RF-044 a
-RF-048, era o último item) foi implementado nesta sessão. Resumo na ordem
-recomendada para o que vem depois:
+**A Fase 1/MVP está completa e a Fase 2 foi iniciada** (Maturidade e
+reconhecimento, RF-024 a RF-028, implementado nesta sessão). Resumo na
+ordem recomendada para o que vem depois:
 
 1. **Fechar limitações conhecidas do RBAC** (ver README, seção "Controle de
    acesso" → "Limitações conhecidas"): escopo por órgão/comissão específica
@@ -324,12 +350,12 @@ recomendada para o que vem depois:
    `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf` — caminho que
    `app/services/geracao_documentos.py` já procurava desde antes, então
    nenhum código mudou.
-5. **Fase 2 do roadmap** (Maturidade/Reconhecimento, RF-024 a RF-028) — só
-   faz sentido agora, depende do Planejamento Estratégico (já pronto) como
-   pré-requisito conceitual.
-6. ~~Deploy na VPS Hostinger~~ — **feito nesta sessão**, ver seção "Deploy
-   em produção" abaixo para todos os detalhes (como foi feito, segredos,
-   como reimplantar).
+5. **Restante da Fase 2** — plano de trabalho, orçamento, cotações e
+   submissões (RF-029 em diante) dependem do módulo de Projetos, ainda não
+   iniciado.
+6. ~~Deploy na VPS Hostinger~~ — **feito nesta sessão** (numa sessão
+   anterior a esta), ver seção "Deploy em produção" abaixo para todos os
+   detalhes (como foi feito, segredos, como reimplantar).
 7. **Trilha de auditoria: limitações conhecidas** — (a) a tela
    `/painel/auditoria` é por CPL; eventos sem CPL resolvível (login,
    criação de `Usuario`/`Pessoa`/`CPL` em si) ficam gravados no banco com
@@ -350,7 +376,14 @@ recomendada para o que vem depois:
    não existem (comissão/projeto dependem de módulos ainda não
    construídos). RF-045 só cobre governança/planejamento/cadastro —
    maturidade/projetos/finanças/impacto territorial ficam pra quando esses
-   módulos existirem.
+   módulos existirem (maturidade já tem painel próprio desde esta sessão,
+   ver item 9).
+9. **Maturidade e reconhecimento: limitações conhecidas** — "habilitação
+   jurídica" (RF-027) não tem modelo/etapa própria; "simular cenários"
+   (RF-026, ver o efeito de uma nota hipotética antes de salvar) não foi
+   construído, só o cálculo real ao concluir a avaliação; validade/versão
+   de evidência (RF-025) dependem do versionamento que `Documento` já tem,
+   não algo modelado à parte para maturidade.
 
 ## Deploy em produção
 

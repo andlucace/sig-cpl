@@ -1,0 +1,81 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Maturidade e reconhecimento{% endblock %}
+{% block subtitulo %}Maturidade e reconhecimento{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1"><i class="bi bi-award text-primary me-2"></i>Maturidade e reconhecimento</h1>
+    <p class="text-body-secondary">Avaliação de maturidade das CPLs contra os editais do Programa SP Produz.</p>
+
+    {% if vencendo %}
+        <div class="alert alert-warning d-flex gap-2 mb-4" role="alert">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <div>
+                <strong>Reconhecimento vencendo ou vencido:</strong>
+                {% for cpl in vencendo %}
+                    <a href="/painel/maturidade/cpls/{{ cpl.id }}" class="alert-link">{{ cpl.nome }}</a>
+                    ({{ cpl.data_validade_reconhecimento.strftime('%d/%m/%Y') if cpl.data_validade_reconhecimento else "sem data" }}){% if not loop.last %}, {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-journal-text text-primary me-2"></i>Editais</span>
+                </div>
+                <div class="list-group list-group-flush">
+                    {% for edital in editais %}
+                        <a href="/painel/maturidade/editais/{{ edital.id }}"
+                           class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <span>{{ edital.nome }} <small class="text-body-secondary">({{ edital.ciclo }})</small></span>
+                            {% if edital.ativo %}<span class="badge text-bg-success">ativo</span>{% else %}<span class="badge text-bg-secondary">encerrado</span>{% endif %}
+                        </a>
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhum edital cadastrado ainda.</div>
+                    {% endfor %}
+                </div>
+                {% if e_administrador %}
+                    <div class="card-body border-top">
+                        <form method="post" action="/painel/maturidade/editais">
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control form-control-sm" name="nome" placeholder="Nome do edital" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <input type="text" class="form-control form-control-sm" name="ciclo" placeholder="Ciclo (ex.: 2026)" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                                        <i class="bi bi-plus-lg me-1"></i>Novo edital
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-geo-alt-fill text-primary me-2"></i>Selecionar CPL
+                </div>
+                <div class="list-group list-group-flush">
+                    {% for cpl in cpls %}
+                        <a href="/painel/maturidade/cpls/{{ cpl.id }}"
+                           class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <span>{{ cpl.nome }}</span>
+                            <span class="badge {% if cpl.nivel_maturidade %}text-bg-info{% else %}text-bg-secondary{% endif %}">
+                                {{ cpl.nivel_maturidade.value.replace('_', ' ') if cpl.nivel_maturidade else "sem nível" }}
+                            </span>
+                        </a>
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhuma CPL vinculada ao seu usuário ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

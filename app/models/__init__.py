@@ -19,6 +19,13 @@ from app.models.governanca import (
     TarefaGovernanca,
     VotoRegistro,
 )
+from app.models.maturidade import (
+    Avaliacao,
+    AvaliacaoCriterio,
+    CriterioMaturidade,
+    Edital,
+    RecursoAvaliacao,
+)
 from app.models.pessoa import Pessoa, PessoaVinculo
 from app.models.planejamento import (
     DiagnosticoItem,
@@ -62,4 +69,9 @@ __all__ = [
     "ImportacaoLinha",
     "Documento",
     "RegistroAuditoria",
+    "Edital",
+    "CriterioMaturidade",
+    "Avaliacao",
+    "AvaliacaoCriterio",
+    "RecursoAvaliacao",
 ]

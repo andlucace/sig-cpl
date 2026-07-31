@@ -166,3 +166,34 @@ class AcaoAuditoria(str, enum.Enum):
     LOGIN_SUCESSO = "login_sucesso"
     LOGIN_FALHA = "login_falha"
     DOWNLOAD = "download"
+
+
+class DimensaoMaturidade(str, enum.Enum):
+    """Seção 10 (glossário do modelo conceitual): dimensões avaliadas por
+    critério de maturidade — organização, governança, planejamento,
+    dimensão (porte/escala), diversidade e impacto da CPL."""
+
+    ORGANIZACAO = "organizacao"
+    GOVERNANCA = "governanca"
+    PLANEJAMENTO = "planejamento"
+    DIMENSAO = "dimensao"
+    DIVERSIDADE = "diversidade"
+    IMPACTO = "impacto"
+
+
+class StatusAvaliacao(str, enum.Enum):
+    """RF-024/026: ciclo de vida de uma avaliação de maturidade de uma CPL
+    contra um edital — separado do nível final decidido (RN-016: a decisão
+    de nível é sempre humana, nunca automática ao concluir a avaliação)."""
+
+    EM_ANDAMENTO = "em_andamento"
+    CONCLUIDA = "concluida"
+
+
+class StatusRecurso(str, enum.Enum):
+    """RF-027: status do recurso (contestação) contra o resultado de uma
+    avaliação de maturidade."""
+
+    PENDENTE = "pendente"
+    DEFERIDO = "deferido"
+    INDEFERIDO = "indeferido"

@@ -1,0 +1,115 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Edital — {{ edital.nome }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/maturidade" class="link-secondary text-decoration-none">Maturidade</a>
+    <i class="bi bi-chevron-right small mx-1"></i>{{ edital.nome }}
+{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1">{{ edital.nome }} <small class="text-body-secondary">({{ edital.ciclo }})</small></h1>
+    {% if edital.descricao %}<p class="text-body-secondary">{{ edital.descricao }}</p>{% endif %}
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-list-check text-primary me-2"></i>Critérios de avaliação
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Critério</th>
+                                <th>Dimensão</th>
+                                <th>Peso</th>
+                                <th>Nota de corte</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in criterios %}
+                                <tr>
+                                    <td class="small">{{ c.nome }}</td>
+                                    <td class="small">{{ c.dimensao.value }}</td>
+                                    <td class="small">{{ c.peso }}</td>
+                                    <td class="small">{{ c.nota_corte if c.nota_corte is not none else "—" }}</td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="4" class="text-body-secondary">Nenhum critério cadastrado ainda.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if e_administrador %}
+                    <div class="card-body border-top">
+                        <form method="post" action="/painel/maturidade/editais/{{ edital.id }}/criterios">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1">Critério</label>
+                                    <input type="text" class="form-control form-control-sm" name="nome" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small mb-1">Dimensão</label>
+                                    <select class="form-select form-select-sm" name="dimensao" required>
+                                        {% for d in dimensoes %}
+                                            <option value="{{ d.value }}">{{ d.value }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small mb-1">Peso</label>
+                                    <input type="number" step="0.1" class="form-control form-control-sm" name="peso" value="1.0">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small mb-1">Nota de corte</label>
+                                    <input type="number" step="0.1" class="form-control form-control-sm" name="nota_corte">
+                                </div>
+                                <div class="col-md-1">
+                                    <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-plus-lg"></i></button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-sliders text-primary me-2"></i>Limiares de nível sugerido
+                </div>
+                <div class="card-body small">
+                    {% if e_administrador %}
+                        <form method="post" action="/painel/maturidade/editais/{{ edital.id }}">
+                            <div class="mb-2">
+                                <label class="form-label">Aglomerado Produtivo → CPL em Desenvolvimento</label>
+                                <input type="number" step="0.1" class="form-control form-control-sm" name="limiar_cpl_em_desenvolvimento" value="{{ edital.limiar_cpl_em_desenvolvimento if edital.limiar_cpl_em_desenvolvimento is not none else '' }}">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">→ CPL Consolidada</label>
+                                <input type="number" step="0.1" class="form-control form-control-sm" name="limiar_cpl_consolidada" value="{{ edital.limiar_cpl_consolidada if edital.limiar_cpl_consolidada is not none else '' }}">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">→ CPL Madura</label>
+                                <input type="number" step="0.1" class="form-control form-control-sm" name="limiar_cpl_madura" value="{{ edital.limiar_cpl_madura if edital.limiar_cpl_madura is not none else '' }}">
+                            </div>
+                            <div class="form-check mb-3">
+                                <input type="checkbox" class="form-check-input" name="ativo" id="ativo" {% if edital.ativo %}checked{% endif %}>
+                                <label class="form-check-label" for="ativo">Edital ativo</label>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm w-100">
+                                <i class="bi bi-save me-1"></i>Salvar
+                            </button>
+                        </form>
+                        <div class="form-text mt-2">
+                            Pontuação é a média ponderada das notas (0-100). Sem limiares definidos, a avaliação mostra a pontuação mas não sugere um nível.
+                        </div>
+                    {% else %}
+                        <p class="mb-1">Em desenvolvimento: a partir de {{ edital.limiar_cpl_em_desenvolvimento if edital.limiar_cpl_em_desenvolvimento is not none else "—" }}</p>
+                        <p class="mb-1">Consolidada: a partir de {{ edital.limiar_cpl_consolidada if edital.limiar_cpl_consolidada is not none else "—" }}</p>
+                        <p class="mb-0">Madura: a partir de {{ edital.limiar_cpl_madura if edital.limiar_cpl_madura is not none else "—" }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

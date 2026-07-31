@@ -41,6 +41,19 @@ PAPEIS_IMPEDIMENTO_LEITURA = PAPEIS_GESTAO | {Papel.AUDITORIA_CONTROLE}
 """Declarações de impedimento são dado sensível (RN-014) — leitura mais
 restrita que o resto da governança; conselho/comissão não veem por padrão."""
 
+PAPEIS_EDITAL_GESTAO = {Papel.ADMINISTRADOR_PLATAFORMA}
+"""RF-024/RN-006: edital e critérios de maturidade são configuração
+compartilhada do Programa SP Produz, não algo que cada CPL cria pra si —
+só administrador da plataforma gerencia (chamado com cpl_id=None, já que
+não há CPL nenhuma envolvida em criar/editar um edital)."""
+
+PAPEIS_AVALIACAO_EXECUCAO = PAPEIS_GESTAO | {Papel.ANALISTA_AVALIADOR}
+"""RF-024/025: quem conduz uma avaliação de maturidade — lança nota e
+evidência por critério. Concluir a avaliação (calcula nível sugerido) usa
+o mesmo grupo; **decidir** o nível final que atualiza `CPL.nivel_maturidade`
+é sempre `PAPEIS_GESTAO` (RN-016: decisão humana e mais restrita que
+"quem avalia")."""
+
 
 def papeis_do_usuario(db: Session, usuario: Usuario) -> list[UsuarioPapel]:
     return db.query(UsuarioPapel).filter(UsuarioPapel.usuario_id == usuario.id).all()

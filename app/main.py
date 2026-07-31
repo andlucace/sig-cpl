@@ -13,6 +13,7 @@ from app.api.routes import (
     entidades,
     governanca,
     indicadores,
+    maturidade,
     pessoas,
     planejamento,
     usuario_papel,
@@ -30,6 +31,7 @@ from app.web import (
     routes_documentos,
     routes_governanca,
     routes_indicadores,
+    routes_maturidade,
     routes_planejamento,
     routes_publico,
     routes_restrito,
@@ -84,6 +86,7 @@ app.include_router(cadastro_dinamico.router, prefix="/api")
 app.include_router(documentos.router, prefix="/api")
 app.include_router(auditoria.router, prefix="/api")
 app.include_router(indicadores.router, prefix="/api")
+app.include_router(maturidade.router, prefix="/api")
 for stub_router in stub_routers:
     app.include_router(stub_router, prefix="/api")
 
@@ -95,6 +98,7 @@ app.include_router(routes_cadastro.router)
 app.include_router(routes_documentos.router)
 app.include_router(routes_auditoria.router)
 app.include_router(routes_indicadores.router)
+app.include_router(routes_maturidade.router)
 app.include_router(routes_atualizacao_publica.router)
 app.include_router(routes_publico.router)
 
