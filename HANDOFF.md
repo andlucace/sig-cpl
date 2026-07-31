@@ -51,7 +51,7 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   `http://127.0.0.1:8010`** — confira com `netstat -ano | grep 8010` antes
   de subir outro, e mate o processo antigo antes de reiniciar (o servidor
   não usa `--reload`, então mudanças de código exigem restart manual).
-- **Migrações Alembic aplicadas:** 6 revisões, todas no banco atual:
+- **Migrações Alembic aplicadas:** 9 revisões, todas no banco atual:
   1. `18541dca0a36` — modelos base (CPL, Entidade, Pessoa, Usuário)
   2. `0ba4d1a10f9d` — módulo Governança
   3. `5dd913b79202` — módulo Planejamento Estratégico
@@ -60,6 +60,14 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   5. `5891c62d1cb7` — módulo Documentos (repositório, versionamento,
      aprovação/assinatura, geração de ata em PDF)
   6. `5bff0df723be` — trilha de auditoria (`registros_auditoria`)
+  7. `45d01888a884` — catálogo de indicadores (fonte, responsável,
+     histórico de valores)
+  8. `03a8cd5342ad` — módulo Maturidade (editais, critérios, avaliações,
+     recursos)
+  9. `16a954e6a8d8` — remapeamento manual de colunas na importação
+     (status do lote, arquivo staged, mapeamento salvo)
+  - (a visão global + paginação da auditoria, feita depois, **não**
+    precisou de migração — é só query/rota/template novos)
 
 ### Usuários de teste já existentes no banco
 
@@ -264,6 +272,43 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     foram parar nos campos certos (confirmado lendo a `Entidade` criada de
     volta). `processar_planilha()` (1 passo) continua existindo pra quem
     não precisa da conferência manual.
+14. **Visão global da auditoria + paginação de verdade** — quarto e último
+    "item menor" da lista. Antes, `GET /auditoria/cpls/{id}` e a tela web
+    correspondente tinham um limite fixo de 200/registros mais recentes,
+    sem `offset` nem contagem total — e eventos com `cpl_id=None` (login,
+    criação de `Usuario`/`Pessoa`/`CPL` em si) não apareciam em nenhuma
+    tela, só consultáveis direto no banco. Consolidei a lógica de consulta
+    num único helper novo, `consultar_registros()` em
+    `app/services/auditoria.py` (parâmetros `cpl_id`, `somente_global`,
+    `acao`, `entidade_tipo`, `offset`, `limite`; devolve `(registros,
+    total)`), usado tanto pela API quanto pela web, tanto na visão por-CPL
+    quanto na global — evita duplicar a mesma query em 4 lugares.
+    `GET /api/auditoria/cpls/{cpl_id}` ganhou `offset` e o header
+    `X-Total-Count`; `GET /api/auditoria/global` é rota nova, restrita a
+    `PAPEIS_EDITAL_GESTAO` (= só `ADMINISTRADOR_PLATAFORMA`, já que cruza
+    dados de todas as CPLs). No lado web, mesma coisa em
+    `/painel/auditoria/cpls/{id}` (query param `pagina`) e
+    `/painel/auditoria/global` (nova, linkada a partir do seletor de CPL
+    só quando `cpl_ids_visiveis()` devolve `None`, ou seja só pra quem já
+    enxerga todas as CPLs). Extraí a tabela de eventos e os controles de
+    página anterior/próxima em dois partials Jinja
+    (`_tabela_registros.html`, `_paginacao.html`) reaproveitados pelas duas
+    telas, em vez de duplicar o HTML. **Armadilha evitada por pouco**: o
+    card novo "Visão global" no seletor de CPL quase ganhou a mesma classe
+    `list-group-item-action` dos itens de CPL — isso teria feito o
+    seletor `.list-group-item-action >> nth=0` do script de regressão
+    `auditoria_shot.js` clicar no link errado (visão global em vez da
+    primeira CPL). Troquei pra um `<a class="card">` com classes
+    distintas antes de rodar a suite completa, exatamente pra não
+    repetir o tipo de acoplamento entre UI nova e teste antigo que já
+    causou o bug do `_GeradorAta`/`_GeradorPDF` nesta mesma sessão. Não
+    precisou de migração — mudança é só de query/rota/template. Nenhuma
+    regressão nos scripts Playwright existentes (as falhas observadas ao
+    rodar a suite completa — `cpl_edit_shot.js` por sigla duplicada de uma
+    rodada anterior não-idempotente, `pdf_shot.js` por `networkidle` nunca
+    resolver ao abrir um PDF local via `file://`, `shot.js` por faltar URL
+    hardcoded — já eram conhecidas e não têm relação com este módulo;
+    confirmado também sem nenhum 500 no log do servidor durante a run).
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -425,17 +470,17 @@ ordem recomendada para o que vem depois:
 6. ~~Deploy na VPS Hostinger~~ — **feito nesta sessão** (numa sessão
    anterior a esta), ver seção "Deploy em produção" abaixo para todos os
    detalhes (como foi feito, segredos, como reimplantar).
-7. **Trilha de auditoria: limitações conhecidas** — (a) a tela
-   `/painel/auditoria` é por CPL; eventos sem CPL resolvível (login,
-   criação de `Usuario`/`Pessoa`/`CPL` em si) ficam gravados no banco com
-   `cpl_id=None` mas não aparecem em nenhuma tela hoje (só consultáveis
-   direto no banco) — cobrir isso exigiria uma visão "global", restrita a
-   `ADMINISTRADOR_PLATAFORMA`; (b) não há paginação de verdade, só um
-   limite fixo (200 registros mais recentes) — se o volume crescer, vai
-   precisar de paginação ou filtro por data; (c) `DELETE` não é exposto em
-   nenhum endpoint do sistema hoje, então a captura de EXCLUSAO nunca roda
-   em uso real — foi testada diretamente via sessão SQLAlchemy num script
-   ad-hoc, não através de um endpoint HTTP real.
+7. ~~Trilha de auditoria: visão global e paginação~~ — **feito nesta
+   sessão**: (a) visão "global" (`/painel/auditoria/global`,
+   `GET /api/auditoria/global`), restrita a `ADMINISTRADOR_PLATAFORMA`,
+   pra eventos sem CPL resolvível (login, criação de `Usuario`/`Pessoa`/
+   `CPL` em si); (b) paginação de verdade (`offset`/página, com total via
+   `X-Total-Count` na API e "página X de Y" com anterior/próxima na web) —
+   ver item 14 da seção "Ordem em que este projeto foi construído".
+   Segue pendente, sem relação com este trabalho: `DELETE` não é exposto
+   em nenhum endpoint do sistema hoje, então a captura de EXCLUSAO nunca
+   roda em uso real — foi testada diretamente via sessão SQLAlchemy num
+   script ad-hoc, não através de um endpoint HTTP real.
 8. **Indicadores e relatórios: limitações conhecidas** (ver README para o
    detalhe por requisito) — RF-046/047 só cobrem o que já existe no
    `DiagnosticoCadastral` (empregos, faturamento, inovação, exportação,

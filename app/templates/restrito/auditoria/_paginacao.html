@@ -1,0 +1,16 @@
+{# Controles de página anterior/próxima — RF-056. Recebe `url_base`,
+   `pagina`, `total_paginas` e os filtros atuais (opcionais) pra manter o
+   filtro ao trocar de página. #}
+{% if total_paginas > 1 %}
+    <nav class="d-flex justify-content-between align-items-center mt-3">
+        <small class="text-body-secondary">Página {{ pagina }} de {{ total_paginas }} ({{ total }} registros)</small>
+        <ul class="pagination pagination-sm mb-0">
+            <li class="page-item {% if pagina <= 1 %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_base }}?pagina={{ pagina - 1 }}{% if filtro_acao %}&acao={{ filtro_acao.value }}{% endif %}{% if filtro_entidade_tipo %}&entidade_tipo={{ filtro_entidade_tipo }}{% endif %}">Anterior</a>
+            </li>
+            <li class="page-item {% if pagina >= total_paginas %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_base }}?pagina={{ pagina + 1 }}{% if filtro_acao %}&acao={{ filtro_acao.value }}{% endif %}{% if filtro_entidade_tipo %}&entidade_tipo={{ filtro_entidade_tipo }}{% endif %}">Próxima</a>
+            </li>
+        </ul>
+    </nav>
+{% endif %}

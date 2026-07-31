@@ -183,6 +183,47 @@ def _capturar_auditoria_depois(session: Session, flush_context) -> None:
         session.execute(insert(RegistroAuditoria.__table__), linhas)
 
 
+LIMITE_PADRAO = 50
+LIMITE_MAXIMO = 200
+
+
+def consultar_registros(
+    db: Session,
+    *,
+    cpl_id: uuid.UUID | None = None,
+    somente_global: bool = False,
+    acao: AcaoAuditoria | None = None,
+    entidade_tipo: str | None = None,
+    offset: int = 0,
+    limite: int = LIMITE_PADRAO,
+) -> tuple[list[RegistroAuditoria], int]:
+    """RF-056: consulta paginada da trilha — usada tanto pela API quanto
+    pela web, tanto na visão por-CPL quanto na visão global
+    (`somente_global=True`, eventos sem CPL resolvível — login, criação de
+    `Usuario`/`Pessoa`/`CPL` em si). Devolve `(registros da página, total
+    de registros que batem com o filtro)`, pra dar pra montar "página X de
+    Y" sem uma segunda ida ao banco."""
+
+    query = db.query(RegistroAuditoria)
+    if somente_global:
+        query = query.filter(RegistroAuditoria.cpl_id.is_(None))
+    elif cpl_id is not None:
+        query = query.filter(RegistroAuditoria.cpl_id == cpl_id)
+    if acao is not None:
+        query = query.filter(RegistroAuditoria.acao == acao)
+    if entidade_tipo:
+        query = query.filter(RegistroAuditoria.entidade_tipo == entidade_tipo)
+
+    total = query.count()
+    registros = (
+        query.order_by(RegistroAuditoria.created_at.desc())
+        .offset(max(offset, 0))
+        .limit(min(limite, LIMITE_MAXIMO))
+        .all()
+    )
+    return registros, total
+
+
 def registrar_evento(
     db: Session,
     *,

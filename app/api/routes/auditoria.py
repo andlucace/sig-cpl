@@ -1,27 +1,28 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
-from app.core.rbac import PAPEIS_IMPEDIMENTO_LEITURA, verificar_papel
+from app.core.rbac import PAPEIS_EDITAL_GESTAO, PAPEIS_IMPEDIMENTO_LEITURA, verificar_papel
 from app.db.session import get_db
 from app.models.auditoria import RegistroAuditoria
 from app.models.cpl import CPL
 from app.models.enums import AcaoAuditoria
 from app.models.usuario import Usuario
 from app.schemas.auditoria import RegistroAuditoriaRead
+from app.services.auditoria import LIMITE_PADRAO, consultar_registros
 
 router = APIRouter(prefix="/auditoria", tags=["Auditoria"])
-
-LIMITE_PADRAO = 200
 
 
 @router.get("/cpls/{cpl_id}", response_model=list[RegistroAuditoriaRead])
 def listar_registros(
     cpl_id: uuid.UUID,
+    response: Response,
     acao: AcaoAuditoria | None = None,
     entidade_tipo: str | None = None,
+    offset: int = 0,
     limite: int = LIMITE_PADRAO,
     db: Session = Depends(get_db),
     usuario_atual: Usuario = Depends(get_current_user),
@@ -33,16 +34,43 @@ def listar_registros(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL não encontrada.")
     verificar_papel(db, usuario_atual, PAPEIS_IMPEDIMENTO_LEITURA, cpl_id=cpl_id)
 
-    query = db.query(RegistroAuditoria).filter(RegistroAuditoria.cpl_id == cpl_id)
-    if acao is not None:
-        query = query.filter(RegistroAuditoria.acao == acao)
-    if entidade_tipo:
-        query = query.filter(RegistroAuditoria.entidade_tipo == entidade_tipo)
-    return (
-        query.order_by(RegistroAuditoria.created_at.desc())
-        .limit(min(limite, 1000))
-        .all()
+    registros, total = consultar_registros(
+        db,
+        cpl_id=cpl_id,
+        acao=acao,
+        entidade_tipo=entidade_tipo,
+        offset=offset,
+        limite=limite,
     )
+    response.headers["X-Total-Count"] = str(total)
+    return registros
+
+
+@router.get("/global", response_model=list[RegistroAuditoriaRead])
+def listar_registros_globais(
+    response: Response,
+    acao: AcaoAuditoria | None = None,
+    entidade_tipo: str | None = None,
+    offset: int = 0,
+    limite: int = LIMITE_PADRAO,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[RegistroAuditoria]:
+    """RF-056: eventos sem CPL resolvível (login, criação de Usuario/Pessoa/
+    CPL em si) — restrito a administrador da plataforma, já que cruza
+    dados de todas as CPLs."""
+
+    verificar_papel(db, usuario_atual, PAPEIS_EDITAL_GESTAO)
+    registros, total = consultar_registros(
+        db,
+        somente_global=True,
+        acao=acao,
+        entidade_tipo=entidade_tipo,
+        offset=offset,
+        limite=limite,
+    )
+    response.headers["X-Total-Count"] = str(total)
+    return registros
 
 
 @router.get("/{registro_id}", response_model=RegistroAuditoriaRead)

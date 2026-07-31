@@ -274,16 +274,20 @@ endpoint a endpoint:
   consultar o banco — mantém o middleware leve mesmo rodando em toda
   requisição.
 - Leitura via `GET /api/auditoria/cpls/{cpl_id}` (filtros opcionais por
-  `acao`/`entidade_tipo`, limite de 200 registros mais recentes) e UI web
-  em `/painel/auditoria`, com os mesmos filtros e um botão "ver" que
-  expande valor anterior/novo em JSON. RBAC: `PAPEIS_IMPEDIMENTO_LEITURA`
-  (gestão + auditoria) — mesmo grupo restrito usado para documentos
-  confidenciais e declarações de impedimento.
-- **Limitação conhecida**: eventos sem CPL resolvível (login, criação de
-  `Usuario`/`Pessoa`/`CPL` em si) ficam gravados com `cpl_id=None` mas não
-  aparecem na tela por-CPL hoje — só consultáveis direto no banco/API sem
-  filtro de CPL. Cobrir isso exigiria uma visão "global" restrita a
-  `ADMINISTRADOR_PLATAFORMA`.
+  `acao`/`entidade_tipo`, paginação de verdade via `offset`/`limite` —
+  página de até 50 por padrão, 200 no máximo — com total no header
+  `X-Total-Count`) e UI web em `/painel/auditoria`, com os mesmos filtros,
+  um botão "ver" que expande valor anterior/novo em JSON, e controles de
+  página anterior/próxima. RBAC: `PAPEIS_IMPEDIMENTO_LEITURA` (gestão +
+  auditoria) — mesmo grupo restrito usado para documentos confidenciais e
+  declarações de impedimento.
+- **Visão global**: eventos sem CPL resolvível (login, criação de
+  `Usuario`/`Pessoa`/`CPL` em si) ficam gravados com `cpl_id=None`; agora
+  têm tela própria (`GET /api/auditoria/global`, `/painel/auditoria/global`,
+  linkada a partir do seletor de CPL só para quem enxerga todas as CPLs)
+  restrita a `PAPEIS_EDITAL_GESTAO` (= `ADMINISTRADOR_PLATAFORMA`). A
+  consulta paginada/filtrada de ambas as visões compartilha um único
+  helper, `consultar_registros()` em `app/services/auditoria.py`.
 
 O bloco **Indicadores e relatórios** (RF-044 a RF-048) fecha a Fase 1/MVP.
 Não introduz um módulo isolado — é uma camada de agregação sobre dados que
@@ -699,9 +703,12 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    `app/services/importacao_entidades.py` contra a planilha real "CPLS -
    FORMS.xlsx" (se algum dia for anexada) continua reduzindo o trabalho
    manual, mas não é mais bloqueante.
-4. Visão "global" da trilha de auditoria (eventos sem CPL resolvível, hoje
-   invisíveis na UI por-CPL) e paginação de verdade (hoje é um limite fixo
-   de 200 registros mais recentes).
+4. ~~Visão "global" da trilha de auditoria e paginação de verdade~~ —
+   **feito**: `/painel/auditoria/global` (e `GET /api/auditoria/global`,
+   restrito ao administrador da plataforma) para eventos sem CPL
+   resolvível, e paginação real por `offset`/página em ambas as visões
+   (antes era um limite fixo de 200 registros mais recentes, sem próxima
+   página).
 5. Ampliar o resumo cadastral (RF-046/047) e os painéis (RF-045) conforme
    novos campos/módulos forem existindo: qualificação, novos empregos
    (variação no tempo), sustentabilidade, certificações, contatos

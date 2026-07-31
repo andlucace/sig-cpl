@@ -1,11 +1,12 @@
 {% extends "restrito/_layout.html" %}
-{% block title %}SIG-CPL — Auditoria — {{ cpl.nome }}{% endblock %}
+{% block title %}SIG-CPL — Auditoria — Visão global{% endblock %}
 {% block subtitulo %}
     <a href="/painel/auditoria" class="link-secondary text-decoration-none">Auditoria</a>
-    <i class="bi bi-chevron-right small mx-1"></i>{{ cpl.nome }}
+    <i class="bi bi-chevron-right small mx-1"></i>Visão global
 {% endblock %}
 {% block conteudo %}
-    <h1 class="h3 mb-3">Trilha de auditoria — {{ cpl.nome }}</h1>
+    <h1 class="h3 mb-1">Trilha de auditoria — Visão global</h1>
+    <p class="text-body-secondary">Eventos sem CPL associada: login, criação de usuários, pessoas e das próprias CPLs. Restrito ao administrador da plataforma.</p>
 
     <form method="get" class="row g-2 mb-3 align-items-end">
         <div class="col-auto">
@@ -30,14 +31,14 @@
         </div>
         {% if filtro_acao or filtro_entidade_tipo %}
             <div class="col-auto">
-                <a href="/painel/auditoria/cpls/{{ cpl.id }}" class="btn btn-outline-secondary btn-sm">Limpar filtros</a>
+                <a href="/painel/auditoria/global" class="btn btn-outline-secondary btn-sm">Limpar filtros</a>
             </div>
         {% endif %}
     </form>
 
     <div class="card">
         <div class="card-header bg-transparent fw-semibold d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-clock-history text-primary me-2"></i>Eventos recentes</span>
+            <span><i class="bi bi-globe2 text-primary me-2"></i>Eventos globais</span>
             <small class="text-body-secondary">{{ total }} registro(s) no total</small>
         </div>
         <div class="table-responsive">

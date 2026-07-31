@@ -299,7 +299,7 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 
 | ID | Requisito macro | Pri. | Status no repo |
 |---|---|---|---|
-| RF-056 | Disponibilizar trilha de auditoria, logs, gestão de parâmetros, tabelas auxiliares, perfis e retenção. | M | ✅ Implementado — `RegistroAuditoria` (`app/models/auditoria.py`), captura automática de criação/atualização/exclusão via listener SQLAlchemy (`app/services/auditoria.py`) + registro explícito de login e download; leitura em `/api/auditoria` e `/painel/auditoria`. "Gestão de parâmetros/tabelas auxiliares/perfis" não tem tela dedicada própria (fica coberto indiretamente pela trilha de qualquer alteração nos modelos existentes, incl. `UsuarioPapel`) |
+| RF-056 | Disponibilizar trilha de auditoria, logs, gestão de parâmetros, tabelas auxiliares, perfis e retenção. | M | ✅ Implementado — `RegistroAuditoria` (`app/models/auditoria.py`), captura automática de criação/atualização/exclusão via listener SQLAlchemy (`app/services/auditoria.py`) + registro explícito de login e download; leitura em `/api/auditoria` e `/painel/auditoria`, com paginação real (offset/limite, `X-Total-Count` na API; página anterior/próxima na web) e visão global (`/api/auditoria/global`, `/painel/auditoria/global`) para eventos sem CPL resolvível (login, criação de `Usuario`/`Pessoa`/CPL), restrita ao administrador da plataforma. "Gestão de parâmetros/tabelas auxiliares/perfis" não tem tela dedicada própria (fica coberto indiretamente pela trilha de qualquer alteração nos modelos existentes, incl. `UsuarioPapel`) |
 
 ### Assistência inteligente
 
