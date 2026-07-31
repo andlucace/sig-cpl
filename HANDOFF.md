@@ -225,6 +225,16 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     uma função usada de verdade, não fazia sentido esperar. Lição: depois
     de qualquer rename com `replace_all`, rode a suite de regressão antes
     de considerar terminado, não só teste o caminho que motivou a mudança.
+12. **Tela de criação/edição de CPL** (RF-001) — segundo "item menor" da
+    sequência pedida pelo usuário (depois de RBAC). `PATCH /api/cpls/{id}`
+    novo (só existia `POST`/`GET`) + `app/web/routes_cpl.py` +
+    `/painel/cpls`. Deliberadamente **não** deixa editar
+    `nivel_maturidade`/`data_reconhecimento`/`data_validade_reconhecimento`
+    pelo form — esses só mudam via `decidir_nivel()` do módulo de
+    Maturidade (RN-016), então o schema `CPLUpdate` nem inclui esses
+    campos, pra não abrir um atalho by-design. Mesma regra de acesso da
+    criação (só `ADMINISTRADOR_PLATAFORMA`) — decisão que já vinha do
+    docstring original do `POST /api/cpls`, só estendida ao `PATCH`.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -368,8 +378,8 @@ ordem recomendada para o que vem depois:
    por órgão específico (`verificar_participacao_orgao`), escopo de CPL
    para Entidade/Pessoa na leitura, página 403 amigável no portal web. Ver
    README, seção "Controle de acesso" → "Limitações conhecidas".
-2. **Tela de criação/edição de CPL no portal restrito** — hoje só existe via
-   API (`POST /api/cpls`), o que obriga usar `/docs` para o primeiro passo.
+2. ~~Tela de criação/edição de CPL no portal restrito~~ — **feito nesta
+   sessão**: `/painel/cpls`, restrito a administrador (ver README).
 3. **Remapeamento manual de colunas na importação de planilha** — hoje o
    casamento é só automático por nome de cabeçalho
    (`app/services/importacao_entidades.py`); se a planilha real "CPLS -

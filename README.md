@@ -367,6 +367,17 @@ compartilhados entre CPLs em vez de configuração por CPL (sim, RN-006):
   `/painel/maturidade/avaliacoes/{id}` (notas por critério com lacunas
   destacadas, conclusão, decisão de nível, recurso).
 
+**Tela de criação/edição de CPL** (RF-001) — antes só existia via API
+(`POST /api/cpls`), o que obrigava usar `/docs` até para o primeiro passo
+de qualquer módulo. Agora em `/painel/cpls`: lista (escopada às CPLs
+visíveis) + form de criação/edição restrito a `ADMINISTRADOR_PLATAFORMA`
+(mesma regra da API — criar/editar CPL é decisão de nível de plataforma,
+não de quem gere uma CPL específica). O form **não** inclui
+`nivel_maturidade`/`data_reconhecimento`/`data_validade_reconhecimento`
+de propósito — esses campos só mudam via o fluxo de avaliação de
+maturidade (`POST /api/maturidade/avaliacoes/{id}/decidir`), pra não abrir
+um atalho em volta de RN-016. Demais papéis veem os dados em modo leitura.
+
 ## Como rodar localmente
 
 1. Suba o Postgres de desenvolvimento:
@@ -394,6 +405,7 @@ compartilhados entre CPLs em vez de configuração por CPL (sim, RN-006):
    - Portal público: http://127.0.0.1:8000/
    - Login (área restrita): http://127.0.0.1:8000/login
    - Painel: http://127.0.0.1:8000/painel
+   - CPLs (criar/editar, HTMX): http://127.0.0.1:8000/painel/cpls
    - Governança (HTMX): http://127.0.0.1:8000/painel/governanca
    - Planejamento Estratégico (HTMX): http://127.0.0.1:8000/painel/planejamento
    - Cadastro e dados / campanhas / importação (HTMX): http://127.0.0.1:8000/painel/cadastro
@@ -662,9 +674,10 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
 1. ~~Fechar as limitações conhecidas do RBAC~~ — **feito**: escopo por
    órgão/comissão via `MembroOrgao`, escopo de CPL para Entidade/Pessoa e
    página 403 amigável (ver "Controle de acesso" acima).
-2. Tela de criação/edição de CPL no portal restrito (hoje só via API) —
-   a UI de Governança, Planejamento, Cadastro e Documentos já dependem de
-   uma CPL existir.
+2. ~~Tela de criação/edição de CPL no portal restrito~~ — **feito**:
+   `/painel/cpls` (criar/editar restrito a administrador da plataforma,
+   mesma regra do endpoint de API; demais papéis veem só as CPLs
+   visíveis, em modo leitura).
 3. Remapeamento manual de colunas na importação de planilha — hoje só há
    casamento automático por nome de cabeçalho; se a planilha real "CPLS -
    FORMS.xlsx" for anexada, calibrar os aliases em

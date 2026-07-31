@@ -1,0 +1,74 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — {{ cpl.nome }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/cpls" class="link-secondary text-decoration-none">CPLs</a>
+    <i class="bi bi-chevron-right small mx-1"></i>{{ cpl.nome }}
+{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1">{{ cpl.nome }} <small class="text-body-secondary">({{ cpl.sigla }})</small></h1>
+    <p class="text-body-secondary">
+        Nível de maturidade: <strong>{{ cpl.nivel_maturidade.value.replace('_', ' ') if cpl.nivel_maturidade else "sem nível decidido" }}</strong>
+        {% if cpl.data_validade_reconhecimento %} — reconhecimento válido até {{ cpl.data_validade_reconhecimento.strftime('%d/%m/%Y') }}{% endif %}
+        — gerido em <a href="/painel/maturidade/cpls/{{ cpl.id }}">Maturidade e reconhecimento</a>, não aqui.
+    </p>
+
+    <div class="card" style="max-width: 640px;">
+        <div class="card-header bg-transparent fw-semibold">
+            <i class="bi bi-pencil-square text-primary me-2"></i>Dados cadastrais
+        </div>
+        <div class="card-body">
+            {% if e_administrador %}
+                <form method="post" action="/painel/cpls/{{ cpl.id }}">
+                    <div class="mb-3">
+                        <label class="form-label">Nome</label>
+                        <input type="text" class="form-control" name="nome" value="{{ cpl.nome }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Sigla</label>
+                        <input type="text" class="form-control" name="sigla" value="{{ cpl.sigla }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Setor</label>
+                        <input type="text" class="form-control" name="setor" value="{{ cpl.setor or '' }}">
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-8">
+                            <label class="form-label">Município</label>
+                            <input type="text" class="form-control" name="municipio" value="{{ cpl.municipio or '' }}">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">UF</label>
+                            <input type="text" class="form-control" name="uf" maxlength="2" value="{{ cpl.uf or '' }}">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Entidade gestora</label>
+                        <select class="form-select" name="entidade_gestora_id">
+                            <option value="">—</option>
+                            {% for entidade in entidades %}
+                                <option value="{{ entidade.id }}" {% if cpl.entidade_gestora_id == entidade.id %}selected{% endif %}>
+                                    {{ entidade.razao_social }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input type="checkbox" class="form-check-input" name="ativo" id="ativo" {% if cpl.ativo %}checked{% endif %}>
+                        <label class="form-check-label" for="ativo">CPL ativa</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-save me-1"></i>Salvar
+                    </button>
+                </form>
+            {% else %}
+                <p class="mb-1"><strong>Setor:</strong> {{ cpl.setor or "—" }}</p>
+                <p class="mb-1"><strong>Município/UF:</strong> {{ cpl.municipio or "—" }}{% if cpl.uf %}/{{ cpl.uf }}{% endif %}</p>
+                <p class="mb-1"><strong>Entidade gestora:</strong> {{ cpl.entidade_gestora.razao_social if cpl.entidade_gestora else "—" }}</p>
+                <p class="mb-0"><strong>Status:</strong> {{ "ativa" if cpl.ativo else "inativa" }}</p>
+                <div class="alert alert-light border mt-3 mb-0 small" role="alert">
+                    <i class="bi bi-info-circle me-1"></i>Só administrador da plataforma edita dados cadastrais da CPL.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

@@ -30,6 +30,7 @@ from app.web import (
     routes_atualizacao_publica,
     routes_auditoria,
     routes_cadastro,
+    routes_cpl,
     routes_documentos,
     routes_governanca,
     routes_indicadores,
@@ -115,6 +116,7 @@ for stub_router in stub_routers:
 
 # Portal restrito (HTMX), autopreenchimento público por token e portal público
 app.include_router(routes_restrito.router)
+app.include_router(routes_cpl.router)
 app.include_router(routes_governanca.router)
 app.include_router(routes_planejamento.router)
 app.include_router(routes_cadastro.router)

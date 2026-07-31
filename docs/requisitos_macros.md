@@ -129,7 +129,7 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 
 | ID | Requisito macro | Pri. | Status no repo |
 |---|---|---|---|
-| RF-001 | Permitir cadastrar e configurar uma ou mais CPLs, mantendo isolamento lógico de dados e parâmetros por CPL. | M | ✅ Implementado (`CPL`, `/api/cpls`) |
+| RF-001 | Permitir cadastrar e configurar uma ou mais CPLs, mantendo isolamento lógico de dados e parâmetros por CPL. | M | ✅ Implementado (`CPL`, `/api/cpls` + `PATCH /api/cpls/{id}`, UI em `/painel/cpls`) |
 | RF-002 | Disponibilizar área restrita e portal público com conteúdos e permissões distintos. | M | ✅ Implementado (`/painel`, `/`) |
 | RF-003 | Permitir parametrizar editais, etapas, critérios, pesos, prazos, documentos e níveis de maturidade sem alteração de código. | M | ❌ Pendente (depende do módulo de Maturidade/Editais) |
 

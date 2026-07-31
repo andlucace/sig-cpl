@@ -1,0 +1,86 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — CPLs{% endblock %}
+{% block subtitulo %}CPLs{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1"><i class="bi bi-geo-alt-fill text-primary me-2"></i>Cadeias Produtivas Locais</h1>
+    <p class="text-body-secondary">Cadastro das CPLs geridas nesta instância do sistema (RF-001).</p>
+
+    <div class="row g-4">
+        <div class="col-lg-{% if e_administrador %}7{% else %}12{% endif %}">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-list-ul text-primary me-2"></i>CPLs
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Nome</th>
+                                <th>Sigla</th>
+                                <th>Município/UF</th>
+                                <th>Nível</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for cpl in cpls %}
+                                <tr>
+                                    <td>
+                                        <a href="/painel/cpls/{{ cpl.id }}" class="text-decoration-none">{{ cpl.nome }}</a>
+                                    </td>
+                                    <td class="small">{{ cpl.sigla }}</td>
+                                    <td class="small">{{ cpl.municipio or "—" }}{% if cpl.uf %}/{{ cpl.uf }}{% endif %}</td>
+                                    <td class="small">{{ cpl.nivel_maturidade.value.replace('_', ' ') if cpl.nivel_maturidade else "—" }}</td>
+                                    <td>
+                                        {% if cpl.ativo %}<span class="badge text-bg-success">ativa</span>{% else %}<span class="badge text-bg-secondary">inativa</span>{% endif %}
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="5" class="text-body-secondary">Nenhuma CPL vinculada ao seu usuário ainda.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        {% if e_administrador %}
+            <div class="col-lg-5">
+                <div class="card">
+                    <div class="card-header bg-transparent fw-semibold">
+                        <i class="bi bi-plus-circle me-2"></i>Nova CPL
+                    </div>
+                    <div class="card-body">
+                        <form method="post" action="/painel/cpls">
+                            <div class="mb-3">
+                                <label class="form-label">Nome</label>
+                                <input type="text" class="form-control" name="nome" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Sigla</label>
+                                <input type="text" class="form-control" name="sigla" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Setor</label>
+                                <input type="text" class="form-control" name="setor">
+                            </div>
+                            <div class="row g-2 mb-3">
+                                <div class="col-8">
+                                    <label class="form-label">Município</label>
+                                    <input type="text" class="form-control" name="municipio">
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label">UF</label>
+                                    <input type="text" class="form-control" name="uf" maxlength="2">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-plus-lg me-1"></i>Criar CPL
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}
