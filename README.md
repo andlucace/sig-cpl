@@ -439,16 +439,39 @@ VPS Hostinger:
 - **Acesso à VPS**: via SSH com chave já existente em `~/.ssh/rh_nepen_hostinger`
   (reaproveitada — não foi criada uma chave nova), configurada em
   `~/.ssh/config` como host `rh-nepen-hostinger`. **Não foi usado nenhum
-  mecanismo de deploy automático do Hostinger** (o `VPS_createNewProjectV1`
-  do MCP aceita URL/repo GitHub, mas exigiria um repositório público — o
-  projeto tem `git init` local desde uma sessão seguinte à do deploy, mas
-  sem remoto no GitHub, então o deploy continua replicando o que já havia
-  sido feito manualmente para o `rh-nepen`: copiar os arquivos direto pra VPS).
-- **Arquivos em produção**: `/opt/sigcpl/` na VPS — cópia dos arquivos do
-  projeto (via `tar` piped por `ssh`, excluindo `.venv/`, `uploads/`,
-  `__pycache__/`, `.env`) + `.env.prod` com os segredos de produção (criado
-  direto na VPS, nunca passou pelo disco local em texto puro; permissão
-  `600`, dono `root`).
+  mecanismo de deploy automático do Hostinger** (`VPS_createNewProjectV1`).
+- **Repositório remoto**: https://github.com/andlucace/sig-cpl (privado ou
+  público, decisão do usuário — verificar direto no GitHub). Autenticação
+  por **duas deploy keys separadas** (uma por máquina, prática recomendada
+  em vez de reaproveitar a mesma chave em dois lugares):
+  - Local (este computador): `~/.ssh/sigcpl_github`, com **escrita**
+    habilitada (`git push`), host alias `github.com-sigcpl` em
+    `~/.ssh/config`.
+  - VPS: `/root/.ssh/sigcpl_github`, **só leitura** (não marcada como
+    "Allow write access" no GitHub), mesmo host alias em
+    `/root/.ssh/config`. Não faz sentido a VPS ter permissão de escrita —
+    ela só puxa (`git pull`), nunca empurra.
+- **Arquivos em produção**: `/opt/sigcpl/` na VPS é um **working directory
+  git de verdade** (branch `master`, tracking `origin/master`), não mais
+  uma cópia de arquivo — reimplantar é `git pull` + rebuild (ver
+  `deploy.sh` abaixo). `.env.prod` (segredos de produção) fica na mesma
+  pasta mas **fora do controle de versão** (`.gitignore`), criado direto na
+  VPS via SSH heredoc, nunca passou pelo disco local em texto puro;
+  permissão `600`, dono `root`.
+  - **Atenção, armadilha real desta sessão**: ao converter `/opt/sigcpl` de
+    "cópia de arquivo" pra "working directory git" (`git init` na pasta já
+    existente + `git reset --hard origin/master`), um `git add -A`
+    apressado usou o `.gitignore` *antigo* (de antes do deploy, que ainda
+    não excluía `.env.prod`) e chegou a commitar o arquivo de segredos
+    localmente antes do `reset --hard` sobrescrever tudo — o que, por sua
+    vez, **apagou o `.env.prod` do disco** (porque ele virou um arquivo
+    *rastreado* que não existe em `origin/master`). Detectado na hora,
+    purgado do `.git` (`reflog expire` + `gc --prune=now`) e o arquivo
+    recriado com os mesmos valores antes de qualquer redeploy real
+    acontecer — sem downtime. Lição: ao fazer essa conversão em qualquer
+    outro projeto, **mova o `.env`/segredos pra fora da pasta antes** de
+    rodar `git add`/`reset --hard`, não confie que o `.gitignore` do
+    momento já está correto.
 - **`Dockerfile`** (raiz do projeto, novo) — `python:3.12-slim` + `pip install -e .`
   + `apt-get install fonts-dejavu-core` (resolve o gotcha da fonte Unicode
   pro `fpdf2` em Linux, ver seção de gotchas do `HANDOFF.md` — a detecção de
@@ -470,16 +493,25 @@ VPS Hostinger:
 
 ### Como reimplantar depois de mudar código
 
+Desde que o remote GitHub foi configurado, `/opt/sigcpl` na VPS é um
+working directory git (branch `master`, tracking `origin/master`) — o fluxo
+é simplesmente: **commitar e dar push localmente, depois `./deploy.sh` na
+VPS** (script versionado no repositório, faz `git pull` + rebuild):
+
 ```bash
+# No seu computador
 cd /c/Users/andlu/sig-cpl
-tar -czf - --exclude='.venv' --exclude='venv' --exclude='__pycache__' \
-  --exclude='.git' --exclude='.env' --exclude='.env.prod' --exclude='*.egg-info' \
-  --exclude='uploads' --exclude='.pytest_cache' --exclude='.ruff_cache' \
-  --exclude='docker-compose.yml' . \
-  | ssh rh-nepen-hostinger "tar -xzf - -C /opt/sigcpl"
-ssh rh-nepen-hostinger "cd /opt/sigcpl && set -a && source .env.prod && set +a && \
-  docker compose -f docker-compose.prod.yml up -d --build"
+git add -A && git commit -m "..." && git push origin master
+
+# Na VPS
+ssh rh-nepen-hostinger "cd /opt/sigcpl && ./deploy.sh"
 ```
+
+`deploy.sh` roda `git pull origin master`, carrega `.env.prod` e sobe
+`docker compose -f docker-compose.prod.yml up -d --build`. Não há deploy
+automático no push (sem GitHub Actions/webhook) — o `ssh ... ./deploy.sh`
+final é sempre manual, de propósito, pra nunca reimplantar em produção sem
+alguém decidir isso explicitamente.
 
 Isso reconstrói a imagem e roda `alembic upgrade head` automaticamente (via
 `CMD` do `Dockerfile`) antes de subir o servidor — migrações novas são

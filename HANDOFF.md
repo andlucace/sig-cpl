@@ -29,13 +29,18 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   ver seção própria abaixo, "Deploy em produção", com todos os detalhes de
   como foi feito e como reimplantar).
 - **Local do projeto:** `C:\Users\andlu\sig-cpl`
-- **É um repositório git** desde esta sessão (`git init` + commit inicial
-  `e94d011`, branch `master`, sem remoto configurado — não foi criado
-  nenhum repositório no GitHub/GitLab). `.env`/`.env.prod` estão no
-  `.gitignore`, nunca foram commitados. O deploy em si não depende deste
-  repositório (foi feito por cópia direta de arquivo via SSH, ver seção
-  "Deploy em produção") — o `git init` foi um pedido separado do usuário,
-  não um pré-requisito técnico do deploy.
+- **É um repositório git com remoto no GitHub**: https://github.com/andlucace/sig-cpl,
+  branch `master`. `/opt/sigcpl` na VPS também é um working directory git
+  (não mais cópia de arquivo) tracking `origin/master` — reimplantar agora
+  é `git push` local + `ssh ... "cd /opt/sigcpl && ./deploy.sh"` (ver seção
+  "Deploy em produção" abaixo, que documenta também uma armadilha real de
+  perda temporária do `.env.prod` durante essa conversão — resolvida sem
+  downtime, mas vale ler antes de repetir esse tipo de conversão em outro
+  projeto). Autenticação via **duas deploy keys separadas** (uma por
+  máquina, cada uma em `~/.ssh/sigcpl_github` local e VPS — a da VPS é só
+  leitura). `.env`/`.env.prod` estão no `.gitignore`, nunca foram
+  commitados de propósito (e o `.env.prod` da VPS foi purgado do histórico
+  git depois do incidente mencionado acima).
 - **Postgres:** container Docker `sigcpl_db`, porta **5433** (não 5432 —
   a 5432 padrão está ocupada por outro projeto do usuário, `rh_nepen_db`).
   Sobe com `docker compose up -d` na raiz do projeto.
@@ -239,6 +244,25 @@ só porque é um módulo novo).
    manualmente pro enum só se truthy (`AcaoAuditoria(acao) if acao else None`).
    Qualquer tela nova com filtro por `<select>` deve seguir esse padrão,
    não o padrão "ingênuo" de tipar o parâmetro direto como Enum.
+10. **Converter uma pasta com arquivo de segredos em working directory git
+    (`git init` numa pasta já existente) pode apagar o arquivo de
+    segredos** — ao transformar `/opt/sigcpl` (até então só uma cópia de
+    arquivo via `tar`) num clone git de verdade, o roteiro óbvio (`git
+    init` && `git add -A` && `git commit` && `git reset --hard
+    origin/master`) tem uma pegadinha: o `.gitignore` que já estava na
+    pasta era uma versão **anterior** à que passou a excluir `.env.prod`
+    (esse padrão só foi adicionado ao `.gitignore` numa sessão posterior
+    ao deploy original) — então o `git add -A` local commitou o
+    `.env.prod` de verdade num commit efêmero, e o `git reset --hard
+    origin/master` seguinte, ao não achar esse arquivo na origem,
+    **apagou-o do disco** (comportamento correto do `reset --hard` pra
+    arquivos rastreados, mas destrutivo aqui). Detectado e corrigido na
+    hora (purgado do `.git` com `reflog expire --expire=now --all` +
+    `gc --prune=now`, arquivo recriado com os mesmos valores, containers
+    nunca reiniciaram, zero downtime), mas o jeito certo de fazer essa
+    conversão é: **mover qualquer arquivo de segredo pra fora da pasta
+    antes** de rodar `git add`/`reset --hard` nela, e só devolvê-lo depois
+    de confirmar que o `.gitignore` do commit de destino já o exclui.
 
 ## O que falta (priorizado)
 
