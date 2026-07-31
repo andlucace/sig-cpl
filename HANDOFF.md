@@ -150,6 +150,24 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
    "quem" e o "IP" chegam ao listener via `contextvars`
    (`app/core/audit_context.py`), populados por um middleware em
    `app/main.py` que decodifica o JWT sem tocar o banco.
+9. **Indicadores e relatórios** (RF-044 a RF-048) — fecha a Fase 1/MVP.
+   Diferente dos módulos anteriores, não criou tabelas de domínio novas
+   além de duas: `IndicadorEstrategico` ganhou `fonte`/`responsavel_id`, e
+   `IndicadorValorHistorico` guarda a série histórica (RF-044 exige isso
+   explicitamente, e antes só existia `valor_atual`, sem histórico). O
+   resto é uma **camada de agregação** (`app/services/indicadores.py`)
+   sobre dado que Governança, Planejamento e Cadastro dinâmico já
+   coletavam — deliberado, pra não duplicar coleta de dado. Antes de
+   implementar, perguntei ao usuário (via `AskUserQuestion`) só a decisão
+   que era genuinamente dele: RF-048 pede 6 tipos de relatório
+   (executivo/anual/recadastramento/comissão/projeto/impacto) e construir
+   todos era demais pro escopo atual — ele escolheu só o "Relatório
+   Executivo" em PDF, reaproveitando a mesma infra da ata de reunião
+   (por isso `_GeradorAta` em `geracao_documentos.py` virou `_GeradorPDF`,
+   generalizado pra servir aos dois documentos, não só à ata). RBAC do
+   indicador ganhou a mesma exceção de "responsável pessoal" que
+   objetivo/meta/iniciativa já tinham (`_pode_executar`), agora que ele
+   também tem `responsavel_id`.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -263,42 +281,56 @@ só porque é um módulo novo).
     conversão é: **mover qualquer arquivo de segredo pra fora da pasta
     antes** de rodar `git add`/`reset --hard` nela, e só devolvê-lo depois
     de confirmar que o `.gitignore` do commit de destino já o exclui.
+11. **`python -c "texto com acento"` via git-bash no Windows corrompe o
+    texto antes mesmo de chegar no Python** — não é um bug do app. Ao
+    investigar um "bug" de acentuação no relatório executivo (RF-048),
+    `repr()` de uma string lida do banco mostrava `�` (U+FFFD) no lugar de
+    "ó"/"—". Rastreei até a fonte: o argv passado a `python -c` por esse
+    ambiente (Bash tool → subprocess do Windows) já chega corrompido pro
+    interpretador — confirmado testando um literal Python digitado direto
+    no `-c` (`'Relatório...'`), que saiu corrompido **antes de qualquer
+    banco de dados estar envolvido**. Os bytes de verdade (checados
+    escrevendo em arquivo binário e lendo com `xxd`, sem passar por
+    `print`/console) estavam corretos o tempo todo, e o PDF gerado
+    renderiza os acentos perfeitamente (confirmado via rasterização
+    PyMuPDF, mesmo padrão do gotcha nº 6). **Se for depurar acentuação de
+    novo**: nunca confie em `repr()`/`print()` de string com acento
+    impressa por um script Python invocado via `-c` neste ambiente —
+    escreva em arquivo e leia os bytes brutos (`xxd`), ou confira via
+    navegador/PDF renderizado, que são os caminhos que realmente importam.
 
 ## O que falta (priorizado)
 
 Ver `docs/requisitos_macros.md` para o texto completo de cada requisito e
 `README.md` (seção "Próximos passos sugeridos") para a lista mais atual.
-**A Fase 1/MVP está completa** — trilha de auditoria (RF-056/RNF-003, era o
-último item) foi implementada nesta sessão. Resumo na ordem recomendada
-para o que vem depois:
+**A Fase 1/MVP está completa** — indicadores e relatórios (RF-044 a
+RF-048, era o último item) foi implementado nesta sessão. Resumo na ordem
+recomendada para o que vem depois:
 
-1. **Indicadores e relatórios amplos** (RF-044 a RF-048) — hoje só existem
-   KPIs de governança no `/painel`; falta catálogo multi-módulo e
-   exportação de relatórios.
-2. **Fechar limitações conhecidas do RBAC** (ver README, seção "Controle de
+1. **Fechar limitações conhecidas do RBAC** (ver README, seção "Controle de
    acesso" → "Limitações conhecidas"): escopo por órgão/comissão específica
    (não só CPL), escopo de CPL para Entidade/Pessoa, página 403 amigável no
    portal web (hoje mostra JSON cru).
-3. **Tela de criação/edição de CPL no portal restrito** — hoje só existe via
+2. **Tela de criação/edição de CPL no portal restrito** — hoje só existe via
    API (`POST /api/cpls`), o que obriga usar `/docs` para o primeiro passo.
-4. **Remapeamento manual de colunas na importação de planilha** — hoje o
+3. **Remapeamento manual de colunas na importação de planilha** — hoje o
    casamento é só automático por nome de cabeçalho
    (`app/services/importacao_entidades.py`); se a planilha real "CPLS -
    FORMS.xlsx" for anexada em algum momento, calibrar os aliases contra ela
    (o arquivo em si nunca foi anexado ao projeto).
-5. ~~Fonte Unicode para PDF em produção~~ — **resolvido no deploy**: em vez
+4. ~~Fonte Unicode para PDF em produção~~ — **resolvido no deploy**: em vez
    de bundlar o arquivo `.ttf` no repositório, o `Dockerfile` instala o
    pacote apt `fonts-dejavu-core` na imagem, que já entrega
    `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf` — caminho que
    `app/services/geracao_documentos.py` já procurava desde antes, então
    nenhum código mudou.
-6. **Fase 2 do roadmap** (Maturidade/Reconhecimento, RF-024 a RF-028) — só
-   faz sentido depois do item 1, e depende do Planejamento Estratégico
-   (já pronto) como pré-requisito conceitual.
-7. ~~Deploy na VPS Hostinger~~ — **feito nesta sessão**, ver seção "Deploy
+5. **Fase 2 do roadmap** (Maturidade/Reconhecimento, RF-024 a RF-028) — só
+   faz sentido agora, depende do Planejamento Estratégico (já pronto) como
+   pré-requisito conceitual.
+6. ~~Deploy na VPS Hostinger~~ — **feito nesta sessão**, ver seção "Deploy
    em produção" abaixo para todos os detalhes (como foi feito, segredos,
    como reimplantar).
-8. **Trilha de auditoria: limitações conhecidas** — (a) a tela
+7. **Trilha de auditoria: limitações conhecidas** — (a) a tela
    `/painel/auditoria` é por CPL; eventos sem CPL resolvível (login,
    criação de `Usuario`/`Pessoa`/`CPL` em si) ficam gravados no banco com
    `cpl_id=None` mas não aparecem em nenhuma tela hoje (só consultáveis
@@ -309,6 +341,16 @@ para o que vem depois:
    nenhum endpoint do sistema hoje, então a captura de EXCLUSAO nunca roda
    em uso real — foi testada diretamente via sessão SQLAlchemy num script
    ad-hoc, não através de um endpoint HTTP real.
+8. **Indicadores e relatórios: limitações conhecidas** (ver README para o
+   detalhe por requisito) — RF-046/047 só cobrem o que já existe no
+   `DiagnosticoCadastral` (empregos, faturamento, inovação, exportação,
+   ODS); sustentabilidade, certificações, contatos internacionais,
+   digitalização e "qualificação" não têm campo no cadastro atual. RF-048
+   só tem o relatório executivo — os outros 5 tipos citados no requisito
+   não existem (comissão/projeto dependem de módulos ainda não
+   construídos). RF-045 só cobre governança/planejamento/cadastro —
+   maturidade/projetos/finanças/impacto territorial ficam pra quando esses
+   módulos existirem.
 
 ## Deploy em produção
 

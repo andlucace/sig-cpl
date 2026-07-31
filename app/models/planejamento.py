@@ -1,7 +1,7 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, Float, ForeignKey, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -118,8 +118,9 @@ class IniciativaEstrategica(TimestampedBase):
 
 
 class IndicadorEstrategico(TimestampedBase):
-    """RF-023 (e base para o catálogo mais amplo do RF-044): indicador de
-    acompanhamento de um objetivo, com fórmula, meta e valor atual."""
+    """RF-023/RF-044 (catálogo de indicadores, RN-011): indicador de
+    acompanhamento de um objetivo, com fórmula, fonte de dados, meta,
+    responsável e valor atual — série histórica em `IndicadorValorHistorico`."""
 
     __tablename__ = "indicadores_estrategicos"
 
@@ -128,9 +129,36 @@ class IndicadorEstrategico(TimestampedBase):
     )
     nome: Mapped[str] = mapped_column(String(255), nullable=False)
     formula: Mapped[str | None] = mapped_column(Text)
+    fonte: Mapped[str | None] = mapped_column(String(255))
     unidade: Mapped[str | None] = mapped_column(String(50))
     meta_valor: Mapped[str | None] = mapped_column(String(255))
     valor_atual: Mapped[str | None] = mapped_column(String(255))
     periodicidade: Mapped[str | None] = mapped_column(String(100))
+    responsavel_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pessoas.id"), nullable=True
+    )
 
     objetivo: Mapped["ObjetivoEstrategico"] = relationship(back_populates="indicadores")
+    responsavel: Mapped["Pessoa | None"] = relationship()
+    valores_historico: Mapped[list["IndicadorValorHistorico"]] = relationship(
+        back_populates="indicador", order_by="IndicadorValorHistorico.data_referencia"
+    )
+
+
+class IndicadorValorHistorico(Base):
+    """RF-044: série histórica do indicador — cada aferição registrada fica
+    preservada aqui, em vez de só sobrescrever `valor_atual`."""
+
+    __tablename__ = "indicador_valores_historico"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    indicador_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("indicadores_estrategicos.id"), nullable=False
+    )
+    data_referencia: Mapped[date] = mapped_column(Date, nullable=False)
+    valor: Mapped[str] = mapped_column(String(255), nullable=False)
+    observacao: Mapped[str | None] = mapped_column(Text)
+    registrado_por_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("usuarios.id"))
+    registrado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    indicador: Mapped["IndicadorEstrategico"] = relationship(back_populates="valores_historico")

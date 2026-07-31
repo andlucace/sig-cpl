@@ -1,14 +1,17 @@
-"""RF-043: geração de documentos padronizados. Escopo desta etapa: exportar
-a ata de uma reunião de governança em PDF — usa o campo `Reuniao.ata` que já
-existe, sem depender de módulos ainda não construídos (Editais/Reconhecimento,
-Fase 2, é quem pediria o "pacote de submissão com índice e checklist").
+"""RF-043/RF-048: geração de documentos padronizados em PDF. Duas peças:
+exportar a ata de uma reunião de governança (usa o campo `Reuniao.ata` que
+já existe) e o relatório executivo consolidado de uma CPL (RF-048 — dos
+seis tipos de relatório citados no requisito, só este foi construído;
+comissão/projeto dependem de módulos ainda não implementados, ver README).
 """
 
 from pathlib import Path
 
 from fpdf import FPDF
 
+from app.models.cpl import CPL
 from app.models.governanca import Reuniao
+from app.models.planejamento import IndicadorEstrategico
 
 # A fonte core "Helvetica" do fpdf2 só cobre latin-1 e não tem travessão
 # (—), então acentuação e travessão saem trocados por "?" se usada direto.
@@ -39,7 +42,7 @@ def _texto_seguro(texto: str | None) -> str:
     return texto.encode("latin-1", errors="replace").decode("latin-1")
 
 
-class _GeradorAta:
+class _GeradorPDF:
     def __init__(self) -> None:
         self.pdf = FPDF()
         self.pdf.add_page()
@@ -108,5 +111,76 @@ def gerar_pdf_ata(reuniao: Reuniao) -> bytes:
     doc.espaco()
     doc.linha("Ata", negrito=True, tamanho=12)
     doc.linha(reuniao.ata or "(ata ainda não registrada)")
+
+    return doc.bytes()
+
+
+def gerar_pdf_relatorio_executivo(
+    cpl: CPL,
+    resumo_governanca: dict,
+    resumo_planejamento: dict,
+    resumo_cadastral: dict,
+    indicadores: list[IndicadorEstrategico],
+) -> bytes:
+    """RF-048: relatório executivo — consolida em um único PDF o que RF-045
+    a RF-047 pedem como painéis separados. Dados vêm prontos de
+    `app/services/indicadores.py`; esta função só formata."""
+
+    doc = _GeradorPDF()
+
+    doc.linha(f"Relatório Executivo — {cpl.nome}", altura=10, negrito=True, tamanho=16)
+    doc.linha(f"Sigla: {cpl.sigla} — Elo/setor: {cpl.setor or '—'}")
+    doc.espaco(2)
+
+    doc.linha("Governança", negrito=True, tamanho=12)
+    doc.linha(f"Órgãos ativos: {resumo_governanca['total_orgaos']}")
+    doc.linha(f"Reuniões realizadas: {resumo_governanca['reunioes_realizadas']}")
+    doc.linha(f"Deliberações aprovadas: {resumo_governanca['deliberacoes_aprovadas']}")
+    doc.linha(
+        f"Tarefas: {resumo_governanca['tarefas_concluidas']} concluídas, "
+        f"{resumo_governanca['tarefas_pendentes']} pendentes"
+    )
+
+    doc.espaco()
+    doc.linha("Planejamento estratégico", negrito=True, tamanho=12)
+    doc.linha(f"Ciclos de planejamento: {resumo_planejamento['total_ciclos']}")
+    doc.linha(
+        f"Objetivos: {resumo_planejamento['objetivos_concluidos']} concluídos de "
+        f"{resumo_planejamento['total_objetivos']}"
+    )
+    doc.linha(
+        f"Metas: {resumo_planejamento['metas_concluidas']} concluídas de "
+        f"{resumo_planejamento['total_metas']}"
+    )
+
+    doc.espaco()
+    doc.linha("Cadastro e cadeia", negrito=True, tamanho=12)
+    doc.linha(f"Empresas vinculadas: {resumo_cadastral['total_empresas']}")
+    doc.linha(f"Com diagnóstico cadastral respondido: {resumo_cadastral['total_com_diagnostico']}")
+    doc.linha(
+        f"Empregos diretos: {resumo_cadastral['soma_empregos_diretos']} — "
+        f"indiretos: {resumo_cadastral['soma_empregos_indiretos']}"
+    )
+    if resumo_cadastral["percentual_inovacao"] is not None:
+        doc.linha(f"Realizam inovação: {resumo_cadastral['percentual_inovacao']}%")
+    if resumo_cadastral["percentual_exportacao"] is not None:
+        doc.linha(f"Exportam: {resumo_cadastral['percentual_exportacao']}%")
+    if resumo_cadastral["distribuicao_faturamento"]:
+        doc.linha("Faturamento por faixa:")
+        for faixa, quantidade in resumo_cadastral["distribuicao_faturamento"].items():
+            doc.linha(f"- {faixa}: {quantidade}")
+    if resumo_cadastral["ods_mais_citados"]:
+        ods_texto = ", ".join(f"{nome} ({qtd})" for nome, qtd in resumo_cadastral["ods_mais_citados"])
+        doc.linha(f"ODS mais citados: {ods_texto}")
+
+    doc.espaco()
+    doc.linha("Catálogo de indicadores", negrito=True, tamanho=12)
+    if indicadores:
+        for indicador in indicadores:
+            valor = indicador.valor_atual or "sem valor registrado"
+            meta = f" (meta: {indicador.meta_valor})" if indicador.meta_valor else ""
+            doc.linha(f"- {indicador.nome}: {valor}{meta}")
+    else:
+        doc.linha("Nenhum indicador cadastrado ainda.")
 
     return doc.bytes()

@@ -23,6 +23,7 @@ from app.models.pessoa import Pessoa, PessoaVinculo
 from app.models.planejamento import (
     DiagnosticoItem,
     IndicadorEstrategico,
+    IndicadorValorHistorico,
     IniciativaEstrategica,
     MetaEstrategica,
     ObjetivoEstrategico,
@@ -53,6 +54,7 @@ __all__ = [
     "MetaEstrategica",
     "IniciativaEstrategica",
     "IndicadorEstrategico",
+    "IndicadorValorHistorico",
     "DiagnosticoCadastral",
     "CampanhaCadastral",
     "CampanhaConvite",

@@ -1,7 +1,10 @@
 <div class="list-group-item" id="indicador-{{ indicador.id }}">
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
         <div>
-            <i class="bi bi-graph-up text-primary me-2"></i><strong>{{ indicador.nome }}</strong>
+            <i class="bi bi-graph-up text-primary me-2"></i>
+            <a href="/painel/indicadores/{{ indicador.id }}/historico" class="link-body-emphasis text-decoration-none">
+                <strong>{{ indicador.nome }}</strong>
+            </a>
             <small class="text-body-secondary d-block ms-4">
                 {% if indicador.meta_valor %}Meta: {{ indicador.meta_valor }}{% endif %}
                 {% if indicador.unidade %} {{ indicador.unidade }}{% endif %}
@@ -9,6 +12,12 @@
             </small>
             {% if indicador.formula %}
                 <small class="text-body-secondary d-block ms-4">Fórmula: {{ indicador.formula }}</small>
+            {% endif %}
+            {% if indicador.fonte %}
+                <small class="text-body-secondary d-block ms-4">Fonte: {{ indicador.fonte }}</small>
+            {% endif %}
+            {% if indicador.responsavel %}
+                <small class="text-body-secondary d-block ms-4">Responsável: {{ indicador.responsavel.nome }}</small>
             {% endif %}
         </div>
         <form class="d-flex gap-2 align-items-center"

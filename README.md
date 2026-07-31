@@ -4,12 +4,13 @@ Esqueleto inicial da plataforma descrita no *Documento de Requisitos Macros*
 (referência: Programa SP Produz; projeto de referência: CPL Autopeças de
 Atibaia/SP — a transcrição completa do documento, com status de
 implementação por requisito, está em `docs/requisitos_macros.md`). Este
-repositório cobre a Fase 1 (MVP) do roadmap: fundação técnica, modelos de
+repositório cobre **100% da Fase 1 (MVP)** do roadmap (com recortes de
+escopo documentados requisito a requisito): fundação técnica, modelos de
 dados centrais, e os módulos de Identidade e Acesso, Governança,
 Planejamento Estratégico, Cadastro dinâmico (campanhas + importação de
-planilha), Documentos (repositório + geração de ata em PDF) e Trilha de
-auditoria funcionando. Falta apenas Indicadores e relatórios amplos
-(RF-044 a RF-048) para o MVP ficar 100% coberto.
+planilha), Documentos (repositório + geração de ata em PDF), Trilha de
+auditoria e Indicadores e relatórios (catálogo com série histórica,
+painéis consolidados, relatório executivo em PDF) funcionando.
 Maturidade/Reconhecimento (Fase 2), Projetos/fomento, Comunicação e
 Integrações existem como routers-stub, prontos para receber implementação
 incremental.
@@ -268,6 +269,55 @@ endpoint a endpoint:
   filtro de CPL. Cobrir isso exigiria uma visão "global" restrita a
   `ADMINISTRADOR_PLATAFORMA`.
 
+O bloco **Indicadores e relatórios** (RF-044 a RF-048) fecha a Fase 1/MVP.
+Não introduz um módulo isolado — é uma camada de agregação sobre dados que
+os outros módulos já coletam:
+
+- `IndicadorEstrategico` ganhou `fonte` (RN-011: "fonte de dados") e
+  `responsavel_id`; `IndicadorValorHistorico` é a série histórica de
+  verdade (RF-044) — cada aferição fica preservada, não só o `valor_atual`
+  mais recente. Registrar um novo valor (via `PATCH
+  /api/planejamento/indicadores/{id}` ou o form de `/painel/indicadores/
+  {id}/historico`) grava os dois: atualiza `valor_atual` **e** adiciona
+  uma linha ao histórico — a mesma função de serviço
+  (`app/services/indicadores.py::registrar_valor_indicador`) é chamada
+  pelos dois endpoints, pra não divergir.
+- **Catálogo consolidado** (`catalogo_indicadores`): todos os indicadores
+  de uma CPL através de **todos** os ciclos de planejamento, não só o mais
+  recente — é isso que torna RF-044 um "catálogo" e não só uma lista por
+  objetivo.
+- **Resumo cadastral** (`resumo_cadastral`, RF-046/047): agrega o que já é
+  coletado via `DiagnosticoCadastral` (campanha de atualização cadastral,
+  módulo de Cadastro dinâmico) — empresas vinculadas, empregos diretos/
+  indiretos, distribuição de faturamento por faixa, % inovação/P&D/
+  exportação/associativismo, ODS mais citados. **Não introduz coleta de
+  dado novo**: sustentabilidade, certificações, contatos internacionais e
+  digitalização (também citados no RF-047) não têm campo no cadastro atual
+  e por isso ficam de fora deste resumo.
+- **Painéis** (RF-045): `resumo_governanca` e `resumo_planejamento`
+  complementam o resumo cadastral acima, formando o dashboard de
+  `/painel/indicadores/cpls/{cpl_id}`. Só cobre governança/planejamento/
+  cadastro — maturidade, projetos, finanças e impacto territorial não têm
+  painel porque esses módulos ainda não existem (Fase 2/3).
+- **Relatório executivo em PDF** (RF-048) — dos seis tipos de relatório
+  citados no requisito (executivo, anual, recadastramento, comissão,
+  projeto, impacto), só este foi construído; decisão tomada com o usuário
+  via `AskUserQuestion` antes de implementar, dado que comissão/projeto
+  dependem de módulos que não existem e os demais não têm formato
+  definido no documento de requisitos. Reaproveita a mesma infraestrutura
+  da ata de reunião (`app/services/geracao_documentos.py` — a classe
+  `_GeradorPDF`, antes `_GeradorAta`, foi generalizada pra servir aos
+  dois): `POST /api/indicadores/cpls/{cpl_id}/relatorio-executivo` (e o
+  botão equivalente em `/painel/indicadores`) gera o PDF e já cadastra
+  como `Documento` (categoria `relatorio`), igual ao padrão da ata.
+- RBAC: leitura (catálogo, resumo, painel) usa `PAPEIS_GOVERNANCA_LEITURA`;
+  gerar relatório executivo usa `PAPEIS_GESTAO` (mesma exigência da ata);
+  registrar novo valor de indicador usa `PAPEIS_TAREFA_EXECUCAO` **ou** o
+  responsável pessoal do indicador (`Usuario.pessoa_id ==
+  IndicadorEstrategico.responsavel_id`) — mesma exceção já usada em
+  objetivo/meta/iniciativa, estendida ao indicador agora que ele também
+  tem `responsavel_id`.
+
 ## Como rodar localmente
 
 1. Suba o Postgres de desenvolvimento:
@@ -300,6 +350,7 @@ endpoint a endpoint:
    - Cadastro e dados / campanhas / importação (HTMX): http://127.0.0.1:8000/painel/cadastro
    - Documentos (HTMX): http://127.0.0.1:8000/painel/documentos
    - Trilha de auditoria (HTMX): http://127.0.0.1:8000/painel/auditoria
+   - Indicadores e relatórios (HTMX): http://127.0.0.1:8000/painel/indicadores
    - Documentação da API: http://127.0.0.1:8000/docs
 
 Para criar o primeiro usuário administrativo:
@@ -539,30 +590,30 @@ de novo enquanto existir pelo menos um administrador.
 
 ## Próximos passos sugeridos
 
-Seguindo o roadmap (seção 17 do documento). **A Fase 1/MVP está
-essencialmente completa** — falta só o item 1:
+Seguindo o roadmap (seção 17 do documento). **A Fase 1/MVP está completa.**
+O que resta é polimento e a Fase 2:
 
-1. Indicadores e relatórios amplos (RF-044 a RF-048) — hoje só há KPIs de
-   governança no `/painel`; falta o catálogo de indicadores multi-módulo e
-   relatórios exportáveis (executivo, anual, de recadastramento).
-2. Fechar as limitações conhecidas do RBAC (escopo por órgão/comissão via
+1. Fechar as limitações conhecidas do RBAC (escopo por órgão/comissão via
    `MembroOrgao`, escopo de CPL para Entidade/Pessoa, página 403 amigável).
-3. Tela de criação/edição de CPL no portal restrito (hoje só via API) —
+2. Tela de criação/edição de CPL no portal restrito (hoje só via API) —
    a UI de Governança, Planejamento, Cadastro e Documentos já dependem de
    uma CPL existir.
-4. Remapeamento manual de colunas na importação de planilha — hoje só há
+3. Remapeamento manual de colunas na importação de planilha — hoje só há
    casamento automático por nome de cabeçalho; se a planilha real "CPLS -
    FORMS.xlsx" for anexada, calibrar os aliases em
    `app/services/importacao_entidades.py` contra ela.
-5. Fonte Unicode para geração de PDF — hoje o serviço usa `arial.ttf` do
-   Windows como fallback quando não acha uma fonte bundled; para funcionar
-   igual numa VPS Linux, adicionar um `DejaVuSans.ttf`/`DejaVuSans-Bold.ttf`
-   (licença permissiva) em `app/static/fonts/` antes do deploy.
-6. Matriz de maturidade e reconhecimento/recadastro (RF-024 a RF-028,
+4. Matriz de maturidade e reconhecimento/recadastro (RF-024 a RF-028,
    Fase 2) — depende do Planejamento Estratégico existir, que agora está
    pronto.
-7. ~~Deploy~~ — **feito**: em produção em https://sigcpl.dedev.cloud (ver
-   seção "Infraestrutura de implantação — em produção" acima).
-8. Visão "global" da trilha de auditoria (eventos sem CPL resolvível, hoje
+5. Visão "global" da trilha de auditoria (eventos sem CPL resolvível, hoje
    invisíveis na UI por-CPL) e paginação de verdade (hoje é um limite fixo
    de 200 registros mais recentes).
+6. Ampliar o resumo cadastral (RF-046/047) e os painéis (RF-045) conforme
+   novos campos/módulos forem existindo: qualificação, novos empregos
+   (variação no tempo), sustentabilidade, certificações, contatos
+   internacionais, digitalização, e painéis de maturidade/projetos/
+   finanças/impacto territorial quando esses módulos forem construídos.
+7. Outros tipos de relatório do RF-048 (anual, recadastramento, comissão,
+   projeto, impacto) — hoje só o executivo existe; os demais não têm
+   formato definido no documento de requisitos e alguns dependem de
+   módulos ainda não construídos.

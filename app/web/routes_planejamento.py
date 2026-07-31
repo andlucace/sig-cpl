@@ -27,6 +27,7 @@ from app.models.planejamento import (
     PlanejamentoEstrategico,
 )
 from app.models.usuario import Usuario
+from app.services.indicadores import registrar_valor_indicador
 from app.web.templates import templates
 
 router = APIRouter(prefix="/painel/planejamento", tags=["Área restrita — Planejamento"])
@@ -511,9 +512,11 @@ def criar_indicador(
     objetivo_id: uuid.UUID,
     nome: str = Form(...),
     formula: str | None = Form(None),
+    fonte: str | None = Form(None),
     unidade: str | None = Form(None),
     meta_valor: str | None = Form(None),
     periodicidade: str | None = Form(None),
+    responsavel_id: str | None = Form(None),
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user_optional),
 ):
@@ -527,9 +530,11 @@ def criar_indicador(
         objetivo_id=objetivo_id,
         nome=nome,
         formula=formula or None,
+        fonte=fonte or None,
         unidade=unidade or None,
         meta_valor=meta_valor or None,
         periodicidade=periodicidade or None,
+        responsavel_id=_opt_uuid(responsavel_id),
     )
     db.add(indicador)
     db.commit()
@@ -552,10 +557,9 @@ def atualizar_valor_indicador(
     indicador = db.get(IndicadorEstrategico, indicador_id)
     if indicador is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Indicador não encontrado.")
-    verificar_papel(db, usuario, PAPEIS_TAREFA_EXECUCAO, cpl_id=indicador.objetivo.planejamento.cpl_id)
-    indicador.valor_atual = valor_atual or None
-    db.commit()
-    db.refresh(indicador)
+    if not _pode_executar(usuario, indicador.responsavel_id):
+        verificar_papel(db, usuario, PAPEIS_TAREFA_EXECUCAO, cpl_id=indicador.objetivo.planejamento.cpl_id)
+    indicador = registrar_valor_indicador(db, indicador, valor_atual, usuario.id)
     return templates.TemplateResponse(
         request, "restrito/planejamento/fragments/indicador_item.html", {"indicador": indicador}
     )

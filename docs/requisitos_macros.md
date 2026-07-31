@@ -252,16 +252,16 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 
 | ID | Requisito macro | Pri. | Status no repo |
 |---|---|---|---|
-| RF-044 | Manter catálogo de indicadores com fórmula, fonte, periodicidade, responsável, meta e série histórica. | M | ⚠️ Parcial — `IndicadorEstrategico` existe por objetivo, mas não há catálogo/série histórica multi-módulo |
-| RF-045 | Disponibilizar painéis de governança, maturidade, projetos, finanças e impacto territorial. | M | ⚠️ Parcial — só painel de governança (`/painel`, KPIs básicos) |
-| RF-046 | Monitorar empresas participantes, empregos diretos/indiretos, novos empregos, faturamento por faixa, inovação, qualificação e cooperação. | M | ❌ Pendente |
-| RF-047 | Monitorar ODS, sustentabilidade, exportação, contatos internacionais, certificações e digitalização. | S | ❌ Pendente |
+| RF-044 | Manter catálogo de indicadores com fórmula, fonte, periodicidade, responsável, meta e série histórica. | M | ✅ Implementado — `IndicadorEstrategico` ganhou `fonte` e `responsavel_id`; `IndicadorValorHistorico` guarda a série (cada aferição, não só o valor atual). Catálogo consolidado (através de todos os ciclos de planejamento de uma CPL) em `/painel/indicadores` e `GET /api/indicadores/cpls/{id}/catalogo` |
+| RF-045 | Disponibilizar painéis de governança, maturidade, projetos, finanças e impacto territorial. | M | ⚠️ Parcial — painel de governança (`/painel`) + painel consolidado de governança/planejamento/cadastro por CPL (`/painel/indicadores/cpls/{id}`). Maturidade, projetos, finanças e impacto territorial não têm painel próprio porque os módulos ainda não existem (Fase 2/3) |
+| RF-046 | Monitorar empresas participantes, empregos diretos/indiretos, novos empregos, faturamento por faixa, inovação, qualificação e cooperação. | M | ⚠️ Parcial — `resumo_cadastral()` agrega empresas vinculadas, empregos diretos/indiretos, faturamento por faixa e % de inovação/associativismo a partir do `DiagnosticoCadastral` já coletado. "Novos empregos" (variação no tempo) e "qualificação" não têm campo no cadastro atual |
+| RF-047 | Monitorar ODS, sustentabilidade, exportação, contatos internacionais, certificações e digitalização. | S | ⚠️ Parcial — ODS mais citados e % de exportação cobertos (campos já existiam em `DiagnosticoCadastral`). Sustentabilidade, contatos internacionais, certificações e digitalização não têm campo no cadastro — ficam para quando/se esses dados passarem a ser coletados |
 
 ### Relatórios
 
 | ID | Requisito macro | Pri. | Status no repo |
 |---|---|---|---|
-| RF-048 | Gerar relatórios executivo, anual, de recadastramento, de comissão, de projeto e de impacto. | M | ❌ Pendente |
+| RF-048 | Gerar relatórios executivo, anual, de recadastramento, de comissão, de projeto e de impacto. | M | ⚠️ Parcial (escopo deliberadamente recortado) — só o **relatório executivo** foi construído (`POST /api/indicadores/cpls/{id}/relatorio-executivo`, PDF salvo no repositório de Documentos), consolidando governança + planejamento + cadastro + catálogo de indicadores. Anual/recadastramento/comissão/projeto/impacto não têm formato próprio ainda — comissão e projeto, em particular, dependem de módulos que não existem (governança já tem "comissão temática" como tipo de órgão, mas não um relatório dedicado a ela; projeto é Fase 2/3) |
 
 ### Comunicação
 
@@ -337,8 +337,11 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 > hoje coberto de forma ad-hoc por campos como `evidencia_execucao` em
 > `Deliberacao`/`TarefaGovernanca`, não de forma genérica). RN-010 está
 > implementada em `MetaEstrategica`
-> (tipo/valor-alvo/prazo/responsável/método/evidência).
-> As demais (RN-002, RN-005, RN-006, RN-008, RN-009, RN-011 a RN-016)
+> (tipo/valor-alvo/prazo/responsável/método/evidência). RN-011 também está
+> implementada: `IndicadorEstrategico` liga indicador a objetivo (via
+> `objetivo_id`, que por sua vez liga a metas/etapas) e a fonte de dados
+> (`fonte`, novo campo).
+> As demais (RN-002, RN-005, RN-006, RN-008, RN-009, RN-012 a RN-016)
 > dependem de módulos ainda não construídos (Maturidade, Editais, Projetos,
 > Portal público avançado).
 
@@ -453,7 +456,7 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 | Fase | Entregas principais | Status no repo |
 |---|---|---|
 | Fase 0 – Descoberta (4–6 semanas) | Validação de processos, matriz de perfis, dicionário de dados, protótipos, integração da planilha atual e backlog detalhado. | Pulado — este projeto começou direto na construção técnica |
-| Fase 1 – MVP (3–4 meses) | Identidade, cadastro, cadeia, formulários, governança, planejamento, documentos, tarefas, indicadores básicos, relatórios e auditoria. | ⚠️ **Quase completa.** Feito: identidade, cadastro (parcial) + campanhas/importação, governança, planejamento, documentos (repositório + ata em PDF), tarefas (dentro de governança), indicadores básicos (parcial), trilha de auditoria (RF-056). Falta: relatórios amplos (RF-044 a RF-048) — único item restante do MVP. |
+| Fase 1 – MVP (3–4 meses) | Identidade, cadastro, cadeia, formulários, governança, planejamento, documentos, tarefas, indicadores básicos, relatórios e auditoria. | ✅ **Completa** (com recortes de escopo documentados por requisito). Feito: identidade, cadastro (parcial) + campanhas/importação, governança, planejamento, documentos (repositório + ata em PDF), tarefas (dentro de governança), catálogo de indicadores com série histórica (RF-044), painéis consolidados (RF-045, parcial), resumo cadastral (RF-046/047, parcial), relatório executivo em PDF (RF-048, parcial), trilha de auditoria (RF-056). |
 | Fase 2 – Conformidade SP Produz (2–3 meses) | Maturidade, reconhecimento/recadastro, editais, plano de trabalho, orçamento, cotações, submissões e alertas. | ❌ Não iniciado |
 | Fase 3 – Execução e fomento (2–3 meses) | Execução física/financeira, prestação de contas, riscos, bens, relatórios e portal de transparência. | ❌ Não iniciado |
 | Fase 4 – Ecossistema e inovação | Matchmaking, catálogo de competências, integração SPAI/ICTs, mapas de rede, IA assistiva e análises avançadas. | ❌ Não iniciado |

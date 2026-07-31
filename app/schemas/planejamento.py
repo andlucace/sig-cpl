@@ -148,10 +148,12 @@ class IniciativaStatusUpdate(BaseModel):
 class IndicadorEstrategicoCreate(BaseModel):
     nome: str
     formula: str | None = None
+    fonte: str | None = None
     unidade: str | None = None
     meta_valor: str | None = None
     valor_atual: str | None = None
     periodicidade: str | None = None
+    responsavel_id: uuid.UUID | None = None
 
 
 class IndicadorEstrategicoRead(BaseModel):
@@ -161,11 +163,26 @@ class IndicadorEstrategicoRead(BaseModel):
     objetivo_id: uuid.UUID
     nome: str
     formula: str | None
+    fonte: str | None
     unidade: str | None
     meta_valor: str | None
     valor_atual: str | None
     periodicidade: str | None
+    responsavel_id: uuid.UUID | None
 
 
 class IndicadorValorUpdate(BaseModel):
     valor_atual: str | None = None
+    data_referencia: date | None = None
+    observacao: str | None = None
+
+
+class IndicadorValorHistoricoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    indicador_id: uuid.UUID
+    data_referencia: date
+    valor: str
+    observacao: str | None
+    registrado_por_id: uuid.UUID

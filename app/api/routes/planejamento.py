@@ -41,6 +41,7 @@ from app.schemas.planejamento import (
     PlanejamentoEstrategicoRead,
     PlanejamentoStatusUpdate,
 )
+from app.services.indicadores import registrar_valor_indicador
 
 router = APIRouter(prefix="/planejamento", tags=["Estratégia e maturidade"])
 
@@ -380,10 +381,15 @@ def atualizar_valor_indicador(
     indicador = db.get(IndicadorEstrategico, indicador_id)
     if indicador is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Indicador não encontrado.")
-    verificar_papel(
-        db, usuario_atual, PAPEIS_TAREFA_EXECUCAO, cpl_id=indicador.objetivo.planejamento.cpl_id
+    if not _pode_executar(usuario_atual, indicador.responsavel_id):
+        verificar_papel(
+            db, usuario_atual, PAPEIS_TAREFA_EXECUCAO, cpl_id=indicador.objetivo.planejamento.cpl_id
+        )
+    return registrar_valor_indicador(
+        db,
+        indicador,
+        dados.valor_atual,
+        usuario_atual.id,
+        data_referencia=dados.data_referencia,
+        observacao=dados.observacao,
     )
-    indicador.valor_atual = dados.valor_atual
-    db.commit()
-    db.refresh(indicador)
-    return indicador

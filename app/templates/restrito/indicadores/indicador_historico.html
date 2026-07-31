@@ -1,0 +1,85 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Histórico — {{ indicador.nome }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/indicadores/cpls/{{ cpl_id }}" class="link-secondary text-decoration-none">Indicadores</a>
+    <i class="bi bi-chevron-right small mx-1"></i>{{ indicador.nome }}
+{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1">{{ indicador.nome }}</h1>
+    <p class="text-body-secondary">
+        {% if indicador.formula %}Fórmula: {{ indicador.formula }} — {% endif %}
+        {% if indicador.fonte %}Fonte: {{ indicador.fonte }} — {% endif %}
+        {% if indicador.periodicidade %}Periodicidade: {{ indicador.periodicidade }} — {% endif %}
+        {% if indicador.responsavel %}Responsável: {{ indicador.responsavel.nome }}{% endif %}
+    </p>
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-clock-history text-primary me-2"></i>Série histórica</span>
+                    {% if indicador.meta_valor %}<small class="text-body-secondary">Meta: {{ indicador.meta_valor }} {{ indicador.unidade or "" }}</small>{% endif %}
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Data de referência</th>
+                                <th>Valor</th>
+                                <th>Observação</th>
+                                <th>Registrado em</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for v in valores %}
+                                <tr>
+                                    <td class="small">{{ v.data_referencia.strftime('%d/%m/%Y') }}</td>
+                                    <td class="fw-semibold small">{{ v.valor }}</td>
+                                    <td class="small text-body-secondary">{{ v.observacao or "" }}</td>
+                                    <td class="small text-body-secondary">{{ v.registrado_em.strftime('%d/%m/%Y %H:%M') }}</td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="4" class="text-body-secondary">Nenhum valor registrado ainda.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            {% if pode_registrar %}
+                <div class="card">
+                    <div class="card-header bg-transparent fw-semibold">
+                        <i class="bi bi-plus-circle me-2"></i>Registrar novo valor
+                    </div>
+                    <div class="card-body">
+                        <form method="post" action="/painel/indicadores/{{ indicador.id }}/historico">
+                            <div class="mb-3">
+                                <label class="form-label">Valor</label>
+                                <input type="text" class="form-control" name="valor" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Data de referência</label>
+                                <input type="date" class="form-control" name="data_referencia">
+                                <div class="form-text">Em branco, usa a data de hoje.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Observação (opcional)</label>
+                                <textarea class="form-control" name="observacao" rows="2"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-save me-1"></i>Registrar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            {% else %}
+                <div class="alert alert-light border d-flex gap-2" role="alert">
+                    <i class="bi bi-lock"></i>
+                    <div>Só a gestão ou o responsável por este indicador podem registrar novos valores.</div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}
