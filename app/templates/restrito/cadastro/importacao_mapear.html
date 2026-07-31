@@ -1,0 +1,59 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Mapear colunas — {{ lote.nome_arquivo }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/cadastro" class="link-secondary text-decoration-none">Cadastro e dados</a>
+    <i class="bi bi-chevron-right small mx-1"></i>mapear colunas
+{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1"><i class="bi bi-file-earmark-spreadsheet text-primary me-2"></i>{{ lote.nome_arquivo }}</h1>
+    <p class="text-body-secondary">
+        {{ total_linhas }} linha(s) de dado encontradas. Confira o mapeamento sugerido abaixo — corrija manualmente
+        qualquer campo que não bateu certo antes de confirmar. Nada é gravado até você confirmar.
+    </p>
+
+    <div class="card" style="max-width: 900px;">
+        <div class="card-header bg-transparent fw-semibold">
+            <i class="bi bi-arrow-left-right text-primary me-2"></i>Mapeamento de colunas
+        </div>
+        <form method="post" action="/painel/cadastro/importacoes/{{ lote.id }}/mapear">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Campo do sistema</th>
+                            <th>Coluna da planilha</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for campo in campos %}
+                            <tr>
+                                <td class="small">
+                                    {{ campo.replace('_', ' ') }}
+                                    {% if campo == 'razao_social' %}<span class="text-danger">*</span>{% endif %}
+                                </td>
+                                <td>
+                                    <select class="form-select form-select-sm" name="campo__{{ campo }}">
+                                        <option value="">— não mapear —</option>
+                                        {% for indice, cabecalho in cabecalhos %}
+                                            <option value="{{ indice }}" {% if mapeamento_sugerido.get(campo) == indice %}selected{% endif %}>
+                                                {{ cabecalho or "(coluna " ~ (indice + 1) ~ ", sem nome)" }}
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-body border-top">
+                <p class="small text-body-secondary mb-3">
+                    <span class="text-danger">*</span> Razão social é obrigatória — linhas sem ela viram erro no relatório.
+                </p>
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg me-1"></i>Confirmar mapeamento e importar
+                </button>
+            </div>
+        </form>
+    </div>
+{% endblock %}

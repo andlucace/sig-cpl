@@ -3,7 +3,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.enums import StatusLinhaImportacao
+from app.models.enums import StatusLinhaImportacao, StatusLoteImportacao
 
 # Diagnóstico cadastral (RF-012)
 
@@ -92,8 +92,26 @@ class ImportacaoLoteRead(BaseModel):
     cpl_id: uuid.UUID
     usuario_id: uuid.UUID
     nome_arquivo: str
+    status: StatusLoteImportacao
+    mapeamento_colunas: dict[str, int] | None
     total_linhas: int
     total_criadas: int
     total_atualizadas: int
     total_erros: int
     linhas: list[ImportacaoLinhaRead] = []
+
+
+class PrepararImportacaoRead(BaseModel):
+    """RF-013 (remapeamento manual), resposta do passo 1: cabeçalhos
+    lidos + mapeamento sugerido, pra o cliente montar a tela/payload de
+    confirmação — `campos_conhecidos` lista todos os campos que podem ser
+    mapeados, mesmo os que a sugestão não bateu com nenhuma coluna."""
+
+    lote: ImportacaoLoteRead
+    cabecalhos: list[str]
+    mapeamento_sugerido: dict[str, int]
+    campos_conhecidos: list[str]
+
+
+class ConfirmarMapeamentoCreate(BaseModel):
+    mapeamento: dict[str, int]

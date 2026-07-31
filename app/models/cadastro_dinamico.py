@@ -2,11 +2,11 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampedBase
-from app.models.enums import StatusLinhaImportacao
+from app.models.enums import StatusLinhaImportacao, StatusLoteImportacao
 
 
 class DiagnosticoCadastral(TimestampedBase):
@@ -87,6 +87,15 @@ class ImportacaoLote(TimestampedBase):
     cpl_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("cpls.id"), nullable=False)
     usuario_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("usuarios.id"))
     nome_arquivo: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[StatusLoteImportacao] = mapped_column(
+        default=StatusLoteImportacao.CONCLUIDO, nullable=False
+    )
+    # RF-013: arquivo fica em staging (mesmo mecanismo de armazenamento do
+    # RF-042) entre o upload e a confirmação do mapeamento de colunas;
+    # mapeamento_colunas registra o que foi de fato usado (sugerido ou
+    # ajustado à mão), como trilha de origem do próprio mapeamento.
+    arquivo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    mapeamento_colunas: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     total_linhas: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_criadas: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_atualizadas: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

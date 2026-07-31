@@ -161,7 +161,7 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 | ID | Requisito macro | Pri. | Status no repo |
 |---|---|---|---|
 | RF-012 | Criar formulários configuráveis, pesquisas diagnósticas e campanhas de atualização cadastral. | M | ⚠️ Parcial — implementado como campanha + link público de autopreenchimento (`CampanhaCadastral`/`CampanhaConvite`), reaproveitando os campos já modelados em `Entidade`/`DiagnosticoCadastral`; **não** é um construtor de formulário genérico (decisão deliberada, ver README) |
-| RF-013 | Importar dados de planilhas, com pré-validação, tratamento de duplicidades, relatório de erros e trilha de origem. | M | ✅ Implementado (`ImportacaoLote`/`ImportacaoLinha`, CSV/XLSX, dedup por CNPJ) — mapeamento de coluna é automático por nome, sem remapeamento manual; planilha real "CPLS - FORMS.xlsx" ainda não foi anexada para calibrar os aliases |
+| RF-013 | Importar dados de planilhas, com pré-validação, tratamento de duplicidades, relatório de erros e trilha de origem. | M | ✅ Implementado (`ImportacaoLote`/`ImportacaoLinha`, CSV/XLSX, dedup por CNPJ) — mapeamento automático por nome de cabeçalho, com **remapeamento manual** quando a sugestão erra ou deixa campo sem coluna (fluxo em 2 passos: upload → conferir/ajustar mapeamento → confirmar). Planilha real "CPLS - FORMS.xlsx" ainda não foi anexada para calibrar os aliases, mas isso já não bloqueia a importação |
 | RF-014 | Aplicar regras de qualidade: campos obrigatórios, máscaras, consistência, unicidade e validade temporal. | M | ⚠️ Parcial — obrigatoriedade de razão social, normalização de CNPJ/UF e dedup por CNPJ implementados; sem máscaras de campo nem validade temporal |
 
 ### Governança

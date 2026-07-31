@@ -12,6 +12,11 @@
         <span class="badge text-bg-info">{{ lote.total_atualizadas }} atualizadas</span>
         <span class="badge {{ 'text-bg-danger' if lote.total_erros else 'text-bg-secondary' }}">{{ lote.total_erros }} erros</span>
     </p>
+    {% if lote.mapeamento_colunas %}
+        <p class="text-body-secondary small">
+            Mapeamento usado: {% for campo, indice in lote.mapeamento_colunas.items() %}{{ campo.replace('_', ' ') }} → coluna {{ indice + 1 }}{% if not loop.last %}, {% endif %}{% endfor %}
+        </p>
+    {% endif %}
 
     <div class="card">
         <div class="table-responsive">

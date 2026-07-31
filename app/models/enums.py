@@ -197,3 +197,13 @@ class StatusRecurso(str, enum.Enum):
     PENDENTE = "pendente"
     DEFERIDO = "deferido"
     INDEFERIDO = "indeferido"
+
+
+class StatusLoteImportacao(str, enum.Enum):
+    """RF-013: ciclo de vida de um lote de importação de planilha — desde
+    que o remapeamento manual de colunas existe, o upload não processa as
+    linhas imediatamente; fica pendente até o usuário confirmar (ou
+    ajustar) o mapeamento sugerido."""
+
+    PENDENTE_MAPEAMENTO = "pendente_mapeamento"
+    CONCLUIDO = "concluido"

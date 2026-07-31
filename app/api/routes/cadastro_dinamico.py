@@ -15,17 +15,20 @@ from app.models.cadastro_dinamico import (
 )
 from app.models.cpl import CPL
 from app.models.entidade import Entidade
+from app.models.enums import StatusLoteImportacao
 from app.models.usuario import Usuario
 from app.schemas.cadastro_dinamico import (
     CampanhaCadastralCreate,
     CampanhaCadastralRead,
     CampanhaConviteCreate,
     CampanhaConviteRead,
+    ConfirmarMapeamentoCreate,
     DiagnosticoCadastralRead,
     DiagnosticoCadastralUpdate,
     ImportacaoLoteRead,
+    PrepararImportacaoRead,
 )
-from app.services.importacao_entidades import processar_planilha
+from app.services.importacao_entidades import CAMPOS_CONHECIDOS, confirmar_importacao, preparar_importacao
 
 router = APIRouter(prefix="/cadastro", tags=["Formulários e dados"])
 
@@ -169,20 +172,53 @@ def atualizar_diagnostico(
 
 
 @router.post(
-    "/cpls/{cpl_id}/importacoes", response_model=ImportacaoLoteRead, status_code=status.HTTP_201_CREATED
+    "/cpls/{cpl_id}/importacoes",
+    response_model=PrepararImportacaoRead,
+    status_code=status.HTTP_201_CREATED,
 )
-async def importar_planilha(
+async def preparar_importacao_planilha(
     cpl_id: uuid.UUID,
     arquivo: UploadFile,
     db: Session = Depends(get_db),
     usuario_atual: Usuario = Depends(get_current_user),
-) -> ImportacaoLote:
+) -> dict:
+    """RF-013 (remapeamento manual), passo 1: salva o arquivo e devolve o
+    mapeamento sugerido — não processa nenhuma linha ainda. Confirme (ou
+    ajuste) via `POST /importacoes/{lote_id}/confirmar-mapeamento`."""
+
     _get_cpl_or_404(db, cpl_id)
     verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=cpl_id)
     if not arquivo.filename or not arquivo.filename.lower().endswith((".csv", ".xlsx", ".xlsm")):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Envie um arquivo .csv, .xlsx ou .xlsm.")
     conteudo = await arquivo.read()
-    return processar_planilha(db, cpl_id, usuario_atual.id, arquivo.filename, conteudo)
+    lote, cabecalhos, mapeamento_sugerido = preparar_importacao(
+        db, cpl_id, usuario_atual.id, arquivo.filename, conteudo
+    )
+    return {
+        "lote": lote,
+        "cabecalhos": cabecalhos,
+        "mapeamento_sugerido": mapeamento_sugerido,
+        "campos_conhecidos": CAMPOS_CONHECIDOS,
+    }
+
+
+@router.post("/importacoes/{lote_id}/confirmar-mapeamento", response_model=ImportacaoLoteRead)
+def confirmar_mapeamento_importacao(
+    lote_id: uuid.UUID,
+    dados: ConfirmarMapeamentoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> ImportacaoLote:
+    """RF-013 (remapeamento manual), passo 2: processa as linhas com o
+    mapeamento confirmado (igual à sugestão ou ajustado à mão)."""
+
+    lote = db.get(ImportacaoLote, lote_id)
+    if lote is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lote de importação não encontrado.")
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=lote.cpl_id)
+    if lote.status != StatusLoteImportacao.PENDENTE_MAPEAMENTO:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Este lote já foi processado.")
+    return confirmar_importacao(db, lote, dados.mapeamento)
 
 
 @router.get("/cpls/{cpl_id}/importacoes", response_model=list[ImportacaoLoteRead])

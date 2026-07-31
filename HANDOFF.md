@@ -235,6 +235,35 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     campos, pra não abrir um atalho by-design. Mesma regra de acesso da
     criação (só `ADMINISTRADOR_PLATAFORMA`) — decisão que já vinha do
     docstring original do `POST /api/cpls`, só estendida ao `PATCH`.
+13. **Remapeamento manual de colunas na importação** (RF-013) — terceiro
+    "item menor". Antes, `processar_planilha()` fazia tudo num passo só
+    (upload → mapeamento automático → processa linhas), e se o cabeçalho
+    não batesse com nenhum alias conhecido, o campo ficava em branco sem
+    avisar ninguém. Virou um fluxo em 2 passos: `preparar_importacao()`
+    salva o arquivo em staging (reaproveita `app/services/armazenamento.py`,
+    o mesmo mecanismo do repositório de Documentos) e devolve cabeçalhos +
+    sugestão, sem tocar em nenhuma linha; `confirmar_importacao()` só roda
+    depois que o usuário conferiu/ajustou o mapeamento na tela
+    `/painel/cadastro/importacoes/{id}/mapear`. `ImportacaoLote` ganhou
+    `status` (`pendente_mapeamento`/`concluido`), `arquivo_path` (staging)
+    e `mapeamento_colunas` (JSONB — o que foi de fato usado, trilha de
+    origem do próprio mapeamento). Migração precisou de **dois** ajustes
+    manuais no arquivo autogerado: (a) `sa.Enum` sozinho dentro de
+    `add_column` não criou o tipo Postgres — precisou de
+    `postgresql.ENUM(...).create(op.get_bind(), checkfirst=True)`
+    explícito antes (variante nova do gotcha de enum já documentado,
+    desta vez num enum **novo**, não reaproveitado — vale conferir sempre,
+    não só quando o enum já existe); (b) a coluna `status` é `NOT NULL`
+    mas já havia 1 lote de importação antigo no banco, então precisou de
+    `server_default='CONCLUIDO'` pra não quebrar o backfill (removido
+    logo depois, já que todo INSERT novo passa pelo default do modelo
+    Python). Provei que o problema era real com um CSV de teste com
+    cabeçalhos que não batem com nenhum alias ("Nome do Fornecedor",
+    "Documento Fiscal", "Cidade Base") — sem remapeamento manual, essa
+    planilha importaria tudo em branco; com ele, mapeei na mão e os dados
+    foram parar nos campos certos (confirmado lendo a `Entidade` criada de
+    volta). `processar_planilha()` (1 passo) continua existindo pra quem
+    não precisa da conferência manual.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -380,11 +409,10 @@ ordem recomendada para o que vem depois:
    README, seção "Controle de acesso" → "Limitações conhecidas".
 2. ~~Tela de criação/edição de CPL no portal restrito~~ — **feito nesta
    sessão**: `/painel/cpls`, restrito a administrador (ver README).
-3. **Remapeamento manual de colunas na importação de planilha** — hoje o
-   casamento é só automático por nome de cabeçalho
-   (`app/services/importacao_entidades.py`); se a planilha real "CPLS -
-   FORMS.xlsx" for anexada em algum momento, calibrar os aliases contra ela
-   (o arquivo em si nunca foi anexado ao projeto).
+3. ~~Remapeamento manual de colunas na importação de planilha~~ — **feito
+   nesta sessão**: fluxo em 2 passos (upload → conferir/ajustar mapeamento
+   → confirmar), ver README e item 13 da seção "Ordem em que este projeto
+   foi construído".
 4. ~~Fonte Unicode para PDF em produção~~ — **resolvido no deploy**: em vez
    de bundlar o arquivo `.ttf` no repositório, o `Dockerfile` instala o
    pacote apt `fonts-dejavu-core` na imagem, que já entrega

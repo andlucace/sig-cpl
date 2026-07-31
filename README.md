@@ -167,22 +167,37 @@ Também foi adicionado, como pré-requisito, o endpoint de vínculo
 (`POST/GET /api/cpls/{cpl_id}/entidades`) — antes só existia o modelo, sem
 rota alguma.
 
-**Limitação deliberada:** a planilha real "CPLS - FORMS.xlsx" citada no
-documento nunca foi anexada ao projeto (ver `docs/requisitos_macros.md`),
-então o dicionário de aliases de coluna é uma aproximação razoável dos
-nomes de campo mencionados na seção 3 do documento, não calibrado contra o
-arquivo real. Não há remapeamento manual de colunas nesta versão — se o
-cabeçalho da planilha não bater com nenhum alias conhecido, aquele campo
-fica em branco na importação (sem erro, mas também sem dado).
+**Remapeamento manual de colunas** — a planilha real "CPLS - FORMS.xlsx"
+citada no documento nunca foi anexada ao projeto (ver
+`docs/requisitos_macros.md`), então o dicionário de aliases é uma
+aproximação, não calibrada contra o arquivo real — e qualquer outra
+planilha do usuário pode ter cabeçalhos que o dicionário simplesmente não
+prevê. Em vez de tentar adivinhar todo cabeçalho possível, a importação
+virou um **fluxo em dois passos**:
+1. Upload salva o arquivo (mesmo mecanismo de armazenamento do
+   repositório de Documentos, RF-042) e sugere um mapeamento automático —
+   `ImportacaoLote.status = pendente_mapeamento`, nenhuma linha é
+   processada ainda.
+2. Tela de conferência (`/painel/cadastro/importacoes/{id}/mapear`)
+   mostra, campo a campo, qual coluna foi sugerida (ou "— não mapear —"
+   se nada bateu) — o usuário ajusta manualmente o que precisar antes de
+   confirmar. Só aí as linhas são processadas de verdade, e o mapeamento
+   efetivamente usado fica registrado em `ImportacaoLote.mapeamento_colunas`
+   (trilha de origem também para o próprio mapeamento, não só para o
+   resultado por linha).
+
+`processar_planilha()` (1 passo, só mapeamento automático) continua
+existindo no serviço para quem prefere pular a conferência manual.
 
 UI web: `/painel/cadastro` (seleciona CPL) → `/painel/cadastro/cpls/{id}`
 (entidades vinculadas + campanhas + importações) →
-`/painel/cadastro/campanhas/{id}` (convites, com link/token copiável) e
-`/painel/cadastro/importacoes/{id}` (relatório por linha). RBAC reaproveita
-`PAPEIS_GESTAO`/`PAPEIS_GOVERNANCA_LEITURA` dos módulos anteriores; a rota
-pública de autopreenchimento não passa por RBAC nenhum (é intencionalmente
-sem autenticação — a segurança vem do token ser imprevisível e de uso
-único por convite, não de login).
+`/painel/cadastro/importacoes/{id}/mapear` (conferir/ajustar mapeamento,
+só para lotes pendentes) → `/painel/cadastro/importacoes/{id}` (relatório
+por linha) e `/painel/cadastro/campanhas/{id}` (convites, com link/token
+copiável). RBAC reaproveita `PAPEIS_GESTAO`/`PAPEIS_GOVERNANCA_LEITURA`
+dos módulos anteriores; a rota pública de autopreenchimento não passa por
+RBAC nenhum (é intencionalmente sem autenticação — a segurança vem do
+token ser imprevisível e de uso único por convite, não de login).
 
 O bloco **Documentos** (RF-042/043) foi implementado com escopo recortado
 deliberadamente — repositório completo (RF-042), mas geração de documento
@@ -678,10 +693,12 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    `/painel/cpls` (criar/editar restrito a administrador da plataforma,
    mesma regra do endpoint de API; demais papéis veem só as CPLs
    visíveis, em modo leitura).
-3. Remapeamento manual de colunas na importação de planilha — hoje só há
-   casamento automático por nome de cabeçalho; se a planilha real "CPLS -
-   FORMS.xlsx" for anexada, calibrar os aliases em
-   `app/services/importacao_entidades.py` contra ela.
+3. ~~Remapeamento manual de colunas na importação de planilha~~ — **feito**:
+   fluxo em 2 passos (upload → conferir/ajustar mapeamento → confirmar),
+   ver seção do módulo de Cadastro dinâmico acima. Calibrar os aliases em
+   `app/services/importacao_entidades.py` contra a planilha real "CPLS -
+   FORMS.xlsx" (se algum dia for anexada) continua reduzindo o trabalho
+   manual, mas não é mais bloqueante.
 4. Visão "global" da trilha de auditoria (eventos sem CPL resolvível, hoje
    invisíveis na UI por-CPL) e paginação de verdade (hoje é um limite fixo
    de 200 registros mais recentes).

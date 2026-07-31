@@ -1,13 +1,26 @@
 """RF-013/RF-014: importação de planilha (CSV/XLSX) para o cadastro de
 Entidade + DiagnosticoCadastral, com mapeamento automático de colunas por
-nome, deduplicação por CNPJ, validação e relatório por linha.
+nome (ver `_ALIASES_CAMPO`), remapeamento manual quando a sugestão erra ou
+deixa campo sem coluna, deduplicação por CNPJ, validação e relatório por
+linha.
 
-Não há mapeamento manual de colunas nesta versão — o casamento é só por
-nome de cabeçalho (ver `_ALIASES_CAMPO`). A planilha real "CPLS -
-FORMS.xlsx" citada no documento de requisitos nunca foi anexada ao
-projeto, então o dicionário de aliases é uma aproximação razoável dos
-nomes de campo mencionados na seção 3 do documento — ajuste
-`_ALIASES_CAMPO` se a planilha real usar cabeçalhos diferentes.
+Fluxo em dois passos (RF-013 — "remapeamento manual"):
+1. `preparar_importacao()` salva o arquivo em staging (mesmo mecanismo de
+   `app/services/armazenamento.py`) e devolve os cabeçalhos + o
+   mapeamento *sugerido*, sem processar nenhuma linha ainda.
+2. `confirmar_importacao()` recebe o mapeamento que o usuário confirmou
+   (igual à sugestão) ou ajustou manualmente, e só então processa as
+   linhas de verdade.
+
+`processar_planilha()` continua existindo como atalho de 1 passo só
+mapeamento automático — não quebra quem já chamava a API assim.
+
+A planilha real "CPLS - FORMS.xlsx" citada no documento de requisitos
+nunca foi anexada ao projeto, então o dicionário de aliases é uma
+aproximação razoável dos nomes de campo mencionados na seção 3 do
+documento — ajuste `_ALIASES_CAMPO` se a planilha real usar cabeçalhos
+diferentes (o remapeamento manual cobre o caso de ela não bater de
+primeira, mas calibrar os aliases continua reduzindo o trabalho manual).
 """
 
 import csv
@@ -20,7 +33,8 @@ from sqlalchemy.orm import Session
 
 from app.models.cadastro_dinamico import DiagnosticoCadastral, ImportacaoLinha, ImportacaoLote
 from app.models.entidade import Entidade, EntidadeCPL
-from app.models.enums import StatusLinhaImportacao, TipoEntidade
+from app.models.enums import StatusLinhaImportacao, StatusLoteImportacao, TipoEntidade
+from app.services.armazenamento import caminho_absoluto, salvar_arquivo
 
 _ALIASES_CAMPO: dict[str, list[str]] = {
     "razao_social": ["razao social", "nome", "nome da empresa", "empresa", "organizacao"],
@@ -63,6 +77,11 @@ _CAMPOS_DIAGNOSTICO = set(_ALIASES_CAMPO) - {
     "razao_social", "nome_fantasia", "cnpj", "cpf", "cnae", "porte", "municipio", "uf", "endereco", "tipo",
 }
 
+CAMPOS_CONHECIDOS = list(_ALIASES_CAMPO.keys())
+"""Campos que o mapeamento (automático ou manual) pode preencher — usado
+pra renderizar o formulário de remapeamento com todos os campos, mesmo os
+que a sugestão automática não bateu com nenhuma coluna."""
+
 _VALORES_VERDADEIROS = {"sim", "s", "yes", "y", "true", "verdadeiro", "1"}
 _VALORES_FALSOS = {"nao", "não", "n", "no", "false", "falso", "0"}
 
@@ -81,7 +100,7 @@ def _parse_bool(valor: str) -> bool | None:
     return None
 
 
-def _mapear_colunas(cabecalhos: list[str]) -> dict[str, int]:
+def mapear_colunas(cabecalhos: list[str]) -> dict[str, int]:
     normalizados = [_normalizar(h) for h in cabecalhos]
     mapa: dict[str, int] = {}
     for campo, aliases in _ALIASES_CAMPO.items():
@@ -93,7 +112,7 @@ def _mapear_colunas(cabecalhos: list[str]) -> dict[str, int]:
     return mapa
 
 
-def _ler_planilha(nome_arquivo: str, conteudo: bytes) -> tuple[list[str], list[list[str]]]:
+def ler_planilha(nome_arquivo: str, conteudo: bytes) -> tuple[list[str], list[list[str]]]:
     if nome_arquivo.lower().endswith((".xlsx", ".xlsm")):
         import openpyxl
 
@@ -124,27 +143,16 @@ def _ler_planilha(nome_arquivo: str, conteudo: bytes) -> tuple[list[str], list[l
     return todas_linhas[0], todas_linhas[1:]
 
 
-def processar_planilha(
+def _processar_linhas(
     db: Session,
+    lote: ImportacaoLote,
     cpl_id: uuid.UUID,
-    usuario_id: uuid.UUID,
-    nome_arquivo: str,
-    conteudo: bytes,
-) -> ImportacaoLote:
-    """RF-013/RF-014: processa a planilha inteira e devolve o lote com o
-    relatório por linha já persistido (trilha de origem)."""
-
-    cabecalhos, linhas_dados = _ler_planilha(nome_arquivo, conteudo)
-    mapa = _mapear_colunas(cabecalhos)
-
-    lote = ImportacaoLote(
-        cpl_id=cpl_id,
-        usuario_id=usuario_id,
-        nome_arquivo=nome_arquivo,
-        total_linhas=len(linhas_dados),
-    )
-    db.add(lote)
-    db.flush()
+    mapa: dict[str, int],
+    linhas_dados: list[list[str]],
+) -> None:
+    """Preenche `ImportacaoLinha` + `Entidade`/`DiagnosticoCadastral` para
+    um lote já existente, usando o mapeamento (sugerido ou confirmado à
+    mão) informado, e atualiza os totais/status nele."""
 
     total_criadas = total_atualizadas = total_erros = 0
 
@@ -248,9 +256,77 @@ def processar_planilha(
         else:
             total_atualizadas += 1
 
+    lote.total_linhas = len(linhas_dados)
     lote.total_criadas = total_criadas
     lote.total_atualizadas = total_atualizadas
     lote.total_erros = total_erros
+    lote.mapeamento_colunas = dict(mapa)
+    lote.status = StatusLoteImportacao.CONCLUIDO
+
+
+def processar_planilha(
+    db: Session,
+    cpl_id: uuid.UUID,
+    usuario_id: uuid.UUID,
+    nome_arquivo: str,
+    conteudo: bytes,
+) -> ImportacaoLote:
+    """RF-013/RF-014: atalho de 1 passo, só com mapeamento automático —
+    usado por quem chama a importação sem passar pelo fluxo de
+    remapeamento manual (`preparar_importacao`/`confirmar_importacao`)."""
+
+    cabecalhos, linhas_dados = ler_planilha(nome_arquivo, conteudo)
+    mapa = mapear_colunas(cabecalhos)
+
+    lote = ImportacaoLote(cpl_id=cpl_id, usuario_id=usuario_id, nome_arquivo=nome_arquivo)
+    db.add(lote)
+    db.flush()
+
+    _processar_linhas(db, lote, cpl_id, mapa, linhas_dados)
+    db.commit()
+    db.refresh(lote)
+    return lote
+
+
+def preparar_importacao(
+    db: Session,
+    cpl_id: uuid.UUID,
+    usuario_id: uuid.UUID,
+    nome_arquivo: str,
+    conteudo: bytes,
+) -> tuple[ImportacaoLote, list[str], dict[str, int]]:
+    """RF-013 (remapeamento manual), passo 1: salva o arquivo em staging e
+    devolve o lote (status `pendente_mapeamento`), os cabeçalhos lidos e o
+    mapeamento sugerido — sem processar nenhuma linha ainda."""
+
+    caminho = salvar_arquivo(cpl_id, nome_arquivo, conteudo)
+    cabecalhos, linhas_dados = ler_planilha(nome_arquivo, conteudo)
+    mapa_sugerido = mapear_colunas(cabecalhos)
+
+    lote = ImportacaoLote(
+        cpl_id=cpl_id,
+        usuario_id=usuario_id,
+        nome_arquivo=nome_arquivo,
+        status=StatusLoteImportacao.PENDENTE_MAPEAMENTO,
+        arquivo_path=caminho,
+        total_linhas=len(linhas_dados),
+    )
+    db.add(lote)
+    db.commit()
+    db.refresh(lote)
+    return lote, cabecalhos, mapa_sugerido
+
+
+def confirmar_importacao(
+    db: Session, lote: ImportacaoLote, mapeamento: dict[str, int]
+) -> ImportacaoLote:
+    """RF-013 (remapeamento manual), passo 2: processa as linhas de
+    verdade com o mapeamento que o usuário confirmou (igual à sugestão
+    original ou ajustado à mão)."""
+
+    conteudo = caminho_absoluto(lote.arquivo_path).read_bytes()
+    _, linhas_dados = ler_planilha(lote.nome_arquivo, conteudo)
+    _processar_linhas(db, lote, lote.cpl_id, mapeamento, linhas_dados)
     db.commit()
     db.refresh(lote)
     return lote

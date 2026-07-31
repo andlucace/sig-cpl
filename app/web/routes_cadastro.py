@@ -12,8 +12,16 @@ from app.db.session import get_db
 from app.models.cadastro_dinamico import CampanhaCadastral, CampanhaConvite, ImportacaoLote
 from app.models.cpl import CPL
 from app.models.entidade import Entidade, EntidadeCPL
+from app.models.enums import StatusLoteImportacao
 from app.models.usuario import Usuario
-from app.services.importacao_entidades import processar_planilha
+from app.services.armazenamento import caminho_absoluto
+from app.services.importacao_entidades import (
+    CAMPOS_CONHECIDOS,
+    confirmar_importacao,
+    ler_planilha,
+    mapear_colunas,
+    preparar_importacao,
+)
 from app.web.templates import templates
 
 router = APIRouter(prefix="/painel/cadastro", tags=["Área restrita — Cadastro"])
@@ -140,6 +148,10 @@ async def importar_planilha(
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user_optional),
 ):
+    """RF-013 (remapeamento manual): só salva o arquivo e sugere o
+    mapeamento — não processa nenhuma linha ainda. Confirme (ou ajuste)
+    em `/painel/cadastro/importacoes/{lote_id}/mapear`."""
+
     if redir := _exigir_login(usuario):
         return redir
     if db.get(CPL, cpl_id) is None:
@@ -148,8 +160,75 @@ async def importar_planilha(
     if not arquivo.filename or not arquivo.filename.lower().endswith((".csv", ".xlsx", ".xlsm")):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Envie um arquivo .csv, .xlsx ou .xlsm.")
     conteudo = await arquivo.read()
-    lote = processar_planilha(db, cpl_id, usuario.id, arquivo.filename, conteudo)
-    return RedirectResponse(f"/painel/cadastro/importacoes/{lote.id}", status_code=status.HTTP_303_SEE_OTHER)
+    lote, _, _ = preparar_importacao(db, cpl_id, usuario.id, arquivo.filename, conteudo)
+    return RedirectResponse(
+        f"/painel/cadastro/importacoes/{lote.id}/mapear", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.get("/importacoes/{lote_id}/mapear")
+def form_mapeamento_importacao(
+    request: Request,
+    lote_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    lote = db.get(ImportacaoLote, lote_id)
+    if lote is None:
+        return RedirectResponse("/painel/cadastro", status_code=status.HTTP_303_SEE_OTHER)
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=lote.cpl_id)
+    if lote.status != StatusLoteImportacao.PENDENTE_MAPEAMENTO:
+        return RedirectResponse(
+            f"/painel/cadastro/importacoes/{lote_id}", status_code=status.HTTP_303_SEE_OTHER
+        )
+
+    conteudo = caminho_absoluto(lote.arquivo_path).read_bytes()
+    cabecalhos, linhas_dados = ler_planilha(lote.nome_arquivo, conteudo)
+    mapeamento_sugerido = mapear_colunas(cabecalhos)
+    return templates.TemplateResponse(
+        request,
+        "restrito/cadastro/importacao_mapear.html",
+        {
+            "lote": lote,
+            "cabecalhos": list(enumerate(cabecalhos)),
+            "total_linhas": len(linhas_dados),
+            "campos": CAMPOS_CONHECIDOS,
+            "mapeamento_sugerido": mapeamento_sugerido,
+            "usuario": usuario,
+            "pagina_ativa": "cadastro",
+        },
+    )
+
+
+@router.post("/importacoes/{lote_id}/mapear")
+async def confirmar_mapeamento_importacao(
+    request: Request,
+    lote_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    lote = db.get(ImportacaoLote, lote_id)
+    if lote is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lote de importação não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=lote.cpl_id)
+    if lote.status != StatusLoteImportacao.PENDENTE_MAPEAMENTO:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Este lote já foi processado.")
+
+    # Número variável de campos (um <select> por campo conhecido) — não dá
+    # pra declarar como parâmetros Form() fixos, por isso lê o form direto.
+    form = await request.form()
+    mapeamento = {}
+    for campo in CAMPOS_CONHECIDOS:
+        valor = form.get(f"campo__{campo}")
+        if valor:
+            mapeamento[campo] = int(valor)
+
+    confirmar_importacao(db, lote, mapeamento)
+    return RedirectResponse(f"/painel/cadastro/importacoes/{lote_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/importacoes/{lote_id}")
@@ -165,6 +244,10 @@ def detalhe_importacao(
     if lote is None:
         return RedirectResponse("/painel/cadastro", status_code=status.HTTP_303_SEE_OTHER)
     verificar_papel(db, usuario, PAPEIS_GOVERNANCA_LEITURA, cpl_id=lote.cpl_id)
+    if lote.status == StatusLoteImportacao.PENDENTE_MAPEAMENTO:
+        return RedirectResponse(
+            f"/painel/cadastro/importacoes/{lote_id}/mapear", status_code=status.HTTP_303_SEE_OTHER
+        )
     return templates.TemplateResponse(
         request,
         "restrito/cadastro/importacao_detail.html",
