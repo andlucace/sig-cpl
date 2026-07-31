@@ -9,10 +9,10 @@ from app.core.deps import get_current_user_optional
 from app.core.rbac import (
     PAPEIS_GESTAO,
     PAPEIS_GOVERNANCA_LEITURA,
-    PAPEIS_GOVERNANCA_PARTICIPACAO,
     PAPEIS_TAREFA_EXECUCAO,
     cpl_ids_visiveis,
     verificar_papel,
+    verificar_participacao_orgao,
 )
 from app.db.session import get_db
 from app.models.cpl import CPL
@@ -382,7 +382,7 @@ def registrar_deliberacao(
     reuniao = db.get(Reuniao, reuniao_id)
     if reuniao is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Reunião não encontrada.")
-    verificar_papel(db, usuario, PAPEIS_GOVERNANCA_PARTICIPACAO, cpl_id=reuniao.orgao.cpl_id)
+    verificar_participacao_orgao(db, usuario, reuniao.orgao_id, reuniao.orgao.cpl_id)
     deliberacao = Deliberacao(
         reuniao_id=reuniao_id,
         descricao=descricao,
@@ -450,7 +450,7 @@ def registrar_voto(
     deliberacao = db.get(Deliberacao, deliberacao_id)
     if deliberacao is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Deliberação não encontrada.")
-    verificar_papel(db, usuario, PAPEIS_GOVERNANCA_PARTICIPACAO, cpl_id=deliberacao.reuniao.orgao.cpl_id)
+    verificar_participacao_orgao(db, usuario, deliberacao.reuniao.orgao_id, deliberacao.reuniao.orgao.cpl_id)
     registro = VotoRegistro(
         deliberacao_id=deliberacao_id,
         pessoa_id=pessoa_id,
@@ -510,7 +510,7 @@ def criar_tarefa(
     deliberacao = db.get(Deliberacao, deliberacao_id)
     if deliberacao is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Deliberação não encontrada.")
-    verificar_papel(db, usuario, PAPEIS_GOVERNANCA_PARTICIPACAO, cpl_id=deliberacao.reuniao.orgao.cpl_id)
+    verificar_participacao_orgao(db, usuario, deliberacao.reuniao.orgao_id, deliberacao.reuniao.orgao.cpl_id)
     tarefa = TarefaGovernanca(
         cpl_id=deliberacao.reuniao.orgao.cpl_id,
         deliberacao_id=deliberacao_id,

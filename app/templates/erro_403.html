@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}SIG-CPL — Acesso negado{% endblock %}
+{% block body %}
+<div class="container d-flex flex-column align-items-center justify-content-center text-center" style="min-height: 100vh;">
+    <i class="bi bi-shield-lock display-1 text-danger mb-3"></i>
+    <h1 class="h3 mb-2">Você não tem permissão para acessar esta página</h1>
+    <p class="text-body-secondary mb-4">
+        {{ detalhe or "Seu papel atual não autoriza esta ação. Se acha que isso é um engano, fale com quem administra sua CPL." }}
+    </p>
+    <a href="/painel" class="btn btn-primary">
+        <i class="bi bi-house me-1"></i>Voltar ao painel
+    </a>
+</div>
+{% endblock %}

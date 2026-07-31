@@ -138,7 +138,7 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 | ID | Requisito macro | Pri. | Status no repo |
 |---|---|---|---|
 | RF-004 | Autenticar usuários por e-mail e senha, com recuperação segura e opção de MFA para perfis críticos. | M | ⚠️ Parcial — login/senha com bcrypt+JWT ok; recuperação de senha e MFA **não implementados** |
-| RF-005 | Aplicar controle de acesso por papéis, CPL, entidade, projeto, comissão e tipo de dado. | M | ⚠️ Parcial — papel+CPL ok; escopo por entidade/projeto/comissão específica **não** (ver limitações no README) |
+| RF-005 | Aplicar controle de acesso por papéis, CPL, entidade, projeto, comissão e tipo de dado. | M | ⚠️ Parcial — papel+CPL+entidade+comissão/órgão ok (`verificar_participacao_orgao`, escopo de CPL para Entidade/Pessoa); "projeto" ainda não, porque o módulo de Projetos não existe (ver limitações no README) |
 
 ### Cadastro de atores
 

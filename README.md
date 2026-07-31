@@ -473,6 +473,16 @@ Implementado em `app/core/rbac.py`:
 | `PAPEIS_GOVERNANCA_PARTICIPACAO` | Gestão + Conselho/Comitê | Registrar deliberação, votar, criar tarefa, declarar impedimento |
 | `PAPEIS_TAREFA_EXECUCAO` | Gestão + Comissão temática, Gestor de projeto | Atualizar status de tarefa (+ o responsável pessoal da tarefa, sempre, via `Usuario.pessoa_id`) |
 | `PAPEIS_IMPEDIMENTO_LEITURA` | Gestão + Auditoria | Ler declarações de impedimento (RN-014, dado sensível — mais restrito que o resto da governança) |
+| `PAPEIS_EDITAL_GESTAO` | Administrador | Criar/editar edital e critérios de maturidade (RF-024/RN-006 — configuração global, não por CPL) |
+| `PAPEIS_AVALIACAO_EXECUCAO` | Gestão + Analista avaliador | Lançar nota/evidência e concluir avaliação de maturidade — decidir o nível final é sempre `PAPEIS_GESTAO` (RN-016) |
+
+Além dos grupos por papel, `verificar_participacao_orgao(db, usuario, orgao_id,
+cpl_id)` escopa **por órgão específico**, não só por CPL: quem tem papel de
+gestão continua agindo em qualquer órgão da CPL, mas `CONSELHO_COMITE` (ou
+qualquer papel fora de `PAPEIS_GESTAO`) só participa (votar, deliberar,
+criar tarefa de deliberação) se for `MembroOrgao` ativo daquele órgão
+específico — não de qualquer órgão da CPL. Ver "Limitações conhecidas"
+abaixo, que documentava essa lacuna antes dela ser fechada.
 
 Essa matriz é uma **simplificação deliberada**: o documento descreve
 responsabilidades por perfil (seção 6), não uma matriz CRUD estrita — foi
@@ -482,21 +492,27 @@ revisar com a governança real da CPL.
 
 ### Limitações conhecidas
 
-- **Entidade e Pessoa não são escopadas por CPL** no RBAC — `verificar_papel`
-  é chamado sem `cpl_id` nesses dois módulos (checa só o papel, em qualquer
-  CPL), porque os modelos atuais não amarram Entidade/Pessoa a uma CPL
-  específica nos endpoints de criação (o vínculo é feito à parte por
-  `EntidadeCPL`, que ainda não tem endpoint). Revisar quando isso existir.
-- **Escopo por comissão/órgão específico não é checado** — RF-005 menciona
-  "comissão" como nível de escopo; hoje o RBAC só escopa por CPL, não por
-  qual órgão/comissão o `UsuarioPapel` pertence. Alguém com `CONSELHO_COMITE`
-  numa CPL pode votar em qualquer órgão dessa CPL, não só no seu.
-  `MembroOrgao` já modela filiação por órgão — falta ligá-la ao RBAC.
-- **403 sem página amigável no portal web** — `verificar_papel` levanta
-  `HTTPException(403)` igual na API e na web; no portal isso aparece como
-  JSON cru em vez de uma página com mensagem/redirecionamento. HTMX não
-  quebra (não troca conteúdo em resposta de erro), mas navegação direta
-  (GET) mostra o JSON.
+- ~~Entidade e Pessoa não são escopadas por CPL~~ — **resolvido**. Criar
+  continua sem escopo de CPL de propósito (o registro pode não ter nenhum
+  vínculo ainda), mas **leitura agora é escopada**: `listar_entidades`/
+  `obter_entidade` só mostram entidades vinculadas (via `EntidadeCPL`) a
+  uma CPL visível pelo usuário; `listar_pessoas`/`obter_pessoa` idem, via
+  três caminhos possíveis (`PessoaVinculo.cpl_id` direto, `PessoaVinculo`
+  → `EntidadeCPL`, ou `MembroOrgao` → `OrgaoGovernanca.cpl_id` — qualquer
+  um conta). Administrador continua vendo tudo.
+- ~~Escopo por comissão/órgão específico não é checado~~ — **resolvido**.
+  `verificar_participacao_orgao()` (ver "Matriz de permissões" acima) liga
+  `MembroOrgao` ao RBAC para registrar deliberação, votar e criar tarefa de
+  deliberação — `CONSELHO_COMITE` só participa no(s) órgão(s) que integra
+  de fato, não em qualquer órgão da CPL. `declarar_impedimento` continua
+  escopado só por CPL (a declaração não é obrigatoriamente ligada a um
+  órgão específico no modelo).
+- ~~403 sem página amigável no portal web~~ — **resolvido**. Um
+  `@app.exception_handler` global em `app/main.py` troca o JSON cru por
+  `app/templates/erro_403.html` — mas só para navegação de página inteira
+  (GET) fora de `/api/`; chamadas de API e requisições HTMX (`HX-Request`
+  header) continuam recebendo JSON, porque HTMX não faz swap de conteúdo
+  em resposta não-2xx de qualquer forma.
 - **RF-005 também cita escopo por "projeto"** — módulo de projetos ainda não
   existe (roadmap Fase 2/3), então esse eixo do RBAC não tem onde se
   pendurar ainda.
@@ -643,8 +659,9 @@ de novo enquanto existir pelo menos um administrador.
 Seguindo o roadmap (seção 17 do documento). **A Fase 1/MVP está completa**
 e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
 
-1. Fechar as limitações conhecidas do RBAC (escopo por órgão/comissão via
-   `MembroOrgao`, escopo de CPL para Entidade/Pessoa, página 403 amigável).
+1. ~~Fechar as limitações conhecidas do RBAC~~ — **feito**: escopo por
+   órgão/comissão via `MembroOrgao`, escopo de CPL para Entidade/Pessoa e
+   página 403 amigável (ver "Controle de acesso" acima).
 2. Tela de criação/edição de CPL no portal restrito (hoje só via API) —
    a UI de Governança, Planejamento, Cadastro e Documentos já dependem de
    uma CPL existir.

@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.enums import Papel
+from app.models.governanca import MembroOrgao
 from app.models.usuario import Usuario, UsuarioPapel
 
 # RF-005: controle de acesso por papéis, escopado a CPL/entidade. Os grupos
@@ -98,3 +99,35 @@ def verificar_papel(
         if cpl_id is None or vinculo.cpl_id is None or vinculo.cpl_id == cpl_id:
             return
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Você não tem papel autorizado para esta ação.")
+
+
+def usuario_e_membro_orgao(db: Session, usuario: Usuario, orgao_id: uuid.UUID) -> bool:
+    if usuario.pessoa_id is None:
+        return False
+    return (
+        db.query(MembroOrgao)
+        .filter(
+            MembroOrgao.orgao_id == orgao_id,
+            MembroOrgao.pessoa_id == usuario.pessoa_id,
+            MembroOrgao.ativo.is_(True),
+        )
+        .first()
+        is not None
+    )
+
+
+def verificar_participacao_orgao(
+    db: Session, usuario: Usuario, orgao_id: uuid.UUID, cpl_id: uuid.UUID
+) -> None:
+    """RF-005 menciona escopo por "comissão" — até aqui, `PAPEIS_GOVERNANCA_
+    PARTICIPACAO` só escopava por CPL: um `CONSELHO_COMITE` de uma CPL podia
+    votar/deliberar em QUALQUER órgão dessa CPL, não só no(s) que integra de
+    fato. Aqui, quem tem papel de gestão continua podendo agir em qualquer
+    órgão da CPL (é administrativo); `CONSELHO_COMITE` (ou qualquer papel
+    fora de `PAPEIS_GESTAO`) só passa se for `MembroOrgao` ativo do órgão
+    específico — `MembroOrgao` já existia desde a Governança, só não estava
+    ligado ao RBAC ainda."""
+
+    if usuario_e_membro_orgao(db, usuario, orgao_id):
+        return
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=cpl_id)

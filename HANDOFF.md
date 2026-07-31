@@ -63,11 +63,16 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
 
 ### Usuários de teste já existentes no banco
 
+Só no banco de **desenvolvimento local** — produção tem só o
+`admin@sigcpl.dedev.cloud` criado na sessão de deploy (ver seção "Deploy
+em produção"), sem nenhum dado de exemplo.
+
 | E-mail | Senha | Papel (`UsuarioPapel`) |
 |---|---|---|
 | `admin@atibaia-autopecas.sp.gov.br` | `trocar-senha-123` | `administrador_plataforma` (global) |
 | `gestora@cpl-autopecas.example` | `senha-gestora-123` | `entidade_gestora` escopado à CPL Autopeças de Atibaia |
 | `conselho@exemplo.com` | `senha-conselho-123` | nenhum papel (útil para testar 403) |
+| `conselho-maria@exemplo.com` | `senha-teste-123` | `conselho_comite` escopado à CPL Autopeças; `pessoa_id` = Maria Souza, que é `MembroOrgao` só do "Conselho Gestor" (não da "Comissão de Inovação") — útil para testar `verificar_participacao_orgao` (ela deve conseguir votar/deliberar no Conselho Gestor, mas receber 403 na Comissão de Inovação) |
 
 ### Dados de exemplo já no banco
 
@@ -194,6 +199,32 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     auditoria (item 8) capturou as mudanças de `Avaliacao` automaticamente
     sem nenhum código novo — confirma que o listener genérico realmente
     cobre modelos futuros, não só os que existiam quando foi construído.
+11. **Fechar limitações do RBAC** — usuário pediu explicitamente "fechar
+    itens menores pendentes" em vez de partir para o próximo módulo grande
+    (Projetos, RF-029 a RF-041, ficou pra depois). Três coisas, todas já
+    documentadas como limitação conhecida havia sessões: (a) escopo de CPL
+    para Entidade/Pessoa na leitura (`GET`) — criar continua sem escopo de
+    propósito, o registro pode não ter vínculo ainda; (b) escopo por órgão
+    específico (`verificar_participacao_orgao`, novo em `app/core/rbac.py`)
+    — `MembroOrgao` já existia desde Governança, só não estava ligado ao
+    RBAC; (c) página 403 amigável no portal web via
+    `@app.exception_handler(StarletteHTTPException)` em `main.py`, que
+    intercepta só GET fora de `/api/` e sem header `HX-Request` (API e
+    HTMX continuam recebendo JSON — HTMX não troca conteúdo em resposta
+    não-2xx mesmo, então devolver a página inteira quebraria o fragmento).
+    Testado com um usuário novo (`conselho-maria@exemplo.com`, ver tabela
+    de usuários de teste) criado especificamente pra provar o caso que
+    antes vazava: `MembroOrgao` de um órgão só, tentando votar no outro.
+    **Achado no meio do trabalho, não relacionado ao RBAC**: rodar a suite
+    de regressão Playwright revelou que `gerar_pdf_ata()` estava quebrada
+    em produção desde a sessão de Indicadores — um `NameError` genuíno
+    (`_GeradorAta` não existe mais, virou `_GeradorPDF`, mas uma chamada
+    interna não foi atualizada quando o rename aconteceu via
+    `replace_all`). Corrigido e reimplantado **imediatamente**, em commit
+    separado, antes mesmo de terminar o resto do RBAC — geração de ata é
+    uma função usada de verdade, não fazia sentido esperar. Lição: depois
+    de qualquer rename com `replace_all`, rode a suite de regressão antes
+    de considerar terminado, não só teste o caminho que motivou a mudança.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -333,10 +364,10 @@ Ver `docs/requisitos_macros.md` para o texto completo de cada requisito e
 reconhecimento, RF-024 a RF-028, implementado nesta sessão). Resumo na
 ordem recomendada para o que vem depois:
 
-1. **Fechar limitações conhecidas do RBAC** (ver README, seção "Controle de
-   acesso" → "Limitações conhecidas"): escopo por órgão/comissão específica
-   (não só CPL), escopo de CPL para Entidade/Pessoa, página 403 amigável no
-   portal web (hoje mostra JSON cru).
+1. ~~Fechar limitações conhecidas do RBAC~~ — **feito nesta sessão**: escopo
+   por órgão específico (`verificar_participacao_orgao`), escopo de CPL
+   para Entidade/Pessoa na leitura, página 403 amigável no portal web. Ver
+   README, seção "Controle de acesso" → "Limitações conhecidas".
 2. **Tela de criação/edição de CPL no portal restrito** — hoje só existe via
    API (`POST /api/cpls`), o que obriga usar `/docs` para o primeiro passo.
 3. **Remapeamento manual de colunas na importação de planilha** — hoje o

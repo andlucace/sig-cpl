@@ -1,8 +1,10 @@
 import uuid
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from jose import JWTError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.routes import (
     auditoria,
@@ -36,6 +38,7 @@ from app.web import (
     routes_publico,
     routes_restrito,
 )
+from app.web.templates import templates
 
 settings = get_settings()
 
@@ -46,6 +49,26 @@ app = FastAPI(
 )
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+
+@app.exception_handler(StarletteHTTPException)
+async def tratar_http_exception(request: Request, exc: StarletteHTTPException):
+    """RBAC (seção "Controle de acesso"): um 403 de `verificar_papel` por
+    padrão vira JSON cru mesmo em navegação direta no portal web. Aqui
+    trocamos por uma página amigável — mas só para GET de página inteira,
+    não para chamadas de API (`/api/...`, RF-053) nem para requisições
+    HTMX (que não fazem swap em resposta não-2xx de qualquer forma, então
+    devolver a página inteira quebraria o fragmento esperado)."""
+
+    e_rota_api = request.url.path.startswith("/api/")
+    e_htmx = request.headers.get("HX-Request") == "true"
+    if exc.status_code == status.HTTP_403_FORBIDDEN and not e_rota_api and not e_htmx:
+        return templates.TemplateResponse(
+            request, "erro_403.html", {"detalhe": exc.detail}, status_code=status.HTTP_403_FORBIDDEN
+        )
+    return JSONResponse(
+        {"detail": exc.detail}, status_code=exc.status_code, headers=getattr(exc, "headers", None)
+    )
 
 
 @app.middleware("http")

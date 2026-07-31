@@ -11,6 +11,7 @@ from app.core.rbac import (
     PAPEIS_IMPEDIMENTO_LEITURA,
     PAPEIS_TAREFA_EXECUCAO,
     verificar_papel,
+    verificar_participacao_orgao,
 )
 from app.db.session import get_db
 from app.models.cpl import CPL
@@ -266,7 +267,7 @@ def registrar_deliberacao(
     usuario_atual: Usuario = Depends(get_current_user),
 ) -> Deliberacao:
     reuniao = _get_reuniao_or_404(db, reuniao_id)
-    verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_PARTICIPACAO, cpl_id=reuniao.orgao.cpl_id)
+    verificar_participacao_orgao(db, usuario_atual, reuniao.orgao_id, reuniao.orgao.cpl_id)
     deliberacao = Deliberacao(reuniao_id=reuniao_id, **dados.model_dump())
     db.add(deliberacao)
     db.commit()
@@ -320,7 +321,9 @@ def registrar_voto(
     usuario_atual: Usuario = Depends(get_current_user),
 ) -> VotoRegistro:
     deliberacao = _get_deliberacao_or_404(db, deliberacao_id)
-    verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_PARTICIPACAO, cpl_id=deliberacao.reuniao.orgao.cpl_id)
+    verificar_participacao_orgao(
+        db, usuario_atual, deliberacao.reuniao.orgao_id, deliberacao.reuniao.orgao.cpl_id
+    )
     if db.query(VotoRegistro).filter(
         VotoRegistro.deliberacao_id == deliberacao_id, VotoRegistro.pessoa_id == dados.pessoa_id
     ).first():
@@ -359,7 +362,7 @@ def criar_tarefa_de_deliberacao(
 ) -> TarefaGovernanca:
     deliberacao = _get_deliberacao_or_404(db, deliberacao_id)
     cpl_id = deliberacao.reuniao.orgao.cpl_id
-    verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_PARTICIPACAO, cpl_id=cpl_id)
+    verificar_participacao_orgao(db, usuario_atual, deliberacao.reuniao.orgao_id, cpl_id)
     tarefa = TarefaGovernanca(cpl_id=cpl_id, deliberacao_id=deliberacao_id, **dados.model_dump())
     db.add(tarefa)
     db.commit()
@@ -414,6 +417,11 @@ def declarar_impedimento(
     db: Session = Depends(get_db),
     usuario_atual: Usuario = Depends(get_current_user),
 ) -> DeclaracaoImpedimento:
+    """RF-020: a declaração é opcionalmente ligada a um órgão/reunião
+    (`orgao_id`/`reuniao_id` no corpo), mas não obrigatoriamente — por isso
+    fica escopada só por CPL (`verificar_papel`), não por órgão específico
+    como `verificar_participacao_orgao` faz para votos/deliberações."""
+
     _get_cpl_or_404(db, cpl_id)
     verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_PARTICIPACAO, cpl_id=cpl_id)
     declaracao = DeclaracaoImpedimento(cpl_id=cpl_id, **dados.model_dump())
