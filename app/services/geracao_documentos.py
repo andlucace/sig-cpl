@@ -77,7 +77,7 @@ class _GeradorPDF:
 
 
 def gerar_pdf_ata(reuniao: Reuniao) -> bytes:
-    doc = _GeradorAta()
+    doc = _GeradorPDF()
 
     doc.linha(f"Ata — {reuniao.titulo}", altura=10, negrito=True, tamanho=16)
     doc.espaco(2)
