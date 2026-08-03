@@ -673,10 +673,13 @@ VPS Hostinger:
   `db` (Postgres 16, rede `internal`, sem porta publicada) + serviço
   `backend` (build do `Dockerfile`, `env_file: .env.prod`, volume nomeado
   `uploads` montado em `/app/uploads`, labels Traefik roteando
-  `Host(sigcpl.dedev.cloud)` pra porta 8000, com **healthcheck ativo do
-  Traefik** em `/api/saude` — só passa a rotear tráfego pro container
-  quando esse endpoint responder de fato, não assim que o container
-  existir; ver "Gotcha: janela de indisponibilidade no redeploy" abaixo).
+  `Host(sigcpl.dedev.cloud)` pra porta 8000, com `traefik.docker.network`
+  **explícito** apontando pra `n8n_default` — obrigatório porque o
+  backend está em 2 redes Docker, ver gotcha abaixo — e **healthcheck
+  ativo do Traefik** em `/api/saude`, que só passa a rotear tráfego pro
+  container quando esse endpoint responder de fato, não assim que o
+  container existir; ver "Gotcha: `traefik.docker.network` explícito é
+  obrigatório" abaixo).
 - **Segredos de produção**: `SECRET_KEY` e senha do Postgres gerados via
   `secrets.token_urlsafe` (não são os valores de dev do `.env` local).
   `SESSION_COOKIE_SECURE=true` e `ENVIRONMENT=production` (diferente do
@@ -709,21 +712,36 @@ Isso reconstrói a imagem e roda `alembic upgrade head` automaticamente (via
 `CMD` do `Dockerfile`) antes de subir o servidor — migrações novas são
 aplicadas sozinhas a cada reimplantação, sem passo manual.
 
-### Gotcha: janela de indisponibilidade no redeploy
+### Gotcha: `traefik.docker.network` explícito é obrigatório
 
-`docker compose up -d --build` recria o container `sigcpl_backend` — pára
-o antigo, sobe o novo. Entre esses dois momentos (container antigo já
-parado, novo ainda rodando migração + subindo o `uvicorn`), qualquer
-request que chegue no Traefik pode receber **502/504 (Gateway Timeout)**,
-já observado uma vez em uso real (usuário tentando cadastrar uma CPL). O
+`sigcpl_backend` está em **duas redes Docker** (`internal`, com o
+Postgres, e `n8n_default`, onde o Traefik escuta). Sem o label
+`traefik.docker.network=n8n_default` **explícito**, o provider Docker do
+Traefik pode escolher a rede errada (`internal`, à qual o próprio Traefik
+nem está conectado) ao descobrir o container — resultado observado em
+produção: backend marcado `serverStatus: DOWN` e **todo o site fora do ar
+(503/504)**, não só uma rota específica. A escolha parece
+não-determinística por instância de container (não é "sempre a primeira
+rede da lista"), então o mesmo redeploy pode funcionar hoje e falhar no
+próximo sem nenhuma mudança de código — só recriando o container. **Se
+for adicionar outro serviço Traefik que fique em mais de uma rede Docker
+(neste projeto ou em qualquer outro dessa VPS), sempre declare
+`traefik.docker.network` explicitamente.** Pra diagnosticar isso de
+novo: a API do Traefik (`/api/http/services`) mostra `serverStatus` e a
+URL/IP que ele está tentando usar — só é acessível de dentro do próprio
+container Traefik, já que a porta 8080 (dashboard) não é publicada no
+host (`docker exec n8n-traefik-1 wget -qO- http://localhost:8080/api/http/services`).
+
+Separado disso, `docker compose up -d --build` recria o container — pára
+o antigo, sobe o novo — e nesse intervalo (migração + boot do `uvicorn`)
+qualquer request pode receber 502/504 mesmo com a rede correta. O
 healthcheck do Traefik em `/api/saude` (ver acima) reduz essa janela —
-Traefik só roteia pro container novo quando ele responder de verdade —
-mas **não elimina**, porque é um único container (sem blue-green): ainda
-existe um instante sem nenhum backend saudável. Se isso virar problema
-recorrente, as soluções de verdade seriam rodar 2 réplicas atrás do mesmo
-serviço Traefik (exige remover o `container_name` fixo) ou um deploy
-blue-green explícito — nenhuma das duas foi implementada. Na prática:
-evite reimplantar durante uso ativo do sistema, ou avise antes.
+só roteia quando o backend responder de verdade — mas não elimina, por
+ser um único container (sem blue-green). Solução de verdade pra isso, se
+virar problema recorrente: 2 réplicas atrás do mesmo serviço (exige
+remover o `container_name` fixo) ou deploy blue-green explícito —
+nenhuma das duas foi implementada. Na prática: evite reimplantar durante
+uso ativo do sistema, ou avise antes.
 
 ### Primeiro usuário administrativo em produção
 

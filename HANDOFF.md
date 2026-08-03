@@ -533,40 +533,64 @@ só porque é um módulo novo).
     escreva em arquivo e leia os bytes brutos (`xxd`), ou confira via
     navegador/PDF renderizado, que são os caminhos que realmente importam.
 12. **"Gateway Timeout" ao cadastrar CPL em produção — causa era o próprio
-    redeploy, não um bug do app.** Usuário reportou o erro; investigação
-    encontrou: tabela `cpls` em produção **vazia** (nada foi criado,
-    mesmo silenciosamente — sem risco de duplicata), **nenhum erro de
-    aplicação** logado pra nenhuma tentativa de criação, e o container
+    redeploy, e revelou um bug real de infra ao investigar.** Usuário
+    reportou o erro; primeira investigação encontrou: tabela `cpls` em
+    produção **vazia** (nada foi criado, mesmo silenciosamente — sem
+    risco de duplicata), **nenhum erro de aplicação** logado, container
     `sigcpl_backend` recriado ~40 min antes do relato (redeploy do
-    relatório de recadastramento, sessão anterior). Hipótese confirmada
-    por eliminação, não por prova direta (Traefik não tem access log
-    habilitado — `docker logs n8n-traefik-1` não tem nenhuma linha,
-    então não dá pra confirmar o 504 na origem): o request caiu na
-    janela em que `docker compose up -d --build` já tinha parado o
-    container antigo mas o novo ainda não respondia em `/api/saude` —
-    Traefik não tinha nenhum backend saudável pra rotear. Revisei o
-    código de criação de CPL (`app/web/routes_cpl.py`,
-    `app/api/routes/cpl.py`) e não achei nada que explique um timeout
-    de verdade em uso normal (é só um SELECT de unicidade + INSERT +
-    commit, sem chamada externa). **Achado paralelo, projeto diferente
-    mas mesma VPS**: `cervejeira-app-1` em crash-loop com >5000
-    reinicializações desde 30/07 — não é a causa (já estava assim há
-    dias), mas consome recursos à toa; não mexi nele sem confirmação do
-    usuário, é outro projeto. **Correção aplicada**: healthcheck ativo
-    do Traefik em `docker-compose.prod.yml` —
-    `traefik.http.services.sigcpl-web.loadbalancer.healthcheck.path=
-    /api/saude` (+ `interval=5s`/`timeout=3s`) — faz o Traefik só
-    considerar o backend "up" quando `/api/saude` responder de verdade,
-    em vez de assim que o container existir (que é antes da migração
-    Alembic + boot do uvicorn terminarem). Reduz bastante a janela de
-    erro em redeploys futuros; **não elimina 100%** — é um único
-    container (sem blue-green), então ainda há um instante sem backend
-    saudável entre o container antigo parar e o novo passar no
-    healthcheck. Se isso for inaceitável no futuro, a solução de verdade
-    é rodar 2 réplicas do backend atrás do mesmo Traefik service
-    (`docker compose up -d --build --scale backend=2`, exigiria remover
-    `container_name` fixo) ou um deploy blue-green explícito — nenhum
-    dos dois foi implementado, ficou só o healthcheck por ora.
+    relatório de recadastramento, sessão anterior), e revisão do código
+    de criação de CPL sem achar nada que explicasse um timeout de
+    verdade (é só um SELECT de unicidade + INSERT + commit). Hipótese
+    inicial: request caiu na janela em que o container antigo já tinha
+    parado mas o novo ainda não respondia. Apliquei uma correção
+    (healthcheck ativo do Traefik em `/api/saude`, faz Traefik só
+    rotear pro backend quando ele responder de verdade) e, ao
+    reimplantar pra validar, **o site inteiro caiu com 503** — o que
+    expôs a causa raiz de verdade: `sigcpl_backend` está em **duas
+    redes Docker** (`internal`, com o Postgres, e `n8n_default`, onde o
+    Traefik escuta) e o label `traefik.docker.network` nunca foi
+    definido explicitamente. Sem essa rede fixada, o provider Docker do
+    Traefik escolhe uma rede "livremente" quando descobre o container —
+    nesse redeploy escolheu `internal` (rede que o Traefik nem está
+    conectado), registrou o backend como `serverStatus: DOWN` (IP
+    `172.21.0.3`, inalcançável) e passou a devolver 503/504 pra
+    **qualquer** rota, não só criação de CPL. Confirmado consultando a
+    API do próprio Traefik de dentro do container
+    (`docker exec n8n-traefik-1 wget -qO- http://localhost:8080/api/
+    http/services` — porta 8080 do dashboard não é publicada no host,
+    só acessível de dentro do container) e comparando com
+    `rh_nepen_backend` (mesmo padrão de 2 redes, mas sem o problema
+    nesse momento — a escolha da rede parece não-determinística por
+    instância de container, não uma regra fixa tipo "primeira rede
+    declarada"). Como a escolha errada é por sorte a cada recriação do
+    container, isso pode ter acontecido silenciosamente em qualquer
+    redeploy anterior também — inclusive o que motivou o relato original
+    do usuário; a "janela de restart" não está descartada, mas essa
+    ambiguidade de rede é a explicação mais provável e mais grave, já
+    que ela não se autorresolve como uma janela de restart resolveria.
+    **Correção de verdade aplicada**: label
+    `traefik.docker.network=n8n_default` explícito em
+    `docker-compose.prod.yml`, eliminando a ambiguidade — reimplantado e
+    confirmado via a mesma consulta à API do Traefik (`serverStatus: UP`
+    em `172.18.0.6:8000`, a rede certa) e smoke test em `/`, `/login`,
+    `/docs`, `/api/saude`, todos 200. **Se for adicionar outro serviço
+    Traefik neste projeto (ou em qualquer outro nesta VPS) que fique em
+    mais de uma rede Docker, sempre declare `traefik.docker.network`
+    explicitamente — não confie na escolha automática.** Healthcheck
+    ativo do Traefik em `/api/saude` (`interval=5s`/`timeout=3s`)
+    permanece como camada extra de proteção — reduz a janela de erro em
+    redeploys futuros (Traefik só roteia quando o backend responder de
+    verdade), mas não elimina 100%: é um único container (sem
+    blue-green), então ainda há um instante sem backend saudável entre
+    o container antigo parar e o novo passar no healthcheck. Solução de
+    verdade pra isso, se algum dia for inaceitável: 2 réplicas atrás do
+    mesmo serviço (exige remover `container_name` fixo) ou blue-green
+    explícito — nenhum dos dois foi implementado.
+    **Achado paralelo, projeto diferente mas mesma VPS**:
+    `cervejeira-app-1` em crash-loop com >5000 reinicializações desde
+    30/07 — não é a causa deste incidente (já estava assim há dias,
+    contido em seu próprio container/rede), mas consome recursos à toa;
+    não mexi nele sem confirmação do usuário, é outro projeto.
 
 ## O que falta (priorizado)
 
