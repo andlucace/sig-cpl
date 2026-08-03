@@ -261,7 +261,7 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 
 | ID | Requisito macro | Pri. | Status no repo |
 |---|---|---|---|
-| RF-048 | Gerar relatórios executivo, anual, de recadastramento, de comissão, de projeto e de impacto. | M | ⚠️ Parcial (escopo deliberadamente recortado) — só o **relatório executivo** foi construído (`POST /api/indicadores/cpls/{id}/relatorio-executivo`, PDF salvo no repositório de Documentos), consolidando governança + planejamento + cadastro + catálogo de indicadores. Anual/recadastramento/comissão/projeto/impacto não têm formato próprio ainda — comissão e projeto, em particular, dependem de módulos que não existem (governança já tem "comissão temática" como tipo de órgão, mas não um relatório dedicado a ela; projeto é Fase 2/3) |
+| RF-048 | Gerar relatórios executivo, anual, de recadastramento, de comissão, de projeto e de impacto. | M | ⚠️ Parcial (escopo deliberadamente recortado) — **relatório executivo** (`POST /api/indicadores/cpls/{id}/relatorio-executivo`) e **relatório de recadastramento** (`POST /api/maturidade/cpls/{id}/relatorio-recadastramento`, novo — nível de maturidade vigente, validade do reconhecimento, lacunas da avaliação em vigor e histórico completo de avaliações/decisões) construídos, ambos salvos no repositório de Documentos. Anual/comissão/projeto/impacto não têm formato próprio ainda — comissão e projeto, em particular, dependem de módulos que não existem (governança já tem "comissão temática" como tipo de órgão, mas não um relatório dedicado a ela; projeto é Fase 2/3); anual e impacto exigiriam uma janela de tempo/dado territorial que hoje não tem agregação própria |
 
 ### Comunicação
 

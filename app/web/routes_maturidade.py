@@ -16,11 +16,20 @@ from app.core.rbac import (
 )
 from app.db.session import get_db
 from app.models.cpl import CPL
-from app.models.enums import DimensaoMaturidade, NivelMaturidade
+from app.models.documento import Documento
+from app.models.enums import CategoriaDocumento, ConfidencialidadeDocumento, DimensaoMaturidade, NivelMaturidade
 from app.models.maturidade import Avaliacao, AvaliacaoCriterio, CriterioMaturidade, Edital, RecursoAvaliacao
 from app.models.pessoa import Pessoa
 from app.models.usuario import Usuario
-from app.services.maturidade import concluir_avaliacao, cpls_com_vencimento_proximo, decidir_nivel, lacunas
+from app.services.armazenamento import salvar_arquivo
+from app.services.geracao_documentos import gerar_pdf_relatorio_recadastramento
+from app.services.maturidade import (
+    concluir_avaliacao,
+    cpls_com_vencimento_proximo,
+    decidir_nivel,
+    lacunas,
+    resumo_recadastramento,
+)
 from app.web.templates import templates
 
 router = APIRouter(prefix="/painel/maturidade", tags=["Área restrita — Maturidade"])
@@ -208,6 +217,38 @@ def cpl_avaliacoes(
             "pagina_ativa": "maturidade",
         },
     )
+
+
+@router.post("/cpls/{cpl_id}/relatorio-recadastramento")
+def gerar_relatorio_recadastramento(
+    cpl_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    cpl = db.get(CPL, cpl_id)
+    if cpl is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=cpl_id)
+
+    pdf_bytes = gerar_pdf_relatorio_recadastramento(cpl, resumo_recadastramento(db, cpl_id))
+    nome_arquivo = f"Relatorio de Recadastramento - {cpl.nome}.pdf"
+    caminho = salvar_arquivo(cpl_id, nome_arquivo, pdf_bytes)
+    documento = Documento(
+        cpl_id=cpl_id,
+        titulo=f"Relatório de Recadastramento — {cpl.nome}",
+        categoria=CategoriaDocumento.RELATORIO,
+        confidencialidade=ConfidencialidadeDocumento.INTERNO,
+        arquivo_path=caminho,
+        nome_arquivo_original=nome_arquivo,
+        tipo_mime="application/pdf",
+        tamanho_bytes=len(pdf_bytes),
+        criado_por_id=usuario.id,
+    )
+    db.add(documento)
+    db.commit()
+    return RedirectResponse(f"/painel/documentos/cpls/{cpl_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/cpls/{cpl_id}/avaliacoes")

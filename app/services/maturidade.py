@@ -107,3 +107,35 @@ def cpls_com_vencimento_proximo(db: Session, dias: int = 90) -> list[CPL]:
         .order_by(CPL.data_validade_reconhecimento)
         .all()
     )
+
+
+def resumo_recadastramento(db: Session, cpl_id: uuid.UUID) -> dict:
+    """RF-048: dossiê de recadastramento — nível de maturidade vigente,
+    validade do reconhecimento (RN-005, bienal) e histórico completo de
+    avaliações/decisões de uma CPL, pra instruir o processo de renovação.
+    Reaproveita dados que o módulo de Maturidade já mantém; não introduz
+    coleta nova."""
+
+    cpl = db.get(CPL, cpl_id)
+    avaliacoes = (
+        db.query(Avaliacao)
+        .filter(Avaliacao.cpl_id == cpl_id)
+        .order_by(Avaliacao.data_avaliacao.desc())
+        .all()
+    )
+    avaliacao_vigente = next((a for a in avaliacoes if a.nivel_decidido is not None), None)
+
+    hoje = date.today()
+    dias_para_vencer = (
+        (cpl.data_validade_reconhecimento - hoje).days if cpl.data_validade_reconhecimento else None
+    )
+
+    return {
+        "nivel_maturidade_atual": cpl.nivel_maturidade,
+        "data_reconhecimento": cpl.data_reconhecimento,
+        "data_validade_reconhecimento": cpl.data_validade_reconhecimento,
+        "dias_para_vencer": dias_para_vencer,
+        "vencimento_proximo_ou_vencido": dias_para_vencer is not None and dias_para_vencer <= 90,
+        "avaliacoes": avaliacoes,
+        "lacunas_avaliacao_vigente": lacunas(avaliacao_vigente) if avaliacao_vigente else [],
+    }

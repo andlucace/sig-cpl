@@ -38,8 +38,19 @@ from app.schemas.maturidade import (
     RecursoAvaliacaoDecisao,
     RecursoAvaliacaoRead,
 )
+from app.models.documento import Documento
+from app.models.enums import CategoriaDocumento, ConfidencialidadeDocumento
 from app.schemas.cpl import CPLRead
-from app.services.maturidade import concluir_avaliacao, cpls_com_vencimento_proximo, decidir_nivel, lacunas
+from app.schemas.documento import DocumentoRead
+from app.services.armazenamento import salvar_arquivo
+from app.services.geracao_documentos import gerar_pdf_relatorio_recadastramento
+from app.services.maturidade import (
+    concluir_avaliacao,
+    cpls_com_vencimento_proximo,
+    decidir_nivel,
+    lacunas,
+    resumo_recadastramento,
+)
 
 router = APIRouter(prefix="/maturidade", tags=["Maturidade e reconhecimento"])
 
@@ -326,3 +337,46 @@ def cpls_vencimento_proximo(
     if ids_visiveis is None:
         return cpls
     return [cpl for cpl in cpls if cpl.id in ids_visiveis]
+
+
+# --- Relatório de recadastramento (RF-048) -----------------------------------
+
+
+@router.post(
+    "/cpls/{cpl_id}/relatorio-recadastramento",
+    response_model=DocumentoRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def gerar_relatorio_recadastramento(
+    cpl_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Documento:
+    """RF-048: dossiê de recadastramento em PDF, já cadastrado no
+    repositório de documentos (RF-042) — mesmo padrão do relatório
+    executivo (RF-045/046/047)."""
+
+    cpl = db.get(CPL, cpl_id)
+    if cpl is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL não encontrada.")
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=cpl_id)
+
+    pdf_bytes = gerar_pdf_relatorio_recadastramento(cpl, resumo_recadastramento(db, cpl_id))
+    nome_arquivo = f"Relatorio de Recadastramento - {cpl.nome}.pdf"
+    caminho = salvar_arquivo(cpl_id, nome_arquivo, pdf_bytes)
+
+    documento = Documento(
+        cpl_id=cpl_id,
+        titulo=f"Relatório de Recadastramento — {cpl.nome}",
+        categoria=CategoriaDocumento.RELATORIO,
+        confidencialidade=ConfidencialidadeDocumento.INTERNO,
+        arquivo_path=caminho,
+        nome_arquivo_original=nome_arquivo,
+        tipo_mime="application/pdf",
+        tamanho_bytes=len(pdf_bytes),
+        criado_por_id=usuario_atual.id,
+    )
+    db.add(documento)
+    db.commit()
+    db.refresh(documento)
+    return documento

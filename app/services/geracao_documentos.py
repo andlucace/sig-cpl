@@ -1,8 +1,10 @@
-"""RF-043/RF-048: geração de documentos padronizados em PDF. Duas peças:
+"""RF-043/RF-048: geração de documentos padronizados em PDF. Três peças:
 exportar a ata de uma reunião de governança (usa o campo `Reuniao.ata` que
-já existe) e o relatório executivo consolidado de uma CPL (RF-048 — dos
-seis tipos de relatório citados no requisito, só este foi construído;
-comissão/projeto dependem de módulos ainda não implementados, ver README).
+já existe), o relatório executivo consolidado de uma CPL e o relatório de
+recadastramento (RF-048 — dos seis tipos de relatório citados no
+requisito, só estes dois foram construídos; anual/comissão/projeto/
+impacto ainda não têm formato definido ou dependem de módulos que não
+existem, ver README).
 """
 
 from pathlib import Path
@@ -199,5 +201,61 @@ def gerar_pdf_relatorio_executivo(
             doc.linha(f"- {indicador.nome}: {valor}{meta}")
     else:
         doc.linha("Nenhum indicador cadastrado ainda.")
+
+    return doc.bytes()
+
+
+def gerar_pdf_relatorio_recadastramento(cpl: CPL, resumo: dict) -> bytes:
+    """RF-048: dossiê de recadastramento — nível de maturidade vigente,
+    validade do reconhecimento (RN-005) e histórico de avaliações/decisões.
+    Dados vêm prontos de `app/services/maturidade.py::resumo_recadastramento`;
+    esta função só formata."""
+
+    doc = _GeradorPDF()
+
+    doc.linha(f"Relatório de Recadastramento — {cpl.nome}", altura=10, negrito=True, tamanho=16)
+    doc.linha(f"Sigla: {cpl.sigla} — Elo/setor: {cpl.setor or '—'}")
+    doc.espaco(2)
+
+    doc.linha("Situação atual", negrito=True, tamanho=12)
+    nivel = resumo["nivel_maturidade_atual"]
+    doc.linha(f"Nível de maturidade: {nivel.value.replace('_', ' ') if nivel else 'não reconhecido ainda'}")
+    if resumo["data_reconhecimento"]:
+        doc.linha(f"Reconhecido em: {resumo['data_reconhecimento'].strftime('%d/%m/%Y')}")
+    if resumo["data_validade_reconhecimento"]:
+        doc.linha(f"Válido até: {resumo['data_validade_reconhecimento'].strftime('%d/%m/%Y')}")
+        if resumo["dias_para_vencer"] is not None:
+            if resumo["dias_para_vencer"] < 0:
+                doc.linha(f"Reconhecimento vencido há {-resumo['dias_para_vencer']} dia(s) — recadastramento necessário.")
+            elif resumo["vencimento_proximo_ou_vencido"]:
+                doc.linha(f"Vence em {resumo['dias_para_vencer']} dia(s) — recadastramento recomendado.")
+    else:
+        doc.linha("Sem reconhecimento formal registrado ainda.")
+
+    if resumo["lacunas_avaliacao_vigente"]:
+        doc.espaco()
+        doc.linha("Lacunas identificadas na avaliação vigente", negrito=True, tamanho=12)
+        for nota in resumo["lacunas_avaliacao_vigente"]:
+            doc.linha(f"- {nota.criterio.nome}: nota {nota.nota} (corte: {nota.criterio.nota_corte})")
+
+    doc.espaco()
+    doc.linha("Histórico de avaliações", negrito=True, tamanho=12)
+    if resumo["avaliacoes"]:
+        for avaliacao in resumo["avaliacoes"]:
+            linha = (
+                f"- {avaliacao.data_avaliacao.strftime('%d/%m/%Y')} "
+                f"(edital {avaliacao.edital.ciclo}): status {avaliacao.status.value}"
+            )
+            if avaliacao.pontuacao_calculada is not None:
+                linha += f", pontuação {avaliacao.pontuacao_calculada}"
+            if avaliacao.nivel_sugerido is not None:
+                linha += f", sugerido {avaliacao.nivel_sugerido.value.replace('_', ' ')}"
+            if avaliacao.nivel_decidido is not None:
+                linha += f", decidido {avaliacao.nivel_decidido.value.replace('_', ' ')}"
+            doc.linha(linha)
+            if avaliacao.parecer:
+                doc.linha(f"  Parecer: {avaliacao.parecer}")
+    else:
+        doc.linha("Nenhuma avaliação registrada ainda.")
 
     return doc.bytes()

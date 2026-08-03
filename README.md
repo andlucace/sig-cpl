@@ -348,8 +348,9 @@ os outros módulos já coletam:
   painel porque esses módulos ainda não existem (Fase 2/3).
 - **Relatório executivo em PDF** (RF-048) — dos seis tipos de relatório
   citados no requisito (executivo, anual, recadastramento, comissão,
-  projeto, impacto), só este foi construído; decisão tomada com o usuário
-  via `AskUserQuestion` antes de implementar, dado que comissão/projeto
+  projeto, impacto), dois foram construídos até agora (ver item seguinte
+  para o de recadastramento); decisão tomada com o usuário via
+  `AskUserQuestion` antes de implementar, dado que comissão/projeto
   dependem de módulos que não existem e os demais não têm formato
   definido no documento de requisitos. Reaproveita a mesma infraestrutura
   da ata de reunião (`app/services/geracao_documentos.py` — a classe
@@ -357,6 +358,19 @@ os outros módulos já coletam:
   dois): `POST /api/indicadores/cpls/{cpl_id}/relatorio-executivo` (e o
   botão equivalente em `/painel/indicadores`) gera o PDF e já cadastra
   como `Documento` (categoria `relatorio`), igual ao padrão da ata.
+- **Relatório de recadastramento em PDF** (RF-048) — segundo tipo de
+  relatório construído, escolhido por reaproveitar quase só dado que o
+  módulo de Maturidade já mantém (nenhuma coleta nova): nível de
+  maturidade vigente, data de reconhecimento e validade (RN-005, bienal),
+  quantos dias faltam pro vencimento, lacunas da avaliação vigente
+  (critérios abaixo da nota de corte, via `lacunas()` já existente) e o
+  histórico completo de avaliações com pontuação/nível sugerido/nível
+  decidido/parecer de cada uma. `resumo_recadastramento()` e
+  `gerar_pdf_relatorio_recadastramento()` seguem o mesmo par
+  serviço-formata-PDF do executivo. Gerado via
+  `POST /api/maturidade/cpls/{cpl_id}/relatorio-recadastramento` (e botão
+  equivalente em `/painel/maturidade/cpls/{cpl_id}`), RBAC `PAPEIS_GESTAO`
+  — mesma regra do executivo.
 - RBAC: leitura (catálogo, resumo, painel) usa `PAPEIS_GOVERNANCA_LEITURA`;
   gerar relatório executivo usa `PAPEIS_GESTAO` (mesma exigência da ata);
   registrar novo valor de indicador usa `PAPEIS_TAREFA_EXECUCAO` **ou** o
@@ -743,10 +757,13 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    e relatórios" acima. Painéis de projetos/finanças/impacto territorial
    (parte do RF-045) seguem pendentes — dependem de módulos ainda não
    construídos (Projetos, Fase 2/3).
-6. Outros tipos de relatório do RF-048 (anual, recadastramento, comissão,
-   projeto, impacto) — hoje só o executivo existe; os demais não têm
-   formato definido no documento de requisitos e alguns dependem de
-   módulos ainda não construídos.
+6. ~~Relatório de recadastramento (RF-048)~~ — **feito**: dossiê com
+   nível de maturidade vigente, validade do reconhecimento, lacunas da
+   avaliação em vigor e histórico de avaliações/decisões — ver seção
+   "Indicadores e relatórios" acima. Seguem pendentes, do mesmo RF-048:
+   anual, comissão, projeto e impacto — nenhum tem formato definido no
+   documento de requisitos, e comissão/projeto dependem de módulos ainda
+   não construídos (ou não dedicados, no caso de comissão).
 7. Restante da Fase 2 — plano de trabalho, orçamento, cotações e
    submissões (RF-029 em diante) — depende do módulo de Projetos, ainda
    não iniciado. "Simular cenários" (RF-026) e "habilitação jurídica"

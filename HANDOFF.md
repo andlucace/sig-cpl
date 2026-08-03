@@ -372,6 +372,36 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     Regressão completa rodada de novo (Playwright + verificação de
     log do servidor), incluindo o fluxo de importação (que teve
     `_ALIASES_CAMPO`/`_CAMPOS_BOOLEANOS` mexidos) — sem nenhum 500.
+16. **Relatório de recadastramento** (RF-048) — usuário pediu pra "seguir
+    conforme recomendado"; entre as opções restantes do RF-048 (anual,
+    recadastramento, comissão, projeto, impacto), escolhi recadastramento
+    porque é o único que reaproveita dado que já existe **de verdade**
+    (nível de maturidade, validade do reconhecimento, avaliações,
+    `lacunas()`) sem precisar inventar uma nova janela temporal (anual) ou
+    uma nova agregação por-órgão (comissão) — projeto continua bloqueado
+    (módulo não existe) e impacto duplicaria o executivo sem uma fonte de
+    dado territorial própria. Mesmo par serviço+PDF do executivo:
+    `resumo_recadastramento()` (novo, em `app/services/maturidade.py`) +
+    `gerar_pdf_relatorio_recadastramento()` (novo, em
+    `app/services/geracao_documentos.py`), chamados por 2 rotas novas
+    (`POST /api/maturidade/cpls/{id}/relatorio-recadastramento` e o
+    equivalente web) que salvam o PDF como `Documento` — cópia quase
+    literal do fluxo do executivo (`app/web/routes_indicadores.py`), só
+    trocando os dados. Nenhuma migração — não criei tabela nem coluna
+    nova, só uma função de agregação sobre dado que o módulo de
+    Maturidade (RF-024-028, sessão anterior) já mantinha.
+    **Armadilha evitada, não nova mas quase repetida**: ao testar o PDF
+    gerado, `doc.get_text()` via PyMuPDF voltou com `�` no lugar de
+    acento/travessão — por um instante pareceu o mesmo bug real que já
+    apareceu antes neste projeto. Mas dessa vez confirmei rasterizando a
+    página como imagem (`page.get_pixmap()`) em vez de confiar na
+    extração de texto, e o PDF renderiza os acentos perfeitamente — é uma
+    particularidade de como esse `get_text()` lê a tabela de encoding da
+    fonte embutida (Arial local, via `_FONTES_REGULAR`), não um bug do
+    app. Reforça o padrão já documentado: **nunca confiar em extração de
+    texto/repr de PDF gerado por este código — sempre confirmar via
+    imagem rasterizada ou renderização real**, mesma lição do gotcha do
+    `python -c` com acento.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -548,10 +578,11 @@ ordem recomendada para o que vem depois:
    certificações, digitalização~~ — **feito**: ver item 15 da seção "Ordem
    em que este projeto foi construído" para os detalhes (campos novos em
    `DiagnosticoCadastral`, `DiagnosticoCadastralHistorico` para "novos
-   empregos", os 3 pontos de escrita atualizados). Segue pendente, sem
-   relação com este trabalho: RF-048 só tem o relatório executivo — os
-   outros 5 tipos citados no requisito não existem (comissão/projeto
-   dependem de módulos ainda não construídos). RF-045 só cobre
+   empregos", os 3 pontos de escrita atualizados). RF-048 ganhou também o
+   **relatório de recadastramento** — ver item 16. Seguem pendentes,
+   sem relação com este trabalho: anual/comissão/projeto/impacto do
+   RF-048 (comissão/projeto dependem de módulos ainda não construídos ou
+   não dedicados). RF-045 só cobre
    governança/planejamento/cadastro — maturidade/projetos/finanças/
    impacto territorial ficam pra quando esses módulos tiverem painel
    próprio (maturidade já existe como módulo desde esta sessão, mas sem
