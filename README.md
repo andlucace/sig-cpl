@@ -673,7 +673,10 @@ VPS Hostinger:
   `db` (Postgres 16, rede `internal`, sem porta publicada) + serviço
   `backend` (build do `Dockerfile`, `env_file: .env.prod`, volume nomeado
   `uploads` montado em `/app/uploads`, labels Traefik roteando
-  `Host(sigcpl.dedev.cloud)` pra porta 8000).
+  `Host(sigcpl.dedev.cloud)` pra porta 8000, com **healthcheck ativo do
+  Traefik** em `/api/saude` — só passa a rotear tráfego pro container
+  quando esse endpoint responder de fato, não assim que o container
+  existir; ver "Gotcha: janela de indisponibilidade no redeploy" abaixo).
 - **Segredos de produção**: `SECRET_KEY` e senha do Postgres gerados via
   `secrets.token_urlsafe` (não são os valores de dev do `.env` local).
   `SESSION_COOKIE_SECURE=true` e `ENVIRONMENT=production` (diferente do
@@ -705,6 +708,22 @@ alguém decidir isso explicitamente.
 Isso reconstrói a imagem e roda `alembic upgrade head` automaticamente (via
 `CMD` do `Dockerfile`) antes de subir o servidor — migrações novas são
 aplicadas sozinhas a cada reimplantação, sem passo manual.
+
+### Gotcha: janela de indisponibilidade no redeploy
+
+`docker compose up -d --build` recria o container `sigcpl_backend` — pára
+o antigo, sobe o novo. Entre esses dois momentos (container antigo já
+parado, novo ainda rodando migração + subindo o `uvicorn`), qualquer
+request que chegue no Traefik pode receber **502/504 (Gateway Timeout)**,
+já observado uma vez em uso real (usuário tentando cadastrar uma CPL). O
+healthcheck do Traefik em `/api/saude` (ver acima) reduz essa janela —
+Traefik só roteia pro container novo quando ele responder de verdade —
+mas **não elimina**, porque é um único container (sem blue-green): ainda
+existe um instante sem nenhum backend saudável. Se isso virar problema
+recorrente, as soluções de verdade seriam rodar 2 réplicas atrás do mesmo
+serviço Traefik (exige remover o `container_name` fixo) ou um deploy
+blue-green explícito — nenhuma das duas foi implementada. Na prática:
+evite reimplantar durante uso ativo do sistema, ou avise antes.
 
 ### Primeiro usuário administrativo em produção
 

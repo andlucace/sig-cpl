@@ -39,6 +39,9 @@ services:
       - traefik.http.routers.sigcpl-web.tls=true
       - traefik.http.routers.sigcpl-web.tls.certresolver=mytlschallenge
       - traefik.http.services.sigcpl-web.loadbalancer.server.port=8000
+      - traefik.http.services.sigcpl-web.loadbalancer.healthcheck.path=/api/saude
+      - traefik.http.services.sigcpl-web.loadbalancer.healthcheck.interval=5s
+      - traefik.http.services.sigcpl-web.loadbalancer.healthcheck.timeout=3s
 
 networks:
   internal:

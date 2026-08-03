@@ -532,6 +532,41 @@ só porque é um módulo novo).
     impressa por um script Python invocado via `-c` neste ambiente —
     escreva em arquivo e leia os bytes brutos (`xxd`), ou confira via
     navegador/PDF renderizado, que são os caminhos que realmente importam.
+12. **"Gateway Timeout" ao cadastrar CPL em produção — causa era o próprio
+    redeploy, não um bug do app.** Usuário reportou o erro; investigação
+    encontrou: tabela `cpls` em produção **vazia** (nada foi criado,
+    mesmo silenciosamente — sem risco de duplicata), **nenhum erro de
+    aplicação** logado pra nenhuma tentativa de criação, e o container
+    `sigcpl_backend` recriado ~40 min antes do relato (redeploy do
+    relatório de recadastramento, sessão anterior). Hipótese confirmada
+    por eliminação, não por prova direta (Traefik não tem access log
+    habilitado — `docker logs n8n-traefik-1` não tem nenhuma linha,
+    então não dá pra confirmar o 504 na origem): o request caiu na
+    janela em que `docker compose up -d --build` já tinha parado o
+    container antigo mas o novo ainda não respondia em `/api/saude` —
+    Traefik não tinha nenhum backend saudável pra rotear. Revisei o
+    código de criação de CPL (`app/web/routes_cpl.py`,
+    `app/api/routes/cpl.py`) e não achei nada que explique um timeout
+    de verdade em uso normal (é só um SELECT de unicidade + INSERT +
+    commit, sem chamada externa). **Achado paralelo, projeto diferente
+    mas mesma VPS**: `cervejeira-app-1` em crash-loop com >5000
+    reinicializações desde 30/07 — não é a causa (já estava assim há
+    dias), mas consome recursos à toa; não mexi nele sem confirmação do
+    usuário, é outro projeto. **Correção aplicada**: healthcheck ativo
+    do Traefik em `docker-compose.prod.yml` —
+    `traefik.http.services.sigcpl-web.loadbalancer.healthcheck.path=
+    /api/saude` (+ `interval=5s`/`timeout=3s`) — faz o Traefik só
+    considerar o backend "up" quando `/api/saude` responder de verdade,
+    em vez de assim que o container existir (que é antes da migração
+    Alembic + boot do uvicorn terminarem). Reduz bastante a janela de
+    erro em redeploys futuros; **não elimina 100%** — é um único
+    container (sem blue-green), então ainda há um instante sem backend
+    saudável entre o container antigo parar e o novo passar no
+    healthcheck. Se isso for inaceitável no futuro, a solução de verdade
+    é rodar 2 réplicas do backend atrás do mesmo Traefik service
+    (`docker compose up -d --build --scale backend=2`, exigiria remover
+    `container_name` fixo) ou um deploy blue-green explícito — nenhum
+    dos dois foi implementado, ficou só o healthcheck por ora.
 
 ## O que falta (priorizado)
 
