@@ -1,10 +1,11 @@
-"""RF-043/RF-048: geração de documentos padronizados em PDF. Três peças:
-exportar a ata de uma reunião de governança (usa o campo `Reuniao.ata` que
-já existe), o relatório executivo consolidado de uma CPL e o relatório de
-recadastramento (RF-048 — dos seis tipos de relatório citados no
-requisito, só estes dois foram construídos; anual/comissão/projeto/
-impacto ainda não têm formato definido ou dependem de módulos que não
-existem, ver README).
+"""RF-043/RF-048: geração de documentos padronizados em PDF. Quatro
+peças: exportar a ata de uma reunião de governança (usa o campo
+`Reuniao.ata` que já existe), o relatório executivo consolidado
+(acumulado desde sempre), o relatório de recadastramento e o relatório
+anual (recortado a um ano-calendário) de uma CPL (RF-048 — dos seis
+tipos de relatório citados no requisito, estes quatro foram construídos;
+comissão/projeto/impacto ainda não têm formato definido ou dependem de
+módulos que não existem, ver README).
 """
 
 from pathlib import Path
@@ -257,5 +258,38 @@ def gerar_pdf_relatorio_recadastramento(cpl: CPL, resumo: dict) -> bytes:
                 doc.linha(f"  Parecer: {avaliacao.parecer}")
     else:
         doc.linha("Nenhuma avaliação registrada ainda.")
+
+    return doc.bytes()
+
+
+def gerar_pdf_relatorio_anual(cpl: CPL, resumo: dict) -> bytes:
+    """RF-048: relatório anual — o que aconteceu na CPL num ano-calendário
+    específico (o executivo é o acumulado desde sempre). Dados vêm
+    prontos de `app/services/indicadores.py::resumo_anual`; esta função
+    só formata."""
+
+    doc = _GeradorPDF()
+
+    doc.linha(f"Relatório Anual {resumo['ano']} — {cpl.nome}", altura=10, negrito=True, tamanho=16)
+    doc.linha(f"Sigla: {cpl.sigla} — Elo/setor: {cpl.setor or '—'}")
+    doc.espaco(2)
+
+    doc.linha("Governança", negrito=True, tamanho=12)
+    doc.linha(f"Reuniões realizadas no ano: {resumo['reunioes_realizadas_no_ano']}")
+    doc.linha(f"Deliberações aprovadas no ano: {resumo['deliberacoes_aprovadas_no_ano']}")
+    doc.linha(f"Tarefas concluídas no ano: {resumo['tarefas_concluidas_no_ano']}")
+
+    doc.espaco()
+    doc.linha("Planejamento estratégico", negrito=True, tamanho=12)
+    doc.linha(f"Metas concluídas no ano: {resumo['metas_concluidas_no_ano']}")
+    doc.linha(f"Indicadores atualizados no ano: {resumo['indicadores_atualizados_no_ano']}")
+
+    doc.espaco()
+    doc.linha("Cadastro e cadeia", negrito=True, tamanho=12)
+    doc.linha(f"Novos empregos diretos no ano: {resumo['novos_empregos_diretos_no_ano']}")
+
+    doc.espaco()
+    doc.linha("Documentos", negrito=True, tamanho=12)
+    doc.linha(f"Documentos gerados/anexados no ano: {resumo['documentos_gerados_no_ano']}")
 
     return doc.bytes()

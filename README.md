@@ -371,6 +371,29 @@ os outros módulos já coletam:
   `POST /api/maturidade/cpls/{cpl_id}/relatorio-recadastramento` (e botão
   equivalente em `/painel/maturidade/cpls/{cpl_id}`), RBAC `PAPEIS_GESTAO`
   — mesma regra do executivo.
+- **Relatório anual em PDF** (RF-048) — terceiro tipo de relatório
+  construído. Diferença central pro executivo: o executivo é o
+  **acumulado desde sempre**; o anual é **"o que aconteceu num
+  ano-calendário específico"** — reuniões realizadas, deliberações
+  aprovadas, tarefas/metas concluídas, documentos gerados, indicadores
+  atualizados e novos empregos diretos, todos filtrados pra dentro de
+  `[1º de janeiro, 31 de dezembro]` do ano informado. `resumo_anual(db,
+  cpl_id, ano)` em `app/services/indicadores.py`. "Concluída no ano"
+  para tarefa/meta usa `updated_at` como aproximação — nenhum dos dois
+  modelos guarda uma data de conclusão própria (recorte de escopo, não
+  bug). "Novos empregos no ano" reaproveita a mesma lógica de
+  `DiagnosticoCadastralHistorico` do resumo cadastral (RF-046), mas
+  generalizada para aceitar um intervalo `[início, fim]` explícito em
+  vez de só uma janela rolante de N dias
+  (`_novos_empregos_diretos_periodo`, com `_novos_empregos_diretos`
+  agora implementado por cima dela). Gerado via
+  `POST /api/indicadores/cpls/{cpl_id}/relatorio-anual?ano=` (e um
+  campo de ano + botão em `/painel/indicadores/cpls/{cpl_id}`), RBAC
+  `PAPEIS_GESTAO` — mesma regra dos outros dois relatórios. Testado
+  gerando o mesmo relatório para dois anos diferentes (2026, com dados
+  reais, e 2025, sem nenhum) e confirmando via PDF rasterizado que os
+  números realmente mudam — não é só o mesmo acumulado com um título
+  diferente.
 - RBAC: leitura (catálogo, resumo, painel) usa `PAPEIS_GOVERNANCA_LEITURA`;
   gerar relatório executivo usa `PAPEIS_GESTAO` (mesma exigência da ata);
   registrar novo valor de indicador usa `PAPEIS_TAREFA_EXECUCAO` **ou** o
@@ -830,13 +853,17 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    e relatórios" acima. Painéis de projetos/finanças/impacto territorial
    (parte do RF-045) seguem pendentes — dependem de módulos ainda não
    construídos (Projetos, Fase 2/3).
-6. ~~Relatório de recadastramento (RF-048)~~ — **feito**: dossiê com
-   nível de maturidade vigente, validade do reconhecimento, lacunas da
-   avaliação em vigor e histórico de avaliações/decisões — ver seção
-   "Indicadores e relatórios" acima. Seguem pendentes, do mesmo RF-048:
-   anual, comissão, projeto e impacto — nenhum tem formato definido no
-   documento de requisitos, e comissão/projeto dependem de módulos ainda
-   não construídos (ou não dedicados, no caso de comissão).
+6. ~~Relatório de recadastramento e relatório anual (RF-048)~~ —
+   **feito**: recadastramento (dossiê com nível de maturidade vigente,
+   validade do reconhecimento, lacunas da avaliação em vigor e
+   histórico de avaliações/decisões) e anual (mesma base do executivo,
+   mas recortada a um ano-calendário — reuniões, deliberações, tarefas/
+   metas concluídas, documentos, indicadores e novos empregos, todos só
+   dentro do ano informado) — ver seção "Indicadores e relatórios"
+   acima. Seguem pendentes, do mesmo RF-048: comissão, projeto e
+   impacto — nenhum tem formato definido no documento de requisitos, e
+   comissão/projeto dependem de módulos ainda não construídos (ou não
+   dedicados, no caso de comissão).
 7. Restante da Fase 2 — plano de trabalho, orçamento, cotações e
    submissões (RF-029 em diante) — depende do módulo de Projetos, ainda
    não iniciado. "Simular cenários" (RF-026) e "habilitação jurídica"

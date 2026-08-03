@@ -7,11 +7,19 @@
 {% block conteudo %}
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h1 class="h3 mb-0">Indicadores e relatórios — {{ cpl.nome }}</h1>
-        <form method="post" action="/painel/indicadores/cpls/{{ cpl.id }}/relatorio-executivo">
-            <button type="submit" class="btn btn-primary">
-                <i class="bi bi-file-earmark-pdf me-1"></i>Gerar relatório executivo em PDF
-            </button>
-        </form>
+        <div class="d-flex gap-2 flex-wrap">
+            <form method="post" action="/painel/indicadores/cpls/{{ cpl.id }}/relatorio-anual" class="d-flex gap-2">
+                <input type="number" class="form-control form-control-sm" style="width: 6rem;" name="ano" value="{{ ano_atual }}" min="2000" max="2100" required>
+                <button type="submit" class="btn btn-outline-primary">
+                    <i class="bi bi-file-earmark-pdf me-1"></i>Gerar relatório anual em PDF
+                </button>
+            </form>
+            <form method="post" action="/painel/indicadores/cpls/{{ cpl.id }}/relatorio-executivo">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-file-earmark-pdf me-1"></i>Gerar relatório executivo em PDF
+                </button>
+            </form>
+        </div>
     </div>
 
     <div class="row row-cols-2 row-cols-md-4 g-3 mb-4">

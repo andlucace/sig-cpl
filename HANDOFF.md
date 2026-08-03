@@ -455,6 +455,45 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     (reunião, tarefa, documento, meta, CPL) criadas e removidas via
     script Python direto na sessão (não pela API), confirmando que cada
     fonte notifica exatamente quem deveria e ninguém mais.
+18. **Relatório anual** (RF-048) — usuário disse "continuar para a
+    RF-048" sem especificar qual dos 4 tipos restantes (anual, comissão,
+    projeto, impacto); escolhi anual e expliquei a razão em vez de
+    perguntar de novo (mesmo padrão do item 16: já tinha perguntado o
+    suficiente nesta cadeia de decisões). Razão: é o mais universalmente
+    valioso (prestação de contas anual é um artefato real de programas
+    públicos) e o mais barato de construir sobre dado que já existe —
+    comissão exigiria uma nova função de resumo por-órgão (em vez de
+    por-CPL) e projeto continua bloqueado (módulo não existe); impacto
+    foi descartado de novo por duplicar o executivo sem fonte de dado
+    territorial própria. Diferença central pro executivo: executivo é
+    **acumulado desde sempre**; anual é **recortado a
+    `[1º jan, 31 dez]` de um ano específico** — `resumo_anual(db,
+    cpl_id, ano)`, novo em `app/services/indicadores.py`, reaproveitando
+    os mesmos joins de `resumo_governanca`/`resumo_planejamento` mas com
+    filtro de data adicionado.
+    **Refactor pra evitar duplicar lógica**: "novos empregos" (RF-046,
+    resumo cadastral) já calculava a diferença de `empregos_diretos`
+    entre dois snapshots de `DiagnosticoCadastralHistorico` dentro de
+    uma janela rolante de N dias (`_novos_empregos_diretos`). O
+    relatório anual precisa da mesma conta, mas com `[início, fim]`
+    explícitos (o ano-calendário), não uma janela relativa a "agora".
+    Extraí a lógica pra `_novos_empregos_diretos_periodo(db,
+    entidade_ids, inicio, fim)` e reescrevi `_novos_empregos_diretos`
+    como uma chamada fina por cima dela (`inicio=agora-dias, fim=agora`)
+    — comportamento idêntico pro caso já existente (verificado: nenhum
+    teste de regressão do resumo cadastral mudou), e o relatório anual
+    ganha a variante nova de graça. "Tarefas/metas concluídas no ano"
+    usa `updated_at` como proxy — nem `TarefaGovernanca` nem
+    `MetaEstrategica` guardam uma data de conclusão própria; recorte de
+    escopo documentado, não um bug.
+    **Testado de verdade, não só "não deu erro"**: gerei o relatório
+    para 2026 (ano com dado real — 4 reuniões, 2 deliberações, etc.) e
+    depois pra 2025 (nenhum dado ainda existia naquele ano) e confirmei
+    via PDF rasterizado que os números realmente mudam pra zero — sem
+    esse segundo teste, um bug onde o filtro de ano fosse ignorado
+    silenciosamente (e o relatório "anual" sempre mostrasse o total
+    acumulado) passaria despercebido, já que os números de 2026
+    "pareciam certos" sozinhos.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -690,11 +729,11 @@ ordem recomendada para o que vem depois:
    certificações, digitalização~~ — **feito**: ver item 15 da seção "Ordem
    em que este projeto foi construído" para os detalhes (campos novos em
    `DiagnosticoCadastral`, `DiagnosticoCadastralHistorico` para "novos
-   empregos", os 3 pontos de escrita atualizados). RF-048 ganhou também o
-   **relatório de recadastramento** — ver item 16. Seguem pendentes,
-   sem relação com este trabalho: anual/comissão/projeto/impacto do
-   RF-048 (comissão/projeto dependem de módulos ainda não construídos ou
-   não dedicados). RF-045 só cobre
+   empregos", os 3 pontos de escrita atualizados). RF-048 ganhou também
+   **relatório de recadastramento** (item 16) e **relatório anual**
+   (item 18). Seguem pendentes, sem relação com este trabalho:
+   comissão/projeto/impacto do RF-048 (comissão/projeto dependem de
+   módulos ainda não construídos ou não dedicados). RF-045 só cobre
    governança/planejamento/cadastro — maturidade/projetos/finanças/
    impacto territorial ficam pra quando esses módulos tiverem painel
    próprio (maturidade já existe como módulo desde esta sessão, mas sem

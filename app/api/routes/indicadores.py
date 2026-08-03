@@ -15,9 +15,10 @@ from app.schemas.documento import DocumentoRead
 from app.schemas.indicadores import ResumoCadastralRead
 from app.schemas.planejamento import IndicadorEstrategicoRead, IndicadorValorHistoricoRead
 from app.services.armazenamento import salvar_arquivo
-from app.services.geracao_documentos import gerar_pdf_relatorio_executivo
+from app.services.geracao_documentos import gerar_pdf_relatorio_anual, gerar_pdf_relatorio_executivo
 from app.services.indicadores import (
     catalogo_indicadores,
+    resumo_anual,
     resumo_cadastral,
     resumo_governanca,
     resumo_planejamento,
@@ -108,6 +109,43 @@ def gerar_relatorio_executivo(
     documento = Documento(
         cpl_id=cpl_id,
         titulo=f"Relatório Executivo — {cpl.nome}",
+        categoria=CategoriaDocumento.RELATORIO,
+        confidencialidade=ConfidencialidadeDocumento.INTERNO,
+        arquivo_path=caminho,
+        nome_arquivo_original=nome_arquivo,
+        tipo_mime="application/pdf",
+        tamanho_bytes=len(pdf_bytes),
+        criado_por_id=usuario_atual.id,
+    )
+    db.add(documento)
+    db.commit()
+    db.refresh(documento)
+    return documento
+
+
+@router.post(
+    "/cpls/{cpl_id}/relatorio-anual", response_model=DocumentoRead, status_code=status.HTTP_201_CREATED
+)
+def gerar_relatorio_anual(
+    cpl_id: uuid.UUID,
+    ano: int,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Documento:
+    """RF-048: relatório anual em PDF — recortado a um ano-calendário
+    (diferente do executivo, que é o acumulado desde sempre). Salvo no
+    repositório de documentos igual ao padrão dos outros relatórios."""
+
+    cpl = _get_cpl_or_404(db, cpl_id)
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=cpl_id)
+
+    pdf_bytes = gerar_pdf_relatorio_anual(cpl, resumo_anual(db, cpl_id, ano))
+    nome_arquivo = f"Relatorio Anual {ano} - {cpl.nome}.pdf"
+    caminho = salvar_arquivo(cpl_id, nome_arquivo, pdf_bytes)
+
+    documento = Documento(
+        cpl_id=cpl_id,
+        titulo=f"Relatório Anual {ano} — {cpl.nome}",
         categoria=CategoriaDocumento.RELATORIO,
         confidencialidade=ConfidencialidadeDocumento.INTERNO,
         arquivo_path=caminho,
