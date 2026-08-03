@@ -1,0 +1,166 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Projetos — {{ cpl.nome }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/projetos" class="link-secondary text-decoration-none">Projetos</a>
+    <i class="bi bi-chevron-right small mx-1"></i>{{ cpl.nome }}
+{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1">Projetos — {{ cpl.nome }}</h1>
+    <p class="text-body-secondary">
+        Demandas e portfólio de projetos (RF-031/032). Plano de trabalho, orçamento e
+        execução detalhados ainda não fazem parte deste módulo.
+    </p>
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-inbox text-primary me-2"></i>Demandas registradas
+                </div>
+                <div class="list-group list-group-flush">
+                    {% for d in demandas %}
+                        <a href="/painel/projetos/demandas/{{ d.id }}"
+                           class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <span>
+                                {{ d.titulo }}
+                                <span class="text-body-secondary small">({{ d.origem_tipo.value }})</span>
+                            </span>
+                            <span class="badge {% if d.status.value == 'rejeitada' %}text-bg-danger{% else %}text-bg-secondary{% endif %}">
+                                {{ d.status.value.replace('_', ' ') }}
+                            </span>
+                        </a>
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhuma demanda pendente.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-kanban text-primary me-2"></i>Portfólio de projetos</span>
+                    <small class="text-body-secondary">{{ projetos|length }} projeto(s)</small>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Título</th>
+                                <th>Eixo</th>
+                                <th>Estágio</th>
+                                <th>Prioridade</th>
+                                <th>Responsável</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in projetos %}
+                                <tr>
+                                    <td><a href="/painel/projetos/{{ p.id }}" class="text-decoration-none">{{ p.titulo }}</a></td>
+                                    <td class="small">{{ p.eixo_sp_produz or "—" }}</td>
+                                    <td>
+                                        <span class="badge {% if p.estagio.value == 'concluido' %}text-bg-success{% elif p.estagio.value in ['rejeitado', 'cancelado'] %}text-bg-danger{% else %}text-bg-info{% endif %}">
+                                            {{ p.estagio.value.replace('_', ' ') }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if p.prioridade.value == 'alta' %}text-bg-danger{% elif p.prioridade.value == 'media' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">
+                                            {{ p.prioridade.value }}
+                                        </span>
+                                    </td>
+                                    <td class="small">{{ p.responsavel.nome if p.responsavel else "—" }}</td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="5" class="text-body-secondary">Nenhum projeto cadastrado ainda.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Registrar demanda
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/painel/projetos/cpls/{{ cpl.id }}/demandas">
+                        <div class="mb-3">
+                            <label class="form-label">Título</label>
+                            <input type="text" class="form-control" name="titulo" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="2"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Origem</label>
+                            <select class="form-select" name="origem_tipo" required>
+                                {% for o in origens %}
+                                    <option value="{{ o.value }}">{{ o.value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Detalhe da origem</label>
+                            <input type="text" class="form-control" name="origem_detalhe" placeholder="ex.: nome da empresa/comissão">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-plus-lg me-1"></i>Registrar demanda
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Novo projeto direto
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/painel/projetos/cpls/{{ cpl.id }}/projetos">
+                        <div class="mb-3">
+                            <label class="form-label">Título</label>
+                            <input type="text" class="form-control" name="titulo" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="2"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Eixo do SP Produz</label>
+                            <input type="text" class="form-control" name="eixo_sp_produz">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Prioridade</label>
+                            <select class="form-select" name="prioridade">
+                                {% for pr in prioridades %}
+                                    <option value="{{ pr.value }}" {% if pr.value == 'media' %}selected{% endif %}>{{ pr.value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Responsável</label>
+                            <select class="form-select" name="responsavel_id">
+                                <option value="">Não definido</option>
+                                {% for pessoa in pessoas %}
+                                    <option value="{{ pessoa.id }}">{{ pessoa.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Vínculo ao planejamento estratégico</label>
+                            <select class="form-select" name="objetivo_estrategico_id">
+                                <option value="">Nenhum</option>
+                                {% for objetivo in objetivos %}
+                                    <option value="{{ objetivo.id }}">{{ objetivo.descricao|truncate(60) }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-outline-primary w-100">
+                            <i class="bi bi-plus-lg me-1"></i>Criar projeto
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

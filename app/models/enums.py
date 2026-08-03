@@ -219,3 +219,46 @@ class TipoNotificacao(str, enum.Enum):
     DOCUMENTO_VALIDADE = "documento_validade"
     META_PRAZO = "meta_prazo"
     RECADASTRAMENTO_CPL = "recadastramento_cpl"
+
+
+class OrigemDemanda(str, enum.Enum):
+    """RF-031: de onde partiu a demanda coletiva/oportunidade de projeto —
+    o requisito cita especificamente estas quatro fontes."""
+
+    EMPRESA = "empresa"
+    COMISSAO = "comissao"
+    INSTITUICAO = "instituicao"
+    EDITAL = "edital"
+
+
+class StatusDemanda(str, enum.Enum):
+    """RF-031: ciclo de vida de uma demanda até virar projeto (ou não)."""
+
+    REGISTRADA = "registrada"
+    EM_ANALISE = "em_analise"
+    CONVERTIDA_EM_PROJETO = "convertida_em_projeto"
+    REJEITADA = "rejeitada"
+
+
+class EstagioProjeto(str, enum.Enum):
+    """RF-032: estágio do projeto no portfólio. Ciclo de vida completo
+    modelado de uma vez (evita migração nova quando RF-033 em diante
+    forem construídos), mas esta primeira fatia do módulo só usa os
+    estágios iniciais — não há ainda telas de execução/conclusão."""
+
+    DEMANDA = "demanda"
+    EM_ELABORACAO = "em_elaboracao"
+    SUBMETIDO = "submetido"
+    APROVADO = "aprovado"
+    EM_EXECUCAO = "em_execucao"
+    CONCLUIDO = "concluido"
+    REJEITADO = "rejeitado"
+    CANCELADO = "cancelado"
+
+
+class PrioridadeProjeto(str, enum.Enum):
+    """RF-032: priorização do projeto no portfólio."""
+
+    BAIXA = "baixa"
+    MEDIA = "media"
+    ALTA = "alta"

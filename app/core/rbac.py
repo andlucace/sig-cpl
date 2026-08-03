@@ -55,6 +55,17 @@ o mesmo grupo; **decidir** o nível final que atualiza `CPL.nivel_maturidade`
 é sempre `PAPEIS_GESTAO` (RN-016: decisão humana e mais restrita que
 "quem avalia")."""
 
+PAPEIS_PROJETO_LEITURA = PAPEIS_GOVERNANCA_LEITURA | {Papel.GESTOR_PROJETO}
+"""RF-031/032: quem pode ler demandas e portfólio de projetos de uma
+CPL — mesmo público de PAPEIS_GOVERNANCA_LEITURA, mais o papel
+GESTOR_PROJETO (que não participa de órgãos de governança, mas gere
+projetos)."""
+
+PAPEIS_PROJETO_GESTAO = PAPEIS_GESTAO | {Papel.GESTOR_PROJETO}
+"""RF-031/032: quem pode registrar demanda, converter em projeto e
+atualizar o portfólio (estágio, prioridade, eixo, responsável, vínculo
+ao planejamento) — mesmo padrão de PAPEIS_TAREFA_EXECUCAO."""
+
 
 def papeis_do_usuario(db: Session, usuario: Usuario) -> list[UsuarioPapel]:
     return db.query(UsuarioPapel).filter(UsuarioPapel.usuario_id == usuario.id).all()

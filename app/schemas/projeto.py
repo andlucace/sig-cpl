@@ -1,0 +1,69 @@
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict
+
+from app.models.enums import EstagioProjeto, OrigemDemanda, PrioridadeProjeto, StatusDemanda
+
+# Demanda de projeto (RF-031)
+
+
+class DemandaProjetoCreate(BaseModel):
+    titulo: str
+    descricao: str | None = None
+    origem_tipo: OrigemDemanda
+    origem_id: uuid.UUID | None = None
+    origem_detalhe: str | None = None
+
+
+class DemandaProjetoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    cpl_id: uuid.UUID
+    titulo: str
+    descricao: str | None
+    origem_tipo: OrigemDemanda
+    origem_id: uuid.UUID | None
+    origem_detalhe: str | None
+    status: StatusDemanda
+    registrado_por_id: uuid.UUID
+    created_at: datetime
+
+
+# Projeto / portfólio (RF-032)
+
+
+class ProjetoCreate(BaseModel):
+    titulo: str
+    descricao: str | None = None
+    eixo_sp_produz: str | None = None
+    prioridade: PrioridadeProjeto = PrioridadeProjeto.MEDIA
+    responsavel_id: uuid.UUID | None = None
+    objetivo_estrategico_id: uuid.UUID | None = None
+
+
+class ProjetoUpdate(BaseModel):
+    titulo: str | None = None
+    descricao: str | None = None
+    eixo_sp_produz: str | None = None
+    estagio: EstagioProjeto | None = None
+    prioridade: PrioridadeProjeto | None = None
+    responsavel_id: uuid.UUID | None = None
+    objetivo_estrategico_id: uuid.UUID | None = None
+
+
+class ProjetoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    cpl_id: uuid.UUID
+    demanda_origem_id: uuid.UUID | None
+    titulo: str
+    descricao: str | None
+    eixo_sp_produz: str | None
+    estagio: EstagioProjeto
+    prioridade: PrioridadeProjeto
+    responsavel_id: uuid.UUID | None
+    objetivo_estrategico_id: uuid.UUID | None
+    created_at: datetime

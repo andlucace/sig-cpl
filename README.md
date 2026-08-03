@@ -525,6 +525,62 @@ que já está no banco:
   deliberado pra não introduzir um context processor Jinja2 (mecanismo
   não usado em nenhum outro lugar do projeto) só para isso.
 
+O bloco **Projetos** (RF-031/032) é a **fundação** do módulo de Projetos e
+Fomento — demanda/oportunidade → conversão em projeto → portfólio. Plano de
+trabalho detalhado (RF-033 a RF-035), financeiro (RF-036 a RF-038), execução
+(RF-039/040) e prestação de contas (RF-041) **não** fazem parte desta fatia
+— decisão explícita do usuário diante do tamanho do módulo completo (13
+requisitos em 6 sub-áreas: editais, demandas/portfólio, plano de trabalho,
+financeiro, execução, prestação de contas).
+- **`DemandaProjeto`** (RF-031) — título, descrição, origem
+  (`OrigemDemanda`: empresa/comissão/instituição/edital) com uma
+  referência solta pra origem (`origem_id`/`origem_detalhe`, mesmo padrão
+  de `RegistroAuditoria.entidade_id` — não dá pra usar uma FK rígida
+  porque a origem pode ser de tabelas diferentes) e status até virar
+  projeto ou ser rejeitada.
+- **`Projeto`** (RF-032) — estágio (`EstagioProjeto`, ciclo de vida
+  completo modelado de uma vez — demanda → elaboração → submetido →
+  aprovado → execução → concluído/rejeitado/cancelado — mas só os
+  estágios iniciais são usados nesta fatia, evita migração nova quando
+  RF-033 em diante forem construídos), prioridade, eixo do SP Produz
+  (**texto livre**, não enum — o documento de requisitos não define uma
+  lista fechada de eixos do programa), responsável (`Pessoa`) e vínculo a
+  um `ObjetivoEstrategico` do planejamento estratégico (é assim que RF-032
+  cumpre "vínculo ao planejamento estratégico" — reaproveita o módulo de
+  Planejamento já existente, não duplica o conceito de objetivo).
+- **Dois jeitos de criar um projeto**: converter uma demanda já registrada
+  (`POST /api/projetos/demandas/{id}/converter` — a demanda não é
+  apagada, fica com status `CONVERTIDA_EM_PROJETO` e um vínculo 1:1 com o
+  projeto) ou criar direto no portfólio (`POST /api/projetos/cpls/{id}/projetos`,
+  atalho pra quando já se sabe que é projeto, sem precisar do passo
+  intermediário da demanda).
+- **Edital de fomento é um conceito diferente do `Edital` de
+  maturidade** — o `Edital` que já existe (`app/models/maturidade.py`)
+  guarda critérios/pesos/notas de corte pra avaliação de maturidade; o
+  "edital" de RF-029 seria um edital de fomento (cronograma de submissão,
+  requisitos, documentos, marcos) ao qual CPLs submetem projetos pra
+  financiamento — são domínios diferentes que só compartilham o nome em
+  português. Essa distinção foi decidida explicitamente com o usuário
+  antes de começar a construir o módulo; RF-029/030 (o edital de fomento
+  em si, com recursos/contrarrazões) ainda não foram construídos, então
+  hoje `DemandaProjeto.origem_tipo == EDITAL` só registra a origem como
+  texto (`origem_detalhe`), sem um modelo de edital de fomento por trás.
+- UI web em `/painel/projetos` (seleção de CPL) →
+  `/painel/projetos/cpls/{id}` (demandas pendentes + portfólio + forms de
+  registrar demanda/criar projeto direto) → `/painel/projetos/demandas/{id}`
+  (detalhe da demanda + form de conversão) → `/painel/projetos/{id}`
+  (detalhe do projeto, edição de portfólio).
+- RBAC: `PAPEIS_PROJETO_LEITURA`/`PAPEIS_PROJETO_GESTAO` (ver matriz
+  acima) — não há RBAC por-projeto-específico (ex.: só o
+  `responsavel_id` daquele projeto poder editá-lo), é por papel escopado
+  à CPL, igual ao resto do sistema.
+- Testado de ponta a ponta via Playwright: registrar demanda → ver
+  detalhe → converter em projeto → editar estágio no portfólio →
+  confirmar que a demanda convertida some da lista de "pendentes" mas o
+  projeto aparece na tabela de portfólio. RBAC testado confirmando que
+  Conselho/Comitê lê mas não escreve (403 ao tentar criar demanda sem o
+  papel `GESTOR_PROJETO`).
+
 ## Como rodar localmente
 
 1. Suba o Postgres de desenvolvimento:
@@ -634,6 +690,8 @@ Implementado em `app/core/rbac.py`:
 | `PAPEIS_IMPEDIMENTO_LEITURA` | Gestão + Auditoria | Ler declarações de impedimento (RN-014, dado sensível — mais restrito que o resto da governança) |
 | `PAPEIS_EDITAL_GESTAO` | Administrador | Criar/editar edital e critérios de maturidade (RF-024/RN-006 — configuração global, não por CPL) |
 | `PAPEIS_AVALIACAO_EXECUCAO` | Gestão + Analista avaliador | Lançar nota/evidência e concluir avaliação de maturidade — decidir o nível final é sempre `PAPEIS_GESTAO` (RN-016) |
+| `PAPEIS_PROJETO_LEITURA` | Gestão + Conselho/Comitê, Comissão temática, Auditoria, Gestor de projeto | Ler demandas e portfólio de projetos de uma CPL — mesmo público de `PAPEIS_GOVERNANCA_LEITURA`, mais Gestor de projeto |
+| `PAPEIS_PROJETO_GESTAO` | Gestão + Gestor de projeto | Registrar demanda, converter em projeto e atualizar portfólio (estágio, prioridade, eixo, responsável, vínculo ao planejamento) |
 
 Além dos grupos por papel, `verificar_participacao_orgao(db, usuario, orgao_id,
 cpl_id)` escopa **por órgão específico**, não só por CPL: quem tem papel de
@@ -878,22 +936,29 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    novos empregos (variação no tempo, via `DiagnosticoCadastralHistorico`),
    sustentabilidade, certificações e digitalização ganharam campo e
    entraram no resumo/painel/relatório executivo — ver seção "Indicadores
-   e relatórios" acima. Painéis de projetos/finanças/impacto territorial
-   (parte do RF-045) seguem pendentes — dependem de módulos ainda não
-   construídos (Projetos, Fase 2/3).
+   e relatórios" acima. Painel de projetos (parte do RF-045) segue
+   pendente — o módulo de Projetos agora existe (item 7), mas só como
+   tela de portfólio, não um painel de indicadores agregados; finanças e
+   impacto territorial dependem do plano de trabalho/financeiro
+   (RF-033 a RF-038), ainda não construídos.
 6. ~~RF-048: recadastramento, anual, comissão e impacto~~ — **feito**:
    recadastramento (dossiê de maturidade), anual (mesma base do
    executivo recortada a um ano-calendário), comissão (escopado a um
    único órgão de governança, não toda a CPL) e impacto (recorte do
    resumo cadastral focado em sustentabilidade/ODS/inovação, sem
    agregação nova) — ver seção "Indicadores e relatórios" acima. **Só
-   falta "de projeto"**, do mesmo RF-048 — depende do módulo de
-   Projetos, ainda não construído.
-7. Restante da Fase 2 — plano de trabalho, orçamento, cotações e
-   submissões (RF-029 em diante) — depende do módulo de Projetos, ainda
-   não iniciado. "Simular cenários" (RF-026) e "habilitação jurídica"
-   (RF-027) também ficaram de fora do que foi construído em Maturidade
-   (ver seção do módulo acima).
+   falta "de projeto"**, do mesmo RF-048 — precisa do plano de
+   trabalho/financeiro do módulo de Projetos (item 7), ainda não
+   construído.
+7. ~~Iniciar módulo de Projetos~~ — **fundação feita**: `DemandaProjeto`
+   (RF-031) e `Projeto`/portfólio (RF-032) — ver seção "Projetos" acima.
+   Falta o resto do módulo (13 requisitos em 6 sub-áreas, RF-029/030 e
+   RF-033 a RF-041): edital de fomento com cronograma/recursos, plano de
+   trabalho detalhado (objeto, etapas, cronograma, equipe), orçamento e
+   cotações, desembolsos/conciliação, execução física/financeira,
+   riscos e prestação de contas. "Simular cenários" (RF-026) e
+   "habilitação jurídica" (RF-027) também ficaram de fora do que foi
+   construído em Maturidade (ver seção do módulo acima).
 8. ~~Notificações automáticas (RF-049)~~ — **feito**: reunião próxima,
    tarefa/meta com prazo vencendo, documento perdendo validade e
    recadastramento de CPL vencendo — ver seção "Notificações" acima.

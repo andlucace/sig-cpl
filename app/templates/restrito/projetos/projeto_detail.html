@@ -1,0 +1,77 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Projeto — {{ projeto.titulo }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/projetos" class="link-secondary text-decoration-none">Projetos</a>
+    <i class="bi bi-chevron-right small mx-1"></i>
+    <a href="/painel/projetos/cpls/{{ cpl.id }}" class="link-secondary text-decoration-none">{{ cpl.nome }}</a>
+    <i class="bi bi-chevron-right small mx-1"></i>{{ projeto.titulo }}
+{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1"><i class="bi bi-kanban text-primary me-2"></i>{{ projeto.titulo }}</h1>
+    {% if projeto.demanda_origem %}
+        <p class="text-body-secondary small">
+            Originado da demanda <a href="/painel/projetos/demandas/{{ projeto.demanda_origem_id }}">{{ projeto.demanda_origem.titulo }}</a>
+        </p>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header bg-transparent fw-semibold">
+            <i class="bi bi-pencil-square me-2"></i>Portfólio
+        </div>
+        <div class="card-body">
+            <form method="post" action="/painel/projetos/{{ projeto.id }}">
+                <div class="mb-3">
+                    <label class="form-label">Título</label>
+                    <input type="text" class="form-control" name="titulo" value="{{ projeto.titulo }}" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Descrição</label>
+                    <textarea class="form-control" name="descricao" rows="3">{{ projeto.descricao or '' }}</textarea>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Eixo do SP Produz</label>
+                        <input type="text" class="form-control" name="eixo_sp_produz" value="{{ projeto.eixo_sp_produz or '' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Estágio</label>
+                        <select class="form-select" name="estagio">
+                            {% for e in estagios %}
+                                <option value="{{ e.value }}" {% if e == projeto.estagio %}selected{% endif %}>{{ e.value.replace('_', ' ') }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Prioridade</label>
+                        <select class="form-select" name="prioridade">
+                            {% for pr in prioridades %}
+                                <option value="{{ pr.value }}" {% if pr == projeto.prioridade %}selected{% endif %}>{{ pr.value }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Responsável</label>
+                        <select class="form-select" name="responsavel_id">
+                            <option value="">Não definido</option>
+                            {% for pessoa in pessoas %}
+                                <option value="{{ pessoa.id }}" {% if projeto.responsavel_id == pessoa.id %}selected{% endif %}>{{ pessoa.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Vínculo ao planejamento estratégico</label>
+                        <select class="form-select" name="objetivo_estrategico_id">
+                            <option value="">Nenhum</option>
+                            {% for objetivo in objetivos %}
+                                <option value="{{ objetivo.id }}" {% if projeto.objetivo_estrategico_id == objetivo.id %}selected{% endif %}>{{ objetivo.descricao|truncate(60) }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary mt-3">
+                    <i class="bi bi-check-lg me-1"></i>Salvar
+                </button>
+            </form>
+        </div>
+    </div>
+{% endblock %}

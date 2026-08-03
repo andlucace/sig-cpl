@@ -51,7 +51,7 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   `http://127.0.0.1:8010`** — confira com `netstat -ano | grep 8010` antes
   de subir outro, e mate o processo antigo antes de reiniciar (o servidor
   não usa `--reload`, então mudanças de código exigem restart manual).
-- **Migrações Alembic aplicadas:** 11 revisões, todas no banco atual:
+- **Migrações Alembic aplicadas:** 12 revisões, todas no banco atual:
   1. `18541dca0a36` — modelos base (CPL, Entidade, Pessoa, Usuário)
   2. `0ba4d1a10f9d` — módulo Governança
   3. `5dd913b79202` — módulo Planejamento Estratégico
@@ -71,6 +71,9 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
       digitalização) + tabela nova `diagnosticos_cadastrais_historico`
       (snapshot de empregos, pra "novos empregos" no RF-046)
   11. `d1b19a7c50fc` — tabela `notificacoes` (RF-049)
+  12. `5dfb7c6bf49e` — módulo de Projetos: tabelas `demandas_projeto` e
+      `projetos` (RF-031/032 — só a fundação, demanda → projeto →
+      portfólio)
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos)
 
@@ -541,6 +544,67 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     (bloqueado, sem módulo de Projetos) — todos os outros 5 tipos
     citados no requisito (executivo, anual, recadastramento, comissão,
     impacto) estão implementados.
+20. **Módulo de Projetos — fundação** (RF-031/032) — usuário pediu "fazer
+    o módulo de projetos", o maior bloco pendente do sistema (13
+    requisitos em 6 sub-áreas: editais, demandas/portfólio, plano de
+    trabalho, financeiro, execução, prestação de contas). Diferente das
+    outras vezes que decidi sozinho e só expliquei depois, aqui **parei
+    e perguntei antes de codificar** — duas decisões que só o usuário
+    podia tomar: (a) o sistema já tem um `Edital` (maturidade) e o
+    RF-029 fala de outro "edital" (fomento/submissão) — são conceitos
+    diferentes ou o mesmo? Usuário confirmou: diferentes. (b) por onde
+    começar essa primeira fatia — usuário escolheu "fundação: demanda →
+    projeto → portfólio" (RF-031/032) em vez de "editais primeiro" ou
+    "plano de trabalho completo".
+    **Modelos novos**: `DemandaProjeto` (RF-031) e `Projeto` (RF-032),
+    em `app/models/projeto.py`. Decisão de design que vale registrar:
+    `DemandaProjeto.origem_id` é uma referência **solta**, sem FK de
+    banco — mesmo padrão de `RegistroAuditoria.entidade_id` — porque a
+    origem (empresa/comissão/instituição/edital) aponta pra tabelas
+    diferentes conforme `origem_tipo`, não dá pra usar uma FK rígida
+    única. `Projeto.eixo_sp_produz` é texto livre, não enum — o
+    documento de requisitos não define uma lista fechada de eixos do
+    programa, e inventar uma lista seria fabricar dado que não está na
+    fonte (mesmo cuidado já tomado antes com "gestão de parâmetros" e
+    outros campos sem especificação). `EstagioProjeto` foi modelado com
+    o ciclo de vida **completo** (demanda → elaboração → submetido →
+    aprovado → execução → concluído/rejeitado/cancelado) mesmo só
+    usando os estágios iniciais nesta fatia — mesmo truque de
+    `StatusAvaliacao`/`TipoNotificacao`: evita migração nova quando
+    RF-033 em diante forem construídos.
+    **RBAC**: papel `GESTOR_PROJETO` já existia no enum `Papel` (e já
+    fazia parte de `PAPEIS_TAREFA_EXECUCAO`) desde muito antes deste
+    módulo existir — o documento de requisitos original já previa esse
+    perfil. Criei `PAPEIS_PROJETO_LEITURA`/`PAPEIS_PROJETO_GESTAO`
+    reaproveitando `PAPEIS_GOVERNANCA_LEITURA`/`PAPEIS_GESTAO` como
+    base, só acrescentando `GESTOR_PROJETO` — mesmo padrão de
+    `PAPEIS_TAREFA_EXECUCAO`.
+    **Dois jeitos de criar projeto**: converter uma demanda
+    (`POST /api/projetos/demandas/{id}/converter`) ou criar direto no
+    portfólio (`POST /api/projetos/cpls/{id}/projetos`) — a demanda
+    convertida não é apagada, só muda de status
+    (`CONVERTIDA_EM_PROJETO`) e ganha um vínculo 1:1 com o projeto
+    criado; tentar converter de novo dá 400, testado.
+    **Rota do relatório de comissão fica em `governanca.py`, não em
+    `indicadores.py`** (precedente do item 19) — mesma lógica se
+    aplicaria aqui se houvesse relatório de projeto, mas não há ainda.
+    Testado de ponta a ponta via Playwright: registrar demanda → ver
+    detalhe → converter em projeto → editar estágio no portfólio →
+    voltar à lista e confirmar que a demanda convertida some de
+    "pendentes" mas o projeto aparece no portfólio. RBAC testado
+    (Conselho/Comitê lê mas recebe 403 ao tentar criar demanda). Zero
+    500 reais na regressão completa — a única linha de "Traceback" no
+    log era um `_ProactorBasePipeTransport` do asyncio no Windows
+    (conexão fechada abruptamente após um download que já tinha
+    respondido 200), não um erro da aplicação; confirmado checando que
+    não há nenhuma linha `"HTTP/1.1" 500` de verdade no log.
+    Escopo explicitamente fora desta fatia (documentado no README, não
+    esquecido): edital de fomento com cronograma/recursos (RF-029/030),
+    plano de trabalho detalhado — objeto/etapas/cronograma/equipe
+    (RF-033 a RF-035), orçamento/cotações/desembolsos (RF-036 a
+    RF-038), execução física/financeira/riscos (RF-039/040) e
+    prestação de contas (RF-041). "Relatório de projeto" (RF-048) segue
+    bloqueado até esses existirem.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -755,9 +819,15 @@ ordem recomendada para o que vem depois:
    `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf` — caminho que
    `app/services/geracao_documentos.py` já procurava desde antes, então
    nenhum código mudou.
-5. **Restante da Fase 2** — plano de trabalho, orçamento, cotações e
-   submissões (RF-029 em diante) dependem do módulo de Projetos, ainda não
-   iniciado.
+5. ~~Iniciar módulo de Projetos~~ — **fundação feita** (item 20 da seção
+   "Ordem em que este projeto foi construído"): `DemandaProjeto`
+   (RF-031) e `Projeto`/portfólio (RF-032), em `/painel/projetos`.
+   Segue pendente, sem relação com este trabalho: edital de fomento com
+   cronograma/recursos (RF-029/030), plano de trabalho detalhado
+   (RF-033 a RF-035), orçamento/cotações/desembolsos (RF-036 a RF-038),
+   execução física/financeira/riscos (RF-039/040) e prestação de contas
+   (RF-041) — "relatório de projeto" (RF-048) e o restante da Fase 2
+   dependem desses.
 6. ~~Deploy na VPS Hostinger~~ — **feito nesta sessão** (numa sessão
    anterior a esta), ver seção "Deploy em produção" abaixo para todos os
    detalhes (como foi feito, segredos, como reimplantar).
@@ -780,13 +850,14 @@ ordem recomendada para o que vem depois:
    **relatório de recadastramento** (item 16), **relatório anual**
    (item 18) e **relatório de comissão + relatório de impacto**
    (item 19) — RF-048 está completo exceto "de projeto", que segue
-   pendente sem relação com este trabalho (depende do módulo de
-   Projetos, ainda não construído). RF-045 só cobre
+   pendente (agora o módulo de Projetos existe — item 20 — mas só a
+   fundação; falta o plano de trabalho/financeiro que um relatório de
+   projeto precisaria consolidar). RF-045 só cobre
    governança/planejamento/cadastro — maturidade/projetos/finanças/
    impacto territorial ficam pra quando esses módulos tiverem painel
-   próprio (maturidade já existe como módulo desde esta sessão, mas sem
-   um "painel" resumo dedicado — só as próprias telas de avaliação, ver
-   item 9).
+   próprio (maturidade e projetos já existem como módulos, mas sem um
+   "painel" resumo dedicado — só as próprias telas de avaliação/
+   portfólio, ver item 9).
 9. **Maturidade e reconhecimento: limitações conhecidas** — "habilitação
    jurídica" (RF-027) não tem modelo/etapa própria; "simular cenários"
    (RF-026, ver o efeito de uma nota hipotética antes de salvar) não foi
