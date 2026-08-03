@@ -12,7 +12,7 @@ from app.models.cadastro_dinamico import DiagnosticoCadastral, DiagnosticoCadast
 from app.models.documento import Documento
 from app.models.entidade import EntidadeCPL
 from app.models.enums import ResultadoDeliberacao, StatusReuniao, StatusTarefa
-from app.models.governanca import Deliberacao, OrgaoGovernanca, Reuniao, TarefaGovernanca
+from app.models.governanca import Deliberacao, MembroOrgao, OrgaoGovernanca, Reuniao, TarefaGovernanca
 from app.models.planejamento import (
     IndicadorEstrategico,
     IndicadorValorHistorico,
@@ -218,6 +218,48 @@ def resumo_governanca(db: Session, cpl_id: uuid.UUID) -> dict:
         "total_orgaos": total_orgaos,
         "reunioes_realizadas": reunioes_realizadas,
         "deliberacoes_aprovadas": deliberacoes_aprovadas,
+        "tarefas_concluidas": tarefas_q.filter(TarefaGovernanca.status == StatusTarefa.CONCLUIDA).count(),
+        "tarefas_pendentes": tarefas_q.filter(
+            TarefaGovernanca.status.in_([StatusTarefa.PENDENTE, StatusTarefa.EM_ANDAMENTO])
+        ).count(),
+    }
+
+
+def resumo_orgao(db: Session, orgao_id: uuid.UUID) -> dict:
+    """RF-048: relatório de comissão — mesma lógica de `resumo_governanca`,
+    mas escopada a um único órgão de governança em vez de toda a CPL.
+    Serve qualquer `TipoOrgao` (conselho, câmara, comissão temática,
+    grupo de trabalho) — o requisito fala especificamente de "comissão",
+    mas não há razão técnica pra restringir a esse tipo. Tarefas só
+    entram se estiverem ligadas a uma deliberação deste órgão
+    (`TarefaGovernanca.deliberacao_id`); tarefas soltas da CPL como um
+    todo não são atribuíveis a um órgão específico."""
+
+    membros_ativos = (
+        db.query(MembroOrgao)
+        .filter(MembroOrgao.orgao_id == orgao_id, MembroOrgao.ativo.is_(True))
+        .all()
+    )
+    reunioes = db.query(Reuniao).filter(Reuniao.orgao_id == orgao_id).order_by(Reuniao.data_hora.desc()).all()
+    deliberacoes = (
+        db.query(Deliberacao)
+        .join(Reuniao, Deliberacao.reuniao_id == Reuniao.id)
+        .filter(Reuniao.orgao_id == orgao_id)
+        .order_by(Reuniao.data_hora.desc())
+        .all()
+    )
+    tarefas_q = (
+        db.query(TarefaGovernanca)
+        .join(Deliberacao, TarefaGovernanca.deliberacao_id == Deliberacao.id)
+        .join(Reuniao, Deliberacao.reuniao_id == Reuniao.id)
+        .filter(Reuniao.orgao_id == orgao_id)
+    )
+    return {
+        "membros_ativos": membros_ativos,
+        "reunioes": reunioes,
+        "reunioes_realizadas": sum(1 for r in reunioes if r.status == StatusReuniao.REALIZADA),
+        "deliberacoes": deliberacoes,
+        "deliberacoes_aprovadas": sum(1 for d in deliberacoes if d.resultado == ResultadoDeliberacao.APROVADA),
         "tarefas_concluidas": tarefas_q.filter(TarefaGovernanca.status == StatusTarefa.CONCLUIDA).count(),
         "tarefas_pendentes": tarefas_q.filter(
             TarefaGovernanca.status.in_([StatusTarefa.PENDENTE, StatusTarefa.EM_ANDAMENTO])

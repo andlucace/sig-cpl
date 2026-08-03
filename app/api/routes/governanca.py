@@ -25,7 +25,10 @@ from app.models.governanca import (
     TarefaGovernanca,
     VotoRegistro,
 )
+from app.models.documento import Documento
+from app.models.enums import CategoriaDocumento, ConfidencialidadeDocumento
 from app.models.usuario import Usuario
+from app.schemas.documento import DocumentoRead
 from app.schemas.governanca import (
     DeclaracaoImpedimentoCreate,
     DeclaracaoImpedimentoRead,
@@ -47,6 +50,9 @@ from app.schemas.governanca import (
     VotoCreate,
     VotoRead,
 )
+from app.services.armazenamento import salvar_arquivo
+from app.services.geracao_documentos import gerar_pdf_relatorio_comissao
+from app.services.indicadores import resumo_orgao
 
 router = APIRouter(prefix="/governanca", tags=["Governança"])
 
@@ -443,3 +449,42 @@ def listar_impedimentos(
     _get_cpl_or_404(db, cpl_id)
     verificar_papel(db, usuario_atual, PAPEIS_IMPEDIMENTO_LEITURA, cpl_id=cpl_id)
     return db.query(DeclaracaoImpedimento).filter(DeclaracaoImpedimento.cpl_id == cpl_id).all()
+
+
+# --- Relatório de comissão (RF-048) -----------------------------------------
+
+
+@router.post(
+    "/orgaos/{orgao_id}/relatorio-comissao", response_model=DocumentoRead, status_code=status.HTTP_201_CREATED
+)
+def gerar_relatorio_comissao(
+    orgao_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Documento:
+    """RF-048: relatório de comissão em PDF — escopado a um único órgão de
+    governança, salvo no repositório de documentos igual ao padrão dos
+    outros relatórios."""
+
+    orgao = _get_orgao_or_404(db, orgao_id)
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=orgao.cpl_id)
+
+    pdf_bytes = gerar_pdf_relatorio_comissao(orgao, resumo_orgao(db, orgao_id))
+    nome_arquivo = f"Relatorio de Comissao - {orgao.nome}.pdf"
+    caminho = salvar_arquivo(orgao.cpl_id, nome_arquivo, pdf_bytes)
+
+    documento = Documento(
+        cpl_id=orgao.cpl_id,
+        titulo=f"Relatório de Comissão — {orgao.nome}",
+        categoria=CategoriaDocumento.RELATORIO,
+        confidencialidade=ConfidencialidadeDocumento.INTERNO,
+        arquivo_path=caminho,
+        nome_arquivo_original=nome_arquivo,
+        tipo_mime="application/pdf",
+        tamanho_bytes=len(pdf_bytes),
+        criado_por_id=usuario_atual.id,
+    )
+    db.add(documento)
+    db.commit()
+    db.refresh(documento)
+    return documento

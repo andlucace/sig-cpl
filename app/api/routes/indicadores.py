@@ -15,7 +15,11 @@ from app.schemas.documento import DocumentoRead
 from app.schemas.indicadores import ResumoCadastralRead
 from app.schemas.planejamento import IndicadorEstrategicoRead, IndicadorValorHistoricoRead
 from app.services.armazenamento import salvar_arquivo
-from app.services.geracao_documentos import gerar_pdf_relatorio_anual, gerar_pdf_relatorio_executivo
+from app.services.geracao_documentos import (
+    gerar_pdf_relatorio_anual,
+    gerar_pdf_relatorio_executivo,
+    gerar_pdf_relatorio_impacto,
+)
 from app.services.indicadores import (
     catalogo_indicadores,
     resumo_anual,
@@ -146,6 +150,44 @@ def gerar_relatorio_anual(
     documento = Documento(
         cpl_id=cpl_id,
         titulo=f"Relatório Anual {ano} — {cpl.nome}",
+        categoria=CategoriaDocumento.RELATORIO,
+        confidencialidade=ConfidencialidadeDocumento.INTERNO,
+        arquivo_path=caminho,
+        nome_arquivo_original=nome_arquivo,
+        tipo_mime="application/pdf",
+        tamanho_bytes=len(pdf_bytes),
+        criado_por_id=usuario_atual.id,
+    )
+    db.add(documento)
+    db.commit()
+    db.refresh(documento)
+    return documento
+
+
+@router.post(
+    "/cpls/{cpl_id}/relatorio-impacto", response_model=DocumentoRead, status_code=status.HTTP_201_CREATED
+)
+def gerar_relatorio_impacto(
+    cpl_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Documento:
+    """RF-048/RF-047: relatório de impacto em PDF — recorte do resumo
+    cadastral (sustentabilidade, inovação, ODS, exportação,
+    certificações, empregos), sem consolidar governança/planejamento
+    como o executivo. Salvo no repositório de documentos igual ao
+    padrão dos outros relatórios."""
+
+    cpl = _get_cpl_or_404(db, cpl_id)
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=cpl_id)
+
+    pdf_bytes = gerar_pdf_relatorio_impacto(cpl, resumo_cadastral(db, cpl_id))
+    nome_arquivo = f"Relatorio de Impacto - {cpl.nome}.pdf"
+    caminho = salvar_arquivo(cpl_id, nome_arquivo, pdf_bytes)
+
+    documento = Documento(
+        cpl_id=cpl_id,
+        titulo=f"Relatório de Impacto — {cpl.nome}",
         categoria=CategoriaDocumento.RELATORIO,
         confidencialidade=ConfidencialidadeDocumento.INTERNO,
         arquivo_path=caminho,

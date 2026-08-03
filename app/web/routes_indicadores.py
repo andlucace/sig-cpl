@@ -14,7 +14,11 @@ from app.models.enums import CategoriaDocumento, ConfidencialidadeDocumento
 from app.models.planejamento import IndicadorEstrategico, IndicadorValorHistorico
 from app.models.usuario import Usuario
 from app.services.armazenamento import salvar_arquivo
-from app.services.geracao_documentos import gerar_pdf_relatorio_anual, gerar_pdf_relatorio_executivo
+from app.services.geracao_documentos import (
+    gerar_pdf_relatorio_anual,
+    gerar_pdf_relatorio_executivo,
+    gerar_pdf_relatorio_impacto,
+)
 from app.services.indicadores import (
     catalogo_indicadores,
     registrar_valor_indicador,
@@ -144,6 +148,38 @@ def gerar_relatorio_anual(
     documento = Documento(
         cpl_id=cpl_id,
         titulo=f"Relatório Anual {ano} — {cpl.nome}",
+        categoria=CategoriaDocumento.RELATORIO,
+        confidencialidade=ConfidencialidadeDocumento.INTERNO,
+        arquivo_path=caminho,
+        nome_arquivo_original=nome_arquivo,
+        tipo_mime="application/pdf",
+        tamanho_bytes=len(pdf_bytes),
+        criado_por_id=usuario.id,
+    )
+    db.add(documento)
+    db.commit()
+    return RedirectResponse(f"/painel/documentos/cpls/{cpl_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/cpls/{cpl_id}/relatorio-impacto")
+def gerar_relatorio_impacto(
+    cpl_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    cpl = db.get(CPL, cpl_id)
+    if cpl is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=cpl_id)
+
+    pdf_bytes = gerar_pdf_relatorio_impacto(cpl, resumo_cadastral(db, cpl_id))
+    nome_arquivo = f"Relatorio de Impacto - {cpl.nome}.pdf"
+    caminho = salvar_arquivo(cpl_id, nome_arquivo, pdf_bytes)
+    documento = Documento(
+        cpl_id=cpl_id,
+        titulo=f"Relatório de Impacto — {cpl.nome}",
         categoria=CategoriaDocumento.RELATORIO,
         confidencialidade=ConfidencialidadeDocumento.INTERNO,
         arquivo_path=caminho,

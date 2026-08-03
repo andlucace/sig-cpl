@@ -1,11 +1,13 @@
-"""RF-043/RF-048: geração de documentos padronizados em PDF. Quatro
-peças: exportar a ata de uma reunião de governança (usa o campo
-`Reuniao.ata` que já existe), o relatório executivo consolidado
-(acumulado desde sempre), o relatório de recadastramento e o relatório
-anual (recortado a um ano-calendário) de uma CPL (RF-048 — dos seis
-tipos de relatório citados no requisito, estes quatro foram construídos;
-comissão/projeto/impacto ainda não têm formato definido ou dependem de
-módulos que não existem, ver README).
+"""RF-043/RF-048: geração de documentos padronizados em PDF. Seis peças:
+exportar a ata de uma reunião de governança (usa o campo `Reuniao.ata`
+que já existe), o relatório executivo consolidado (acumulado desde
+sempre), o relatório de recadastramento, o relatório anual (recortado a
+um ano-calendário), o relatório de comissão (escopado a um único órgão
+de governança) e o relatório de impacto (reaproveita o resumo cadastral
+do RF-046/047, sem consolidar governança/planejamento) de uma CPL
+(RF-048 — dos seis tipos de relatório citados no requisito, só "de
+projeto" ainda não existe, porque depende do módulo de Projetos, ver
+README).
 """
 
 from pathlib import Path
@@ -13,7 +15,7 @@ from pathlib import Path
 from fpdf import FPDF
 
 from app.models.cpl import CPL
-from app.models.governanca import Reuniao
+from app.models.governanca import OrgaoGovernanca, Reuniao
 from app.models.planejamento import IndicadorEstrategico
 
 # A fonte core "Helvetica" do fpdf2 só cobre latin-1 e não tem travessão
@@ -291,5 +293,109 @@ def gerar_pdf_relatorio_anual(cpl: CPL, resumo: dict) -> bytes:
     doc.espaco()
     doc.linha("Documentos", negrito=True, tamanho=12)
     doc.linha(f"Documentos gerados/anexados no ano: {resumo['documentos_gerados_no_ano']}")
+
+    return doc.bytes()
+
+
+def gerar_pdf_relatorio_comissao(orgao: OrgaoGovernanca, resumo: dict) -> bytes:
+    """RF-048: relatório de comissão — escopado a um único órgão de
+    governança (qualquer `TipoOrgao`, não só comissão temática), em vez
+    de toda a CPL como o executivo. Dados vêm prontos de
+    `app/services/indicadores.py::resumo_orgao`; esta função só formata."""
+
+    doc = _GeradorPDF()
+
+    doc.linha(f"Relatório de Comissão — {orgao.nome}", altura=10, negrito=True, tamanho=16)
+    doc.linha(f"Tipo: {orgao.tipo.value.replace('_', ' ')}")
+    doc.espaco(2)
+
+    doc.linha("Resumo", negrito=True, tamanho=12)
+    doc.linha(f"Membros ativos: {len(resumo['membros_ativos'])}")
+    doc.linha(f"Reuniões realizadas: {resumo['reunioes_realizadas']}")
+    doc.linha(f"Deliberações aprovadas: {resumo['deliberacoes_aprovadas']}")
+    doc.linha(
+        f"Tarefas: {resumo['tarefas_concluidas']} concluídas, "
+        f"{resumo['tarefas_pendentes']} pendentes"
+    )
+
+    doc.espaco()
+    doc.linha("Membros", negrito=True, tamanho=12)
+    if resumo["membros_ativos"]:
+        for membro in resumo["membros_ativos"]:
+            doc.linha(f"- {membro.pessoa.nome} ({membro.funcao})")
+    else:
+        doc.linha("Nenhum membro ativo cadastrado.")
+
+    doc.espaco()
+    doc.linha("Reuniões", negrito=True, tamanho=12)
+    if resumo["reunioes"]:
+        for reuniao in resumo["reunioes"]:
+            doc.linha(f"- {reuniao.data_hora.strftime('%d/%m/%Y %H:%M')}: {reuniao.titulo} ({reuniao.status.value})")
+    else:
+        doc.linha("Nenhuma reunião registrada ainda.")
+
+    doc.espaco()
+    doc.linha("Deliberações", negrito=True, tamanho=12)
+    if resumo["deliberacoes"]:
+        for deliberacao in resumo["deliberacoes"]:
+            doc.linha(f"- {deliberacao.descricao} ({deliberacao.resultado.value})")
+    else:
+        doc.linha("Nenhuma deliberação registrada ainda.")
+
+    return doc.bytes()
+
+
+def gerar_pdf_relatorio_impacto(cpl: CPL, resumo_cadastral: dict) -> bytes:
+    """RF-048/RF-047: relatório de impacto — recorte do resumo cadastral
+    focado em sustentabilidade, inovação, ODS, exportação, certificações
+    e empregos, sem as seções de governança/planejamento do executivo.
+    Reaproveita o mesmo `resumo_cadastral()` do RF-046/047 — não introduz
+    nenhuma coleta ou agregação nova, só uma apresentação diferente do
+    que já existe."""
+
+    doc = _GeradorPDF()
+
+    doc.linha(f"Relatório de Impacto — {cpl.nome}", altura=10, negrito=True, tamanho=16)
+    doc.linha(f"Sigla: {cpl.sigla} — Elo/setor: {cpl.setor or '—'}")
+    doc.espaco(2)
+
+    doc.linha("Impacto socioeconômico", negrito=True, tamanho=12)
+    doc.linha(f"Empresas vinculadas: {resumo_cadastral['total_empresas']}")
+    doc.linha(
+        f"Empregos diretos: {resumo_cadastral['soma_empregos_diretos']} — "
+        f"indiretos: {resumo_cadastral['soma_empregos_indiretos']}"
+    )
+    if resumo_cadastral["novos_empregos_diretos_12_meses"]:
+        doc.linha(f"Novos empregos diretos (últimos 12 meses): {resumo_cadastral['novos_empregos_diretos_12_meses']}")
+    if resumo_cadastral["percentual_exportacao"] is not None:
+        doc.linha(f"Exportam: {resumo_cadastral['percentual_exportacao']}%")
+    if resumo_cadastral["percentual_qualificacao"] is not None:
+        doc.linha(f"Oferecem qualificação a colaboradores: {resumo_cadastral['percentual_qualificacao']}%")
+
+    doc.espaco()
+    doc.linha("Impacto socioambiental", negrito=True, tamanho=12)
+    if resumo_cadastral["percentual_sustentabilidade"] is not None:
+        doc.linha(f"Adotam práticas de sustentabilidade: {resumo_cadastral['percentual_sustentabilidade']}%")
+    if resumo_cadastral["ods_mais_citados"]:
+        ods_texto = ", ".join(f"{nome} ({qtd})" for nome, qtd in resumo_cadastral["ods_mais_citados"])
+        doc.linha(f"ODS mais citados: {ods_texto}")
+
+    doc.espaco()
+    doc.linha("Inovação e competitividade", negrito=True, tamanho=12)
+    if resumo_cadastral["percentual_inovacao"] is not None:
+        doc.linha(f"Realizam inovação: {resumo_cadastral['percentual_inovacao']}%")
+    if resumo_cadastral["percentual_pd"] is not None:
+        doc.linha(f"Realizam P&D: {resumo_cadastral['percentual_pd']}%")
+    if resumo_cadastral["percentual_certificacoes"] is not None:
+        doc.linha(f"Possuem certificações: {resumo_cadastral['percentual_certificacoes']}%")
+    if resumo_cadastral["certificacoes_mais_citadas"]:
+        cert_texto = ", ".join(f"{nome} ({qtd})" for nome, qtd in resumo_cadastral["certificacoes_mais_citadas"])
+        doc.linha(f"Certificações mais citadas: {cert_texto}")
+    if resumo_cadastral["percentual_contatos_internacionais"] is not None:
+        doc.linha(f"Possuem contatos internacionais: {resumo_cadastral['percentual_contatos_internacionais']}%")
+    if resumo_cadastral["distribuicao_digitalizacao"]:
+        doc.linha("Nível de digitalização:")
+        for nivel, quantidade in resumo_cadastral["distribuicao_digitalizacao"].items():
+            doc.linha(f"- {nivel}: {quantidade}")
 
     return doc.bytes()

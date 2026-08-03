@@ -394,6 +394,34 @@ os outros módulos já coletam:
   reais, e 2025, sem nenhum) e confirmando via PDF rasterizado que os
   números realmente mudam — não é só o mesmo acumulado com um título
   diferente.
+- **Relatório de comissão em PDF** (RF-048) — quarto tipo de relatório,
+  escopado a **um único órgão de governança** (`resumo_orgao(db,
+  orgao_id)`, novo) em vez de toda a CPL como os anteriores. Serve
+  qualquer `TipoOrgao` (conselho, câmara, comissão temática, grupo de
+  trabalho) — o requisito fala especificamente de "comissão", mas não
+  há razão técnica pra restringir a esse tipo. Mostra membros ativos,
+  reuniões, deliberações e tarefas — mas só as tarefas **ligadas a uma
+  deliberação daquele órgão** (`TarefaGovernanca.deliberacao_id`);
+  tarefas soltas da CPL como um todo não são atribuíveis a um órgão
+  específico. Gerado via
+  `POST /api/governanca/orgaos/{orgao_id}/relatorio-comissao` (e botão
+  em `/painel/governanca/orgaos/{orgao_id}`), RBAC `PAPEIS_GESTAO`.
+  Testado confirmando que o relatório do "Conselho Gestor" não vaza
+  reuniões/deliberações dos outros 3 órgãos da mesma CPL (ex.:
+  "Comissão de Inovação") — o escopo é de verdade por-órgão, não
+  por-CPL com um filtro cosmético.
+- **Relatório de impacto em PDF** (RF-048/RF-047) — quinto tipo,
+  o mais barato de construir: **reaproveita `resumo_cadastral()`
+  (RF-046/047) sem nenhuma agregação nova**, só reapresenta um recorte
+  focado em impacto socioeconômico/socioambiental (empregos,
+  exportação, qualificação, sustentabilidade, ODS) e inovação/
+  competitividade (P&D, certificações, digitalização), omitindo as
+  seções de governança/planejamento/catálogo que o executivo tem.
+  Gerado via `POST /api/indicadores/cpls/{cpl_id}/relatorio-impacto`
+  (e botão em `/painel/indicadores/cpls/{cpl_id}`), RBAC
+  `PAPEIS_GESTAO`.
+- **RF-048 fica só faltando "de projeto"** — depende do módulo de
+  Projetos, que ainda não existe (Fase 2/3).
 - RBAC: leitura (catálogo, resumo, painel) usa `PAPEIS_GOVERNANCA_LEITURA`;
   gerar relatório executivo usa `PAPEIS_GESTAO` (mesma exigência da ata);
   registrar novo valor de indicador usa `PAPEIS_TAREFA_EXECUCAO` **ou** o
@@ -853,17 +881,14 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    e relatórios" acima. Painéis de projetos/finanças/impacto territorial
    (parte do RF-045) seguem pendentes — dependem de módulos ainda não
    construídos (Projetos, Fase 2/3).
-6. ~~Relatório de recadastramento e relatório anual (RF-048)~~ —
-   **feito**: recadastramento (dossiê com nível de maturidade vigente,
-   validade do reconhecimento, lacunas da avaliação em vigor e
-   histórico de avaliações/decisões) e anual (mesma base do executivo,
-   mas recortada a um ano-calendário — reuniões, deliberações, tarefas/
-   metas concluídas, documentos, indicadores e novos empregos, todos só
-   dentro do ano informado) — ver seção "Indicadores e relatórios"
-   acima. Seguem pendentes, do mesmo RF-048: comissão, projeto e
-   impacto — nenhum tem formato definido no documento de requisitos, e
-   comissão/projeto dependem de módulos ainda não construídos (ou não
-   dedicados, no caso de comissão).
+6. ~~RF-048: recadastramento, anual, comissão e impacto~~ — **feito**:
+   recadastramento (dossiê de maturidade), anual (mesma base do
+   executivo recortada a um ano-calendário), comissão (escopado a um
+   único órgão de governança, não toda a CPL) e impacto (recorte do
+   resumo cadastral focado em sustentabilidade/ODS/inovação, sem
+   agregação nova) — ver seção "Indicadores e relatórios" acima. **Só
+   falta "de projeto"**, do mesmo RF-048 — depende do módulo de
+   Projetos, ainda não construído.
 7. Restante da Fase 2 — plano de trabalho, orçamento, cotações e
    submissões (RF-029 em diante) — depende do módulo de Projetos, ainda
    não iniciado. "Simular cenários" (RF-026) e "habilitação jurídica"

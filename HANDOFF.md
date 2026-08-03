@@ -494,6 +494,53 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     silenciosamente (e o relatório "anual" sempre mostrasse o total
     acumulado) passaria despercebido, já que os números de 2026
     "pareciam certos" sozinhos.
+19. **Relatório de comissão e relatório de impacto** (RF-048) — usuário
+    disse "seguir com o restante da RF-048", que na sessão anterior eu
+    tinha deixado como comissão/projeto/impacto. Reconsiderei "impacto"
+    em vez de simplesmente reafirmar a rejeição anterior ("duplicaria o
+    executivo") — na prática, o executivo mistura governança +
+    planejamento + cadastro + catálogo num só documento, então um
+    relatório que **só** mostra o recorte cadastral/socioambiental do
+    RF-046/047 (sustentabilidade, ODS, certificações, digitalização,
+    inovação) é um artefato genuinamente diferente pra quem só precisa
+    disso — não é o mesmo documento com outro título, é uma seleção de
+    campos diferente e mais focada. Construí os dois:
+    (a) **Comissão** — `resumo_orgao(db, orgao_id)`, novo em
+    `app/services/indicadores.py`, ao lado dos outros `resumo_*`
+    (mesmo que escopado por órgão, não por CPL — a proximidade
+    conceitual com `resumo_governanca` pesou mais que a diferença de
+    parâmetro). Serve qualquer `TipoOrgao`, não só comissão temática —
+    sem custo técnico adicional pra generalizar, e evita uma
+    distinção artificial entre "comissão" e "conselho" que o requisito
+    não exige tecnicamente. Detalhe que quase passou batido: tarefas só
+    contam se ligadas a uma deliberação **daquele órgão**
+    (`TarefaGovernanca.deliberacao_id` → `Deliberacao.reuniao_id` →
+    `Reuniao.orgao_id`) — uma tarefa solta da CPL (sem
+    `deliberacao_id`) não é atribuível a nenhum órgão específico, então
+    fica de fora, corretamente. Rota nova em
+    `app/api/routes/governanca.py` (não em `indicadores.py`, já que o
+    escopo é órgão, não CPL) — `POST /api/governanca/orgaos/{id}/
+    relatorio-comissao`, RBAC `PAPEIS_GESTAO` escopado ao `cpl_id` do
+    órgão (não ao órgão em si — não existe RBAC por-órgão granular o
+    bastante pra isso hoje, e não era o objetivo desta tarefa).
+    (b) **Impacto** — `gerar_pdf_relatorio_impacto()` reaproveita
+    `resumo_cadastral()` **sem nenhuma função de agregação nova** — só
+    reformata um subconjunto dos mesmos campos que o executivo já usa,
+    omitindo governança/planejamento/catálogo. É o relatório mais barato
+    de todos os 5 construídos nesta sessão e na anterior.
+    **Teste que provou o escopo por-órgão de verdade**: gerei o
+    relatório de comissão pro "Conselho Gestor" (que tem só 1 reunião e
+    2 deliberações próprias) numa CPL que tem 4 órgãos e 4 reuniões no
+    total — confirmei via PDF rasterizado que aparecia só a 1 reunião e
+    as 2 deliberações do Conselho Gestor, não as das outras 3 comissões/
+    grupos da mesma CPL. Sem esse teste específico, um bug onde o join
+    esquecesse o filtro por `orgao_id` (e vazasse dado de outros
+    órgãos) passaria despercebido, porque o "resumo" ainda pareceria
+    plausível sozinho.
+    Com isso, RF-048 fica completo exceto "relatório de projeto"
+    (bloqueado, sem módulo de Projetos) — todos os outros 5 tipos
+    citados no requisito (executivo, anual, recadastramento, comissão,
+    impacto) estão implementados.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -730,10 +777,11 @@ ordem recomendada para o que vem depois:
    em que este projeto foi construído" para os detalhes (campos novos em
    `DiagnosticoCadastral`, `DiagnosticoCadastralHistorico` para "novos
    empregos", os 3 pontos de escrita atualizados). RF-048 ganhou também
-   **relatório de recadastramento** (item 16) e **relatório anual**
-   (item 18). Seguem pendentes, sem relação com este trabalho:
-   comissão/projeto/impacto do RF-048 (comissão/projeto dependem de
-   módulos ainda não construídos ou não dedicados). RF-045 só cobre
+   **relatório de recadastramento** (item 16), **relatório anual**
+   (item 18) e **relatório de comissão + relatório de impacto**
+   (item 19) — RF-048 está completo exceto "de projeto", que segue
+   pendente sem relação com este trabalho (depende do módulo de
+   Projetos, ainda não construído). RF-045 só cobre
    governança/planejamento/cadastro — maturidade/projetos/finanças/
    impacto territorial ficam pra quando esses módulos tiverem painel
    próprio (maturidade já existe como módulo desde esta sessão, mas sem

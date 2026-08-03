@@ -16,7 +16,16 @@ from app.core.rbac import (
 )
 from app.db.session import get_db
 from app.models.cpl import CPL
-from app.models.enums import ResultadoDeliberacao, StatusReuniao, StatusTarefa, TipoOrgao, TipoVoto
+from app.models.documento import Documento
+from app.models.enums import (
+    CategoriaDocumento,
+    ConfidencialidadeDocumento,
+    ResultadoDeliberacao,
+    StatusReuniao,
+    StatusTarefa,
+    TipoOrgao,
+    TipoVoto,
+)
 from app.models.governanca import (
     Deliberacao,
     MembroOrgao,
@@ -28,6 +37,9 @@ from app.models.governanca import (
 )
 from app.models.pessoa import Pessoa
 from app.models.usuario import Usuario
+from app.services.armazenamento import salvar_arquivo
+from app.services.geracao_documentos import gerar_pdf_relatorio_comissao
+from app.services.indicadores import resumo_orgao
 from app.web.templates import templates
 
 router = APIRouter(prefix="/painel/governanca", tags=["Área restrita — Governança"])
@@ -171,6 +183,38 @@ def detalhe_orgao(
             "pagina_ativa": "governanca",
         },
     )
+
+
+@router.post("/orgaos/{orgao_id}/relatorio-comissao")
+def gerar_relatorio_comissao(
+    orgao_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    orgao = db.get(OrgaoGovernanca, orgao_id)
+    if orgao is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Órgão de governança não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=orgao.cpl_id)
+
+    pdf_bytes = gerar_pdf_relatorio_comissao(orgao, resumo_orgao(db, orgao_id))
+    nome_arquivo = f"Relatorio de Comissao - {orgao.nome}.pdf"
+    caminho = salvar_arquivo(orgao.cpl_id, nome_arquivo, pdf_bytes)
+    documento = Documento(
+        cpl_id=orgao.cpl_id,
+        titulo=f"Relatório de Comissão — {orgao.nome}",
+        categoria=CategoriaDocumento.RELATORIO,
+        confidencialidade=ConfidencialidadeDocumento.INTERNO,
+        arquivo_path=caminho,
+        nome_arquivo_original=nome_arquivo,
+        tipo_mime="application/pdf",
+        tamanho_bytes=len(pdf_bytes),
+        criado_por_id=usuario.id,
+    )
+    db.add(documento)
+    db.commit()
+    return RedirectResponse(f"/painel/documentos/cpls/{orgao.cpl_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 # --- Pessoas (cadastro rápido, RF-007) -------------------------------------
