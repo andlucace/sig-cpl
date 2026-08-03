@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.cadastro_dinamico import CampanhaConvite, DiagnosticoCadastral
 from app.models.entidade import Entidade
+from app.services.indicadores import registrar_snapshot_diagnostico
 from app.web.templates import templates
 
 router = APIRouter(prefix="/atualizacao", tags=["Autopreenchimento público"])
@@ -59,6 +60,17 @@ def processar_atualizacao(
     exporta: str | None = Form(None),
     mercados_exportacao: str | None = Form(None),
     interesse_comissoes: str | None = Form(None),
+    participacao_associativa: str | None = Form(None),
+    entidades_associativas: str | None = Form(None),
+    oferece_qualificacao_colaboradores: str | None = Form(None),
+    descricao_qualificacao: str | None = Form(None),
+    adota_praticas_sustentabilidade: str | None = Form(None),
+    descricao_sustentabilidade: str | None = Form(None),
+    possui_contatos_internacionais: str | None = Form(None),
+    descricao_contatos_internacionais: str | None = Form(None),
+    possui_certificacoes: str | None = Form(None),
+    certificacoes: str | None = Form(None),
+    nivel_digitalizacao: str | None = Form(None),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
     convite = db.query(CampanhaConvite).filter(CampanhaConvite.token == token).first()
@@ -91,9 +103,22 @@ def processar_atualizacao(
     diagnostico.exporta = exporta == "sim"
     diagnostico.mercados_exportacao = mercados_exportacao or None
     diagnostico.interesse_comissoes = interesse_comissoes or None
+    diagnostico.participacao_associativa = participacao_associativa == "sim"
+    diagnostico.entidades_associativas = entidades_associativas or None
+    diagnostico.oferece_qualificacao_colaboradores = oferece_qualificacao_colaboradores == "sim"
+    diagnostico.descricao_qualificacao = descricao_qualificacao or None
+    diagnostico.adota_praticas_sustentabilidade = adota_praticas_sustentabilidade == "sim"
+    diagnostico.descricao_sustentabilidade = descricao_sustentabilidade or None
+    diagnostico.possui_contatos_internacionais = possui_contatos_internacionais == "sim"
+    diagnostico.descricao_contatos_internacionais = descricao_contatos_internacionais or None
+    diagnostico.possui_certificacoes = possui_certificacoes == "sim"
+    diagnostico.certificacoes = certificacoes or None
+    diagnostico.nivel_digitalizacao = nivel_digitalizacao or None
 
     convite.respondido = True
     convite.respondido_em = datetime.now()
+    db.flush()
+    registrar_snapshot_diagnostico(db, diagnostico)
     db.commit()
 
     return templates.TemplateResponse(request, "publico/atualizacao_obrigado.html", {"entidade": entidade})

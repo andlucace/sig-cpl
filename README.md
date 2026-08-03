@@ -310,10 +310,37 @@ os outros módulos já coletam:
   coletado via `DiagnosticoCadastral` (campanha de atualização cadastral,
   módulo de Cadastro dinâmico) — empresas vinculadas, empregos diretos/
   indiretos, distribuição de faturamento por faixa, % inovação/P&D/
-  exportação/associativismo, ODS mais citados. **Não introduz coleta de
-  dado novo**: sustentabilidade, certificações, contatos internacionais e
-  digitalização (também citados no RF-047) não têm campo no cadastro atual
-  e por isso ficam de fora deste resumo.
+  exportação/associativismo/qualificação/sustentabilidade/contatos
+  internacionais/certificações, ODS e certificações mais citados,
+  distribuição por nível de digitalização.
+- **Novos empregos diretos (RF-046, "variação no tempo")**:
+  `DiagnosticoCadastral` só guarda o valor atual (sobrescrito a cada
+  resposta de campanha ou importação), então uma tabela nova,
+  `DiagnosticoCadastralHistorico`, preserva um snapshot de
+  `empregos_diretos`/`empregos_indiretos` a cada atualização — mesmo
+  padrão de `IndicadorValorHistorico`. `resumo_cadastral()` soma, por
+  entidade, o crescimento entre o snapshot mais antigo dentro dos últimos
+  12 meses e o mais recente (quedas não abatem o total — é "empregos
+  criados", não "saldo líquido"); precisa de ao menos 2 snapshots por
+  entidade dentro da janela pra contar alguma coisa. `registrar_snapshot_
+  diagnostico()` em `app/services/indicadores.py` é chamado pelos 3
+  pontos de escrita do diagnóstico (API `PUT /api/cadastro/entidades/
+  {id}/diagnostico`, formulário público de campanha, importação de
+  planilha).
+- **Qualificação, sustentabilidade, contatos internacionais, certificações
+  e digitalização (RF-046/047)**: campos novos em `DiagnosticoCadastral`
+  (booleano + descrição livre, mesmo padrão de `realiza_inovacao`/
+  `descricao_inovacao`; certificações é lista separada por vírgula, mesmo
+  padrão de `ods_relacionados`). Coletáveis pelos 3 pontos de escrita —
+  o formulário público de campanha (`/atualizacao/{token}`) ganhou uma
+  seção nova; a importação de planilha reconhece os cabeçalhos via
+  `_ALIASES_CAMPO` em `app/services/importacao_entidades.py` (ajuste ali
+  se a planilha real usar nomes diferentes — o remapeamento manual cobre
+  o resto). De quebra, `participacao_associativa`/`entidades_associativas`
+  também passaram a ser coletáveis pelo formulário público — já existiam
+  no modelo e no resumo (`percentual_associativismo`) desde antes, mas
+  nunca tinham sido expostos nesse formulário, então na prática nunca
+  eram preenchidos por uma entidade respondendo à campanha.
 - **Painéis** (RF-045): `resumo_governanca` e `resumo_planejamento`
   complementam o resumo cadastral acima, formando o dashboard de
   `/painel/indicadores/cpls/{cpl_id}`. Só cobre governança/planejamento/
@@ -709,11 +736,13 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    resolvível, e paginação real por `offset`/página em ambas as visões
    (antes era um limite fixo de 200 registros mais recentes, sem próxima
    página).
-5. Ampliar o resumo cadastral (RF-046/047) e os painéis (RF-045) conforme
-   novos campos/módulos forem existindo: qualificação, novos empregos
-   (variação no tempo), sustentabilidade, certificações, contatos
-   internacionais, digitalização, e painéis de projetos/finanças/impacto
-   territorial quando esses módulos forem construídos.
+5. ~~Ampliar o resumo cadastral (RF-046/047)~~ — **feito**: qualificação,
+   novos empregos (variação no tempo, via `DiagnosticoCadastralHistorico`),
+   sustentabilidade, certificações e digitalização ganharam campo e
+   entraram no resumo/painel/relatório executivo — ver seção "Indicadores
+   e relatórios" acima. Painéis de projetos/finanças/impacto territorial
+   (parte do RF-045) seguem pendentes — dependem de módulos ainda não
+   construídos (Projetos, Fase 2/3).
 6. Outros tipos de relatório do RF-048 (anual, recadastramento, comissão,
    projeto, impacto) — hoje só o executivo existe; os demais não têm
    formato definido no documento de requisitos e alguns dependem de

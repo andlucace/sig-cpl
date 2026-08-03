@@ -94,6 +94,74 @@
                             <label class="form-label">Interesse em comissões temáticas</label>
                             <input type="text" class="form-control" name="interesse_comissoes" value="{{ (diagnostico.interesse_comissoes or '') if diagnostico else '' }}">
                         </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Participa de associação/entidade de classe?</label>
+                            <select class="form-select" name="participacao_associativa">
+                                <option value="nao" {% if diagnostico and not diagnostico.participacao_associativa %}selected{% endif %}>Não</option>
+                                <option value="sim" {% if diagnostico and diagnostico.participacao_associativa %}selected{% endif %}>Sim</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Quais entidades associativas?</label>
+                            <input type="text" class="form-control" name="entidades_associativas" value="{{ (diagnostico.entidades_associativas or '') if diagnostico else '' }}">
+                        </div>
+                    </div>
+
+                    <h2 class="h6 text-body-secondary text-uppercase mt-4">Qualificação, sustentabilidade e certificações</h2>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Oferece qualificação aos colaboradores?</label>
+                            <select class="form-select" name="oferece_qualificacao_colaboradores">
+                                <option value="nao" {% if diagnostico and not diagnostico.oferece_qualificacao_colaboradores %}selected{% endif %}>Não</option>
+                                <option value="sim" {% if diagnostico and diagnostico.oferece_qualificacao_colaboradores %}selected{% endif %}>Sim</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Descrição da qualificação oferecida</label>
+                            <input type="text" class="form-control" name="descricao_qualificacao" value="{{ (diagnostico.descricao_qualificacao or '') if diagnostico else '' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Adota práticas de sustentabilidade?</label>
+                            <select class="form-select" name="adota_praticas_sustentabilidade">
+                                <option value="nao" {% if diagnostico and not diagnostico.adota_praticas_sustentabilidade %}selected{% endif %}>Não</option>
+                                <option value="sim" {% if diagnostico and diagnostico.adota_praticas_sustentabilidade %}selected{% endif %}>Sim</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Quais práticas de sustentabilidade?</label>
+                            <input type="text" class="form-control" name="descricao_sustentabilidade" value="{{ (diagnostico.descricao_sustentabilidade or '') if diagnostico else '' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Possui contatos internacionais?</label>
+                            <select class="form-select" name="possui_contatos_internacionais">
+                                <option value="nao" {% if diagnostico and not diagnostico.possui_contatos_internacionais %}selected{% endif %}>Não</option>
+                                <option value="sim" {% if diagnostico and diagnostico.possui_contatos_internacionais %}selected{% endif %}>Sim</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Quais países/parceiros?</label>
+                            <input type="text" class="form-control" name="descricao_contatos_internacionais" value="{{ (diagnostico.descricao_contatos_internacionais or '') if diagnostico else '' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Possui certificações?</label>
+                            <select class="form-select" name="possui_certificacoes">
+                                <option value="nao" {% if diagnostico and not diagnostico.possui_certificacoes %}selected{% endif %}>Não</option>
+                                <option value="sim" {% if diagnostico and diagnostico.possui_certificacoes %}selected{% endif %}>Sim</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Quais certificações (separadas por vírgula)?</label>
+                            <input type="text" class="form-control" name="certificacoes" value="{{ (diagnostico.certificacoes or '') if diagnostico else '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Nível de digitalização</label>
+                            <select class="form-select" name="nivel_digitalizacao">
+                                <option value="">Não informado</option>
+                                {% for opcao in ["Baixo", "Médio", "Alto"] %}
+                                    <option value="{{ opcao }}" {% if diagnostico and diagnostico.nivel_digitalizacao == opcao %}selected{% endif %}>{{ opcao }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
                     </div>
 
                     <button type="submit" class="btn btn-primary mt-4">

@@ -51,7 +51,7 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   `http://127.0.0.1:8010`** — confira com `netstat -ano | grep 8010` antes
   de subir outro, e mate o processo antigo antes de reiniciar (o servidor
   não usa `--reload`, então mudanças de código exigem restart manual).
-- **Migrações Alembic aplicadas:** 9 revisões, todas no banco atual:
+- **Migrações Alembic aplicadas:** 10 revisões, todas no banco atual:
   1. `18541dca0a36` — modelos base (CPL, Entidade, Pessoa, Usuário)
   2. `0ba4d1a10f9d` — módulo Governança
   3. `5dd913b79202` — módulo Planejamento Estratégico
@@ -66,7 +66,11 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
      recursos)
   9. `16a954e6a8d8` — remapeamento manual de colunas na importação
      (status do lote, arquivo staged, mapeamento salvo)
-  - (a visão global + paginação da auditoria, feita depois, **não**
+  10. `66fb5b2556d0` — amplia `DiagnosticoCadastral` (qualificação,
+      sustentabilidade, contatos internacionais, certificações,
+      digitalização) + tabela nova `diagnosticos_cadastrais_historico`
+      (snapshot de empregos, pra "novos empregos" no RF-046)
+  - (a visão global + paginação da auditoria, feita antes desta, **não**
     precisou de migração — é só query/rota/template novos)
 
 ### Usuários de teste já existentes no banco
@@ -309,6 +313,65 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     resolver ao abrir um PDF local via `file://`, `shot.js` por faltar URL
     hardcoded — já eram conhecidas e não têm relação com este módulo;
     confirmado também sem nenhum 500 no log do servidor durante a run).
+15. **Ampliação do resumo cadastral e painéis** (RF-046/047) — usuário
+    escolheu esta entre 3 opções (a outra era "outros relatórios do
+    RF-048" e a terceira "iniciar módulo de Projetos", maior escopo).
+    Duas partes:
+    (a) **Campos que faltavam no diagnóstico**: qualificação,
+    sustentabilidade, contatos internacionais, certificações e
+    digitalização ganharam campo em `DiagnosticoCadastral` — mesmo
+    padrão booleano+descrição já usado por `realiza_inovacao`/
+    `descricao_inovacao` (certificações usa lista separada por vírgula,
+    como `ods_relacionados`). Precisou tocar **3 pontos de escrita**, não
+    só 1: `PUT /api/cadastro/entidades/{id}/diagnostico` (schema
+    `DiagnosticoCadastralUpdate` — bastou adicionar os campos, o endpoint
+    já fazia `dados.model_dump().items()` genérico), o formulário público
+    de campanha (`app/web/routes_atualizacao_publica.py` +
+    `atualizacao_form.html` — precisou de `Form(...)` novo por campo E
+    de HTML novo, já que esse formulário não é genérico), e a importação
+    de planilha (`_ALIASES_CAMPO`/`_CAMPOS_BOOLEANOS` em
+    `app/services/importacao_entidades.py` — como é data-driven, só
+    precisou adicionar entradas nos dicionários; `CAMPOS_CONHECIDOS` e a
+    tela de remapeamento manual já pegam os campos novos automaticamente,
+    sem tocar template). De brinde, notei que `participacao_associativa`/
+    `entidades_associativas` já existiam no modelo e já entravam no
+    resumo (`percentual_associativismo`) desde a sessão que criou
+    Indicadores, mas **nunca tinham sido expostos no formulário
+    público** — ou seja, na prática nunca eram preenchidos por uma
+    entidade real respondendo à campanha, só via API direta ou
+    importação. Corrigido no mesmo formulário, já que eu estava mexendo
+    nele mesmo.
+    (b) **"Novos empregos" (variação no tempo, RF-046)**: `DiagnosticoCadastral`
+    sobrescreve o valor a cada resposta, sem histórico — então criei
+    `DiagnosticoCadastralHistorico` (mesmo padrão de
+    `IndicadorValorHistorico`: uma tabela `*_historico` que só acumula,
+    nunca é sobrescrita) e um helper único, `registrar_snapshot_
+    diagnostico()` em `app/services/indicadores.py`, chamado pelos
+    mesmos 3 pontos de escrita logo após aplicar os campos novos (com
+    `db.flush()` antes, pra garantir que os valores já estão no objeto).
+    `resumo_cadastral()` soma, por entidade, a diferença entre o
+    snapshot mais antigo dentro dos últimos 12 meses e o mais recente —
+    **decisão deliberada**: só conta crescimento (`if diferenca > 0`),
+    não é "saldo líquido" da CPL, é "empregos novos criados"; e precisa
+    de **pelo menos 2 snapshots por entidade** dentro da janela pra
+    contar qualquer coisa — com histórico vazio ou só 1 ponto, o valor é
+    honestamente 0, não uma estimativa. Testado de verdade via curl:
+    `PUT` com `empregos_diretos=12`, depois de novo com `=20`, e
+    `novos_empregos_diretos_12_meses` bateu em `8` — não só testei que o
+    campo aparece, testei que a conta dá o número certo.
+    **Armadilha evitada por pouco**: `ResumoCadastralRead` em
+    `app/schemas/indicadores.py` é um `response_model` do FastAPI — se eu
+    tivesse esquecido de adicionar os campos novos nesse schema, a API
+    teria **silenciosamente descartado** todo campo novo da resposta
+    (FastAPI filtra pelo response_model), enquanto a tela web (que usa o
+    dict do service direto, sem passar por schema) teria funcionado
+    normal — um bug que só apareceria pra quem consome a API, não pra
+    quem usa a UI, exatamente o tipo de inconsistência silenciosa fácil
+    de não notar sem testar os dois caminhos. Vale lembrar isso sempre
+    que um campo novo entrar em algo que já tem `response_model`.
+    Regressão completa rodada de novo (Playwright + verificação de
+    log do servidor), incluindo o fluxo de importação (que teve
+    `_ALIASES_CAMPO`/`_CAMPOS_BOOLEANOS` mexidos) — sem nenhum 500.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -481,17 +544,19 @@ ordem recomendada para o que vem depois:
    em nenhum endpoint do sistema hoje, então a captura de EXCLUSAO nunca
    roda em uso real — foi testada diretamente via sessão SQLAlchemy num
    script ad-hoc, não através de um endpoint HTTP real.
-8. **Indicadores e relatórios: limitações conhecidas** (ver README para o
-   detalhe por requisito) — RF-046/047 só cobrem o que já existe no
-   `DiagnosticoCadastral` (empregos, faturamento, inovação, exportação,
-   ODS); sustentabilidade, certificações, contatos internacionais,
-   digitalização e "qualificação" não têm campo no cadastro atual. RF-048
-   só tem o relatório executivo — os outros 5 tipos citados no requisito
-   não existem (comissão/projeto dependem de módulos ainda não
-   construídos). RF-045 só cobre governança/planejamento/cadastro —
-   maturidade/projetos/finanças/impacto territorial ficam pra quando esses
-   módulos existirem (maturidade já tem painel próprio desde esta sessão,
-   ver item 9).
+8. ~~RF-046/047: qualificação, novos empregos, sustentabilidade,
+   certificações, digitalização~~ — **feito**: ver item 15 da seção "Ordem
+   em que este projeto foi construído" para os detalhes (campos novos em
+   `DiagnosticoCadastral`, `DiagnosticoCadastralHistorico` para "novos
+   empregos", os 3 pontos de escrita atualizados). Segue pendente, sem
+   relação com este trabalho: RF-048 só tem o relatório executivo — os
+   outros 5 tipos citados no requisito não existem (comissão/projeto
+   dependem de módulos ainda não construídos). RF-045 só cobre
+   governança/planejamento/cadastro — maturidade/projetos/finanças/
+   impacto territorial ficam pra quando esses módulos tiverem painel
+   próprio (maturidade já existe como módulo desde esta sessão, mas sem
+   um "painel" resumo dedicado — só as próprias telas de avaliação, ver
+   item 9).
 9. **Maturidade e reconhecimento: limitações conhecidas** — "habilitação
    jurídica" (RF-027) não tem modelo/etapa própria; "simular cenários"
    (RF-026, ver o efeito de uma nota hipotética antes de salvar) não foi

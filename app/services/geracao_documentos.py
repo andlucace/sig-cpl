@@ -161,17 +161,34 @@ def gerar_pdf_relatorio_executivo(
         f"Empregos diretos: {resumo_cadastral['soma_empregos_diretos']} — "
         f"indiretos: {resumo_cadastral['soma_empregos_indiretos']}"
     )
+    if resumo_cadastral["novos_empregos_diretos_12_meses"]:
+        doc.linha(f"Novos empregos diretos (últimos 12 meses): {resumo_cadastral['novos_empregos_diretos_12_meses']}")
     if resumo_cadastral["percentual_inovacao"] is not None:
         doc.linha(f"Realizam inovação: {resumo_cadastral['percentual_inovacao']}%")
     if resumo_cadastral["percentual_exportacao"] is not None:
         doc.linha(f"Exportam: {resumo_cadastral['percentual_exportacao']}%")
+    if resumo_cadastral["percentual_qualificacao"] is not None:
+        doc.linha(f"Oferecem qualificação a colaboradores: {resumo_cadastral['percentual_qualificacao']}%")
+    if resumo_cadastral["percentual_sustentabilidade"] is not None:
+        doc.linha(f"Adotam práticas de sustentabilidade: {resumo_cadastral['percentual_sustentabilidade']}%")
+    if resumo_cadastral["percentual_contatos_internacionais"] is not None:
+        doc.linha(f"Possuem contatos internacionais: {resumo_cadastral['percentual_contatos_internacionais']}%")
+    if resumo_cadastral["percentual_certificacoes"] is not None:
+        doc.linha(f"Possuem certificações: {resumo_cadastral['percentual_certificacoes']}%")
     if resumo_cadastral["distribuicao_faturamento"]:
         doc.linha("Faturamento por faixa:")
         for faixa, quantidade in resumo_cadastral["distribuicao_faturamento"].items():
             doc.linha(f"- {faixa}: {quantidade}")
+    if resumo_cadastral["distribuicao_digitalizacao"]:
+        doc.linha("Nível de digitalização:")
+        for nivel, quantidade in resumo_cadastral["distribuicao_digitalizacao"].items():
+            doc.linha(f"- {nivel}: {quantidade}")
     if resumo_cadastral["ods_mais_citados"]:
         ods_texto = ", ".join(f"{nome} ({qtd})" for nome, qtd in resumo_cadastral["ods_mais_citados"])
         doc.linha(f"ODS mais citados: {ods_texto}")
+    if resumo_cadastral["certificacoes_mais_citadas"]:
+        cert_texto = ", ".join(f"{nome} ({qtd})" for nome, qtd in resumo_cadastral["certificacoes_mais_citadas"])
+        doc.linha(f"Certificações mais citadas: {cert_texto}")
 
     doc.espaco()
     doc.linha("Catálogo de indicadores", negrito=True, tamanho=12)

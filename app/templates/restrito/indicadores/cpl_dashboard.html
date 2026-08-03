@@ -121,6 +121,9 @@
                 <div class="card-body small">
                     <p class="mb-1">Empresas vinculadas: <strong>{{ cadastral.total_empresas }}</strong> ({{ cadastral.total_com_diagnostico }} com diagnóstico respondido)</p>
                     <p class="mb-1">Empregos diretos: <strong>{{ cadastral.soma_empregos_diretos }}</strong> — indiretos: <strong>{{ cadastral.soma_empregos_indiretos }}</strong></p>
+                    {% if cadastral.novos_empregos_diretos_12_meses %}
+                        <p class="mb-1">Novos empregos diretos (últimos 12 meses): <strong>{{ cadastral.novos_empregos_diretos_12_meses }}</strong></p>
+                    {% endif %}
                     {% if cadastral.percentual_inovacao is not none %}
                         <p class="mb-1">Realizam inovação: <strong>{{ cadastral.percentual_inovacao }}%</strong></p>
                     {% endif %}
@@ -133,6 +136,18 @@
                     {% if cadastral.percentual_associativismo is not none %}
                         <p class="mb-1">Participam de associativismo: <strong>{{ cadastral.percentual_associativismo }}%</strong></p>
                     {% endif %}
+                    {% if cadastral.percentual_qualificacao is not none %}
+                        <p class="mb-1">Oferecem qualificação a colaboradores: <strong>{{ cadastral.percentual_qualificacao }}%</strong></p>
+                    {% endif %}
+                    {% if cadastral.percentual_sustentabilidade is not none %}
+                        <p class="mb-1">Adotam práticas de sustentabilidade: <strong>{{ cadastral.percentual_sustentabilidade }}%</strong></p>
+                    {% endif %}
+                    {% if cadastral.percentual_contatos_internacionais is not none %}
+                        <p class="mb-1">Possuem contatos internacionais: <strong>{{ cadastral.percentual_contatos_internacionais }}%</strong></p>
+                    {% endif %}
+                    {% if cadastral.percentual_certificacoes is not none %}
+                        <p class="mb-1">Possuem certificações: <strong>{{ cadastral.percentual_certificacoes }}%</strong></p>
+                    {% endif %}
 
                     {% if cadastral.distribuicao_faturamento %}
                         <p class="mb-1 mt-3 fw-semibold">Faturamento por faixa</p>
@@ -143,10 +158,28 @@
                         </ul>
                     {% endif %}
 
+                    {% if cadastral.distribuicao_digitalizacao %}
+                        <p class="mb-1 mt-3 fw-semibold">Nível de digitalização</p>
+                        <ul class="mb-0 ps-3">
+                            {% for nivel, quantidade in cadastral.distribuicao_digitalizacao.items() %}
+                                <li>{{ nivel }}: {{ quantidade }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+
                     {% if cadastral.ods_mais_citados %}
                         <p class="mb-1 mt-3 fw-semibold">ODS mais citados</p>
                         <ul class="mb-0 ps-3">
                             {% for nome, quantidade in cadastral.ods_mais_citados %}
+                                <li>{{ nome }}: {{ quantidade }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+
+                    {% if cadastral.certificacoes_mais_citadas %}
+                        <p class="mb-1 mt-3 fw-semibold">Certificações mais citadas</p>
+                        <ul class="mb-0 ps-3">
+                            {% for nome, quantidade in cadastral.certificacoes_mais_citadas %}
                                 <li>{{ nome }}: {{ quantidade }}</li>
                             {% endfor %}
                         </ul>

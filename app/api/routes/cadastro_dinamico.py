@@ -17,6 +17,7 @@ from app.models.cpl import CPL
 from app.models.entidade import Entidade
 from app.models.enums import StatusLoteImportacao
 from app.models.usuario import Usuario
+from app.services.indicadores import registrar_snapshot_diagnostico
 from app.schemas.cadastro_dinamico import (
     CampanhaCadastralCreate,
     CampanhaCadastralRead,
@@ -163,6 +164,8 @@ def atualizar_diagnostico(
         db.add(diagnostico)
     for campo, valor in dados.model_dump().items():
         setattr(diagnostico, campo, valor)
+    db.flush()
+    registrar_snapshot_diagnostico(db, diagnostico)
     db.commit()
     db.refresh(diagnostico)
     return diagnostico

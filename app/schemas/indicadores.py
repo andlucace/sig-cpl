@@ -10,9 +10,16 @@ class ResumoCadastralRead(BaseModel):
     total_com_diagnostico: int
     soma_empregos_diretos: int
     soma_empregos_indiretos: int
+    novos_empregos_diretos_12_meses: int
     distribuicao_faturamento: dict[str, int]
     percentual_inovacao: float | None
     percentual_pd: float | None
     percentual_exportacao: float | None
     percentual_associativismo: float | None
     ods_mais_citados: list[tuple[str, int]]
+    percentual_qualificacao: float | None
+    percentual_sustentabilidade: float | None
+    percentual_contatos_internacionais: float | None
+    percentual_certificacoes: float | None
+    certificacoes_mais_citadas: list[tuple[str, int]]
+    distribuicao_digitalizacao: dict[str, int]

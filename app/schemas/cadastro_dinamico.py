@@ -25,6 +25,15 @@ class DiagnosticoCadastralUpdate(BaseModel):
     exporta: bool | None = None
     mercados_exportacao: str | None = None
     interesse_comissoes: str | None = None
+    oferece_qualificacao_colaboradores: bool | None = None
+    descricao_qualificacao: str | None = None
+    adota_praticas_sustentabilidade: bool | None = None
+    descricao_sustentabilidade: str | None = None
+    possui_contatos_internacionais: bool | None = None
+    descricao_contatos_internacionais: str | None = None
+    possui_certificacoes: bool | None = None
+    certificacoes: str | None = None
+    nivel_digitalizacao: str | None = None
 
 
 class DiagnosticoCadastralRead(DiagnosticoCadastralUpdate):

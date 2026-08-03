@@ -36,8 +36,36 @@ class DiagnosticoCadastral(TimestampedBase):
     exporta: Mapped[bool | None] = mapped_column(Boolean)
     mercados_exportacao: Mapped[str | None] = mapped_column(Text)
     interesse_comissoes: Mapped[str | None] = mapped_column(Text)
+    # RF-046/047: qualificação, sustentabilidade, contatos internacionais,
+    # certificações e digitalização — adicionados numa sessão posterior à
+    # criação do modelo, por isso ficam depois dos campos originais.
+    oferece_qualificacao_colaboradores: Mapped[bool | None] = mapped_column(Boolean)
+    descricao_qualificacao: Mapped[str | None] = mapped_column(Text)
+    adota_praticas_sustentabilidade: Mapped[bool | None] = mapped_column(Boolean)
+    descricao_sustentabilidade: Mapped[str | None] = mapped_column(Text)
+    possui_contatos_internacionais: Mapped[bool | None] = mapped_column(Boolean)
+    descricao_contatos_internacionais: Mapped[str | None] = mapped_column(Text)
+    possui_certificacoes: Mapped[bool | None] = mapped_column(Boolean)
+    certificacoes: Mapped[str | None] = mapped_column(String(255))
+    nivel_digitalizacao: Mapped[str | None] = mapped_column(String(100))
 
     entidade: Mapped["Entidade"] = relationship()
+
+
+class DiagnosticoCadastralHistorico(Base):
+    """RF-046: snapshot de empregos a cada atualização do diagnóstico —
+    `DiagnosticoCadastral` guarda só o valor atual (sobrescrito a cada
+    resposta de campanha/importação), então sem isso "novos empregos"
+    (variação no tempo) não seria calculável. Mesmo padrão de
+    `IndicadorValorHistorico` (app/models/planejamento.py)."""
+
+    __tablename__ = "diagnosticos_cadastrais_historico"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    entidade_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("entidades.id"), nullable=False)
+    empregos_diretos: Mapped[int | None] = mapped_column(Integer)
+    empregos_indiretos: Mapped[int | None] = mapped_column(Integer)
+    registrado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class CampanhaCadastral(TimestampedBase):

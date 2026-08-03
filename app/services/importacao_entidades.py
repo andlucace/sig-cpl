@@ -35,6 +35,7 @@ from app.models.cadastro_dinamico import DiagnosticoCadastral, ImportacaoLinha, 
 from app.models.entidade import Entidade, EntidadeCPL
 from app.models.enums import StatusLinhaImportacao, StatusLoteImportacao, TipoEntidade
 from app.services.armazenamento import caminho_absoluto, salvar_arquivo
+from app.services.indicadores import registrar_snapshot_diagnostico
 
 _ALIASES_CAMPO: dict[str, list[str]] = {
     "razao_social": ["razao social", "nome", "nome da empresa", "empresa", "organizacao"],
@@ -63,6 +64,15 @@ _ALIASES_CAMPO: dict[str, list[str]] = {
     "exporta": ["exportacao", "exporta"],
     "mercados_exportacao": ["mercados de exportacao", "mercados-alvo"],
     "interesse_comissoes": ["comissoes", "interesse em comissoes", "comissoes tematicas"],
+    "oferece_qualificacao_colaboradores": ["qualificacao", "qualificacao de colaboradores"],
+    "descricao_qualificacao": ["descricao da qualificacao", "descricao qualificacao"],
+    "adota_praticas_sustentabilidade": ["sustentabilidade", "praticas sustentaveis"],
+    "descricao_sustentabilidade": ["descricao da sustentabilidade", "descricao sustentabilidade"],
+    "possui_contatos_internacionais": ["contatos internacionais"],
+    "descricao_contatos_internacionais": ["descricao dos contatos internacionais", "paises parceiros"],
+    "possui_certificacoes": ["certificacoes", "possui certificacoes"],
+    "certificacoes": ["lista de certificacoes", "certificacoes obtidas"],
+    "nivel_digitalizacao": ["digitalizacao", "nivel de digitalizacao"],
 }
 
 _CAMPOS_BOOLEANOS = {
@@ -71,6 +81,10 @@ _CAMPOS_BOOLEANOS = {
     "realiza_inovacao",
     "realiza_pd",
     "exporta",
+    "oferece_qualificacao_colaboradores",
+    "adota_praticas_sustentabilidade",
+    "possui_contatos_internacionais",
+    "possui_certificacoes",
 }
 _CAMPOS_INTEIROS = {"empregos_diretos", "empregos_indiretos"}
 _CAMPOS_DIAGNOSTICO = set(_ALIASES_CAMPO) - {
@@ -240,6 +254,8 @@ def _processar_linhas(
                         pass
                 else:
                     setattr(diagnostico, campo, valor)
+            db.flush()
+            registrar_snapshot_diagnostico(db, diagnostico)
 
         status_linha = StatusLinhaImportacao.CRIADA if criando else StatusLinhaImportacao.ATUALIZADA
         db.add(
