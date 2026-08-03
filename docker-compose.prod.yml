@@ -34,6 +34,7 @@ services:
       - n8n_default
     labels:
       - traefik.enable=true
+      - traefik.docker.network=n8n_default
       - traefik.http.routers.sigcpl-web.rule=Host(`sigcpl.dedev.cloud`)
       - traefik.http.routers.sigcpl-web.entrypoints=web,websecure
       - traefik.http.routers.sigcpl-web.tls=true
