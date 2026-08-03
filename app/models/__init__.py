@@ -3,6 +3,7 @@ from app.models.cadastro_dinamico import (
     CampanhaCadastral,
     CampanhaConvite,
     DiagnosticoCadastral,
+    DiagnosticoCadastralHistorico,
     ImportacaoLinha,
     ImportacaoLote,
 )
@@ -26,6 +27,7 @@ from app.models.maturidade import (
     Edital,
     RecursoAvaliacao,
 )
+from app.models.notificacao import Notificacao
 from app.models.pessoa import Pessoa, PessoaVinculo
 from app.models.planejamento import (
     DiagnosticoItem,
@@ -63,6 +65,7 @@ __all__ = [
     "IndicadorEstrategico",
     "IndicadorValorHistorico",
     "DiagnosticoCadastral",
+    "DiagnosticoCadastralHistorico",
     "CampanhaCadastral",
     "CampanhaConvite",
     "ImportacaoLote",
@@ -74,4 +77,5 @@ __all__ = [
     "Avaliacao",
     "AvaliacaoCriterio",
     "RecursoAvaliacao",
+    "Notificacao",
 ]

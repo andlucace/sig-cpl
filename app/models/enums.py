@@ -207,3 +207,15 @@ class StatusLoteImportacao(str, enum.Enum):
 
     PENDENTE_MAPEAMENTO = "pendente_mapeamento"
     CONCLUIDO = "concluido"
+
+
+class TipoNotificacao(str, enum.Enum):
+    """RF-049: fontes de notificação automática — cada uma corresponde a
+    um evento de prazo/pendência já modelado em outro módulo (nenhuma
+    coleta de dado nova)."""
+
+    REUNIAO_PROXIMA = "reuniao_proxima"
+    TAREFA_PRAZO = "tarefa_prazo"
+    DOCUMENTO_VALIDADE = "documento_validade"
+    META_PRAZO = "meta_prazo"
+    RECADASTRAMENTO_CPL = "recadastramento_cpl"

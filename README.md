@@ -438,6 +438,42 @@ de propósito — esses campos só mudam via o fluxo de avaliação de
 maturidade (`POST /api/maturidade/avaliacoes/{id}/decidir`), pra não abrir
 um atalho em volta de RN-016. Demais papéis veem os dados em modo leitura.
 
+O bloco **Notificações** (RF-049) avisa sobre prazos e pendências que já
+existem em outros módulos — não introduz coleta de dado nova, só varre o
+que já está no banco:
+- `Notificacao` (`app/models/notificacao.py`) — uma linha por (usuário,
+  tipo, entidade), com `lida`/`lida_em` como único estado mutável, mesmo
+  padrão "log que só acumula" de `RegistroAuditoria`/`IndicadorValorHistorico`.
+- `app/services/notificacoes.py::gerar_notificacoes()` varre 5 fontes e
+  materializa o que for novo (idempotente — nunca duplica o mesmo aviso
+  pra o mesmo usuário, ver `_notificar`): reunião agendada nos próximos 7
+  dias (avisa os membros ativos do órgão), tarefa/meta com prazo
+  vencendo ou vencido (avisa o responsável), documento perdendo validade
+  (avisa quem criou), recadastramento de CPL vencendo em até 90 dias —
+  RN-005 (avisa os administradores da plataforma, reaproveitando
+  `cpls_com_vencimento_proximo()` já existente do módulo de Maturidade).
+  O recadastramento usa sua **própria** janela de 90 dias, independente
+  da janela de 7 dias dos outros 4 tipos (prazo operacional × alerta de
+  reconhecimento bienal são coisas de escala bem diferente — descoberto
+  só ao testar de ponta a ponta, ver HANDOFF).
+- **Sem agendador/worker** (sem Celery/cron neste stack): a varredura
+  roda **sob demanda**, sempre que `/painel/notificacoes` ou
+  `GET /api/notificacoes` é acessado — decisão deliberada pra não
+  introduzir infraestrutura nova só para isso; a lista fica "fresca o
+  suficiente" sem precisar de um processo em background.
+- "Enviar" é dentro do próprio sistema, não e-mail/push/SMS — não há
+  esse canal hoje, e o requisito não especifica um.
+- RBAC é por posse, não por papel: qualquer usuário autenticado só vê e
+  só marca como lida a própria notificação (`usuario_id` bate com o
+  usuário logado) — não existe um grupo de papéis pra isso, é dado
+  inerentemente pessoal.
+- Sem badge de não lidas na barra lateral (as outras seções também não
+  têm indicador equivalente — ex. Auditoria não mostra quantas entradas
+  novas existem); a contagem aparece só dentro de `/painel/notificacoes`
+  e via `GET /api/notificacoes/nao-lidas/contagem`. Recorte de escopo
+  deliberado pra não introduzir um context processor Jinja2 (mecanismo
+  não usado em nenhum outro lugar do projeto) só para isso.
+
 ## Como rodar localmente
 
 1. Suba o Postgres de desenvolvimento:
@@ -806,3 +842,8 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    não iniciado. "Simular cenários" (RF-026) e "habilitação jurídica"
    (RF-027) também ficaram de fora do que foi construído em Maturidade
    (ver seção do módulo acima).
+8. ~~Notificações automáticas (RF-049)~~ — **feito**: reunião próxima,
+   tarefa/meta com prazo vencendo, documento perdendo validade e
+   recadastramento de CPL vencendo — ver seção "Notificações" acima.
+   "Enviar" é só dentro do sistema (`/painel/notificacoes`), sem
+   e-mail/push; sem agendador — a varredura roda sob demanda.

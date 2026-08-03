@@ -267,7 +267,7 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 
 | ID | Requisito macro | Pri. | Status no repo |
 |---|---|---|---|
-| RF-049 | Enviar notificações de prazos, pendências, reuniões, tarefas, validade documental e metas. | M | ❌ Pendente |
+| RF-049 | Enviar notificações de prazos, pendências, reuniões, tarefas, validade documental e metas. | M | ✅ Implementado — `Notificacao` (`app/models/notificacao.py`) + `app/services/notificacoes.py::gerar_notificacoes()`, cobrindo as 5 fontes citadas: reunião agendada nos próximos 7 dias (aos membros ativos do órgão), tarefa/meta com prazo vencendo ou vencido (ao responsável), documento perdendo validade (a quem criou), e recadastramento de CPL vencendo em até 90 dias — RN-005 (aos administradores da plataforma). "Enviar" é dentro do próprio sistema (`/painel/notificacoes`, `GET /api/notificacoes`), não e-mail/push — não há esse canal hoje. Sem agendador/worker (sem Celery/cron neste stack): a varredura roda sob demanda, sempre que a tela/endpoint é acessado, idempotente (nunca duplica o mesmo aviso) |
 | RF-050 | Gerenciar eventos, capacitações, mentorias, missões técnicas, inscrições, presença e avaliação. | S | ❌ Pendente |
 
 ### Conhecimento

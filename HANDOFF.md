@@ -51,7 +51,7 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   `http://127.0.0.1:8010`** — confira com `netstat -ano | grep 8010` antes
   de subir outro, e mate o processo antigo antes de reiniciar (o servidor
   não usa `--reload`, então mudanças de código exigem restart manual).
-- **Migrações Alembic aplicadas:** 10 revisões, todas no banco atual:
+- **Migrações Alembic aplicadas:** 11 revisões, todas no banco atual:
   1. `18541dca0a36` — modelos base (CPL, Entidade, Pessoa, Usuário)
   2. `0ba4d1a10f9d` — módulo Governança
   3. `5dd913b79202` — módulo Planejamento Estratégico
@@ -70,8 +70,9 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
       sustentabilidade, contatos internacionais, certificações,
       digitalização) + tabela nova `diagnosticos_cadastrais_historico`
       (snapshot de empregos, pra "novos empregos" no RF-046)
-  - (a visão global + paginação da auditoria, feita antes desta, **não**
-    precisou de migração — é só query/rota/template novos)
+  11. `d1b19a7c50fc` — tabela `notificacoes` (RF-049)
+  - (a visão global + paginação da auditoria, feita antes da nº 10,
+    **não** precisou de migração — é só query/rota/template novos)
 
 ### Usuários de teste já existentes no banco
 
@@ -402,6 +403,58 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     texto/repr de PDF gerado por este código — sempre confirmar via
     imagem rasterizada ou renderização real**, mesma lição do gotcha do
     `python -c` com acento.
+17. **Notificações automáticas** (RF-049) — entre "fase 2" e "finalizar
+    fase 1", usuário deixou a escolha comigo via `AskUserQuestion`;
+    recomendei e ele confirmou RF-049 sobre RF-053 (exportação
+    XLSX/CSV), RF-055 (portal público) e o módulo de Projetos (Fase
+    2/3, maior escopo). Modelo novo `Notificacao`
+    (`app/models/notificacao.py`, tabela `notificacoes`) — mesmo padrão
+    "log que só acumula" de `RegistroAuditoria`, `lida`/`lida_em` como
+    único estado mutável, chave de deduplicação é (usuario_id, tipo,
+    entidade_id). Serviço novo, `app/services/notificacoes.py`, com uma
+    função por fonte (`_gerar_reunioes_proximas`,
+    `_gerar_tarefas_com_prazo`, `_gerar_documentos_com_validade`,
+    `_gerar_metas_com_prazo`, `_gerar_recadastramentos_proximos`) e um
+    orquestrador (`gerar_notificacoes()`) chamado por
+    `GET /api/notificacoes` e `/painel/notificacoes` — **sem
+    agendador/worker neste stack** (sem Celery/cron), a varredura roda
+    sob demanda a cada acesso à tela/endpoint, decisão deliberada pra
+    não introduzir infra nova só pra isso.
+    **Resolução de destinatário por fonte** (a parte não-trivial deste
+    módulo): reunião avisa os membros ativos do órgão (`MembroOrgao.
+    pessoa_id` → `Usuario.pessoa_id`, pulando pessoa sem conta), tarefa e
+    meta avisam o `responsavel_id` (mesma indireção pessoa→usuário),
+    documento avisa direto quem criou (`Documento.criado_por_id` já é um
+    `usuario_id`, sem indireção), e recadastramento de CPL avisa todos
+    os `ADMINISTRADOR_PLATAFORMA` (reaproveitando
+    `cpls_com_vencimento_proximo()` do módulo de Maturidade).
+    **Bug real pego só ao testar de ponta a ponta, não na leitura do
+    código**: a primeira versão passava a mesma janela curta (7 dias,
+    pensada pra prazo operacional de tarefa/reunião) também pro
+    recadastramento de CPL — que já tinha seu próprio padrão de 90 dias
+    estabelecido em `cpls_com_vencimento_proximo(dias: int = 90)` desde
+    a sessão de Maturidade. Só descobri criando um cenário de teste de
+    verdade (CPL com validade em 30 dias, dentro de 90 mas fora de 7) e
+    vendo a notificação **não aparecer** quando deveria — corrigido
+    desacoplando `_gerar_recadastramentos_proximos()` da `janela_dias`
+    do resto, sempre usando os 90 dias já convencionados. **Lição**:
+    "reaproveitar uma função que já existe" não é o mesmo que "reaproveitar
+    o parâmetro que a chama em outro contexto" — cada fonte de
+    notificação pode ter sua própria escala de tempo, testar com dado
+    real dentro/fora de cada janela teria pego isso mais cedo se eu
+    tivesse pensado nisso antes de escrever o código, não só depois.
+    UI: link novo "Notificações" na barra lateral, tela
+    `/painel/notificacoes` (lista + marcar uma/todas como lidas). Sem
+    badge de não-lidas na barra lateral — nenhuma outra seção tem
+    indicador equivalente, e adicionar um exigiria um mecanismo (context
+    processor Jinja2) não usado em nenhum outro lugar do projeto;
+    recorte de escopo deliberado, documentado no README. RBAC é só posse
+    (usuário só vê/marca a própria notificação), não papel — testado
+    tentando marcar a notificação de um usuário logado como outro,
+    `404` corretamente. Testado de ponta a ponta com fixtures reais
+    (reunião, tarefa, documento, meta, CPL) criadas e removidas via
+    script Python direto na sessão (não pela API), confirmando que cada
+    fonte notifica exatamente quem deveria e ninguém mais.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -653,6 +706,12 @@ ordem recomendada para o que vem depois:
    construído, só o cálculo real ao concluir a avaliação; validade/versão
    de evidência (RF-025) dependem do versionamento que `Documento` já tem,
    não algo modelado à parte para maturidade.
+10. ~~Notificações automáticas (RF-049)~~ — **feito**: reunião próxima,
+    tarefa/meta com prazo vencendo, documento perdendo validade e
+    recadastramento de CPL vencendo — ver item 17 da seção "Ordem em que
+    este projeto foi construído". Sem canal de e-mail/push (só dentro do
+    sistema) e sem agendador (varredura sob demanda) — ambos recortes de
+    escopo deliberados, não pendências.
 
 ## Deploy em produção
 
