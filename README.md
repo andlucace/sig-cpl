@@ -566,6 +566,25 @@ fundamental que ainda falta.
   ficar misturada com o preenchimento mais longo do plano de trabalho.
   Na API é o mesmo `PATCH /api/projetos/{id}` do portfólio (o schema
   `ProjetoUpdate` já inclui os campos novos).
+- **Etapas e cronograma** (RF-034, parcial) — `EtapaProjeto`, novo. RF-034
+  pede "etapas, atividades, cronograma, metas quantitativas e
+  qualitativas, resultados, indicadores, riscos e impactos
+  socioambientais" — um requisito grande demais pra uma fatia só, então
+  esta rodada cobre só a parte estrutural (etapas/atividades/cronograma),
+  a mais fundamental: metas/resultados/indicadores dependem de ter
+  etapas pra se referir, e riscos (também pedido com mais detalhe no
+  RF-040 — probabilidade, impacto, evidência de mitigação) e impactos
+  socioambientais ficaram de fora por decisão deliberada de não duplicar
+  um modelo simplificado agora. "Etapa" e "atividade" do requisito são
+  tratados como o mesmo nível — uma linha por etapa/atividade, sem
+  hierarquia de dois níveis — mesma simplificação já usada em
+  `TarefaGovernanca` (sem sub-tarefas). Cada etapa tem `data_inicio`/
+  `data_fim` previstos, `ordem` (auto-incrementada — sempre entra no fim
+  da lista, sem campo pro usuário gerenciar manualmente) e status
+  (`StatusTarefa`, reaproveitado, mesmo enum de tarefa/objetivo/meta).
+  `POST/GET /api/projetos/{id}/etapas`, `PATCH /api/projetos/etapas/{id}`
+  — UI com tabela de etapas + form de nova etapa + troca de status
+  inline, tudo na mesma tela de detalhe do projeto.
 - **Edital de fomento é um conceito diferente do `Edital` de
   maturidade** — o `Edital` que já existe (`app/models/maturidade.py`)
   guarda critérios/pesos/notas de corte pra avaliação de maturidade; o
@@ -592,9 +611,12 @@ fundamental que ainda falta.
   projeto aparece na tabela de portfólio; depois, preencher o plano de
   trabalho e confirmar que os campos persistem e recarregam corretos,
   sem interferir nos campos de portfólio salvos por outro form na mesma
-  página. RBAC testado confirmando que Conselho/Comitê lê mas não
-  escreve (403 ao tentar criar demanda ou editar plano de trabalho sem
-  o papel `GESTOR_PROJETO`).
+  página. Adicionadas 2 etapas com datas diferentes e confirmado que
+  aparecem na ordem certa (auto-incrementada) e que trocar o status de
+  uma via o `<select>` inline não afeta as outras. RBAC testado
+  confirmando que Conselho/Comitê lê mas não escreve (403 ao tentar
+  criar demanda, editar plano de trabalho ou criar etapa sem o papel
+  `GESTOR_PROJETO`).
 
 ## Como rodar localmente
 
@@ -966,15 +988,18 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    trabalho/financeiro do módulo de Projetos (item 7), ainda não
    construído.
 7. ~~Iniciar módulo de Projetos~~ — **fundação + plano de trabalho
-   básico feitos**: `DemandaProjeto` (RF-031), `Projeto`/portfólio
-   (RF-032) e informações básicas do plano de trabalho (RF-033) — ver
-   seção "Projetos" acima. Falta o resto do módulo (RF-029/030 e RF-034
-   a RF-041): edital de fomento com cronograma/recursos, etapas/
-   cronograma/metas/indicadores/riscos do plano de trabalho (RF-034),
-   equipe/aquisições/origem de recursos (RF-035), orçamento e cotações,
-   desembolsos/conciliação, execução física/financeira e prestação de
-   contas. "Simular cenários" (RF-026) e "habilitação jurídica"
-   (RF-027) também ficaram de fora do que foi construído em Maturidade
+   básico + etapas/cronograma feitos**: `DemandaProjeto` (RF-031),
+   `Projeto`/portfólio (RF-032), informações básicas do plano de
+   trabalho (RF-033) e `EtapaProjeto` com cronograma (RF-034, parcial)
+   — ver seção "Projetos" acima. Falta o resto do módulo (RF-029/030,
+   resto do RF-034 e RF-035 a RF-041): edital de fomento com
+   cronograma/recursos, metas quantitativas/qualitativas, resultados,
+   indicadores, riscos e impactos socioambientais do plano de trabalho
+   (resto do RF-034), equipe/aquisições/origem de recursos (RF-035),
+   orçamento e cotações, desembolsos/conciliação, execução física/
+   financeira e prestação de contas. "Simular cenários" (RF-026) e
+   "habilitação jurídica" (RF-027) também ficaram de fora do que foi
+   construído em Maturidade
    (ver seção do módulo acima).
 8. ~~Notificações automáticas (RF-049)~~ — **feito**: reunião próxima,
    tarefa/meta com prazo vencendo, documento perdendo validade e

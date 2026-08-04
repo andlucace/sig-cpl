@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -13,10 +14,11 @@ from app.models.enums import (
     OrigemDemanda,
     PrioridadeProjeto,
     StatusDemanda,
+    StatusTarefa,
 )
 from app.models.pessoa import Pessoa
 from app.models.planejamento import ObjetivoEstrategico, PlanejamentoEstrategico
-from app.models.projeto import DemandaProjeto, Projeto
+from app.models.projeto import DemandaProjeto, EtapaProjeto, Projeto
 from app.models.usuario import Usuario
 from app.web.templates import templates
 
@@ -246,6 +248,12 @@ def detalhe_projeto(
     verificar_papel(db, usuario, PAPEIS_PROJETO_LEITURA, cpl_id=projeto.cpl_id)
     cpl = db.get(CPL, projeto.cpl_id)
     pessoas, objetivos = _pessoas_e_objetivos(db, projeto.cpl_id)
+    etapas = (
+        db.query(EtapaProjeto)
+        .filter(EtapaProjeto.projeto_id == projeto_id)
+        .order_by(EtapaProjeto.ordem)
+        .all()
+    )
     return templates.TemplateResponse(
         request,
         "restrito/projetos/projeto_detail.html",
@@ -256,6 +264,8 @@ def detalhe_projeto(
             "prioridades": list(PrioridadeProjeto),
             "pessoas": pessoas,
             "objetivos": objetivos,
+            "etapas": etapas,
+            "status_opcoes": list(StatusTarefa),
             "usuario": usuario,
             "pagina_ativa": "projetos",
         },
@@ -320,3 +330,54 @@ def atualizar_plano_de_trabalho(
     projeto.impactos = impactos or None
     db.commit()
     return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{projeto_id}/etapas")
+def criar_etapa(
+    projeto_id: uuid.UUID,
+    titulo: str = Form(...),
+    descricao: str | None = Form(None),
+    data_inicio: str | None = Form(None),
+    data_fim: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-034: etapa (ou atividade — mesmo nível) do plano de trabalho,
+    com cronograma previsto. Entra no fim da lista."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    projeto = db.get(Projeto, projeto_id)
+    if projeto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    maior_ordem = db.query(EtapaProjeto).filter(EtapaProjeto.projeto_id == projeto_id).count()
+    etapa = EtapaProjeto(
+        projeto_id=projeto_id,
+        titulo=titulo,
+        descricao=descricao or None,
+        ordem=maior_ordem,
+        data_inicio=date.fromisoformat(data_inicio) if data_inicio else None,
+        data_fim=date.fromisoformat(data_fim) if data_fim else None,
+    )
+    db.add(etapa)
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/etapas/{etapa_id}/status")
+def atualizar_status_etapa(
+    etapa_id: uuid.UUID,
+    status_etapa: StatusTarefa = Form(..., alias="status"),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    etapa = db.get(EtapaProjeto, etapa_id)
+    if etapa is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Etapa de projeto não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=etapa.projeto.cpl_id)
+    etapa.status = status_etapa
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{etapa.projeto_id}", status_code=status.HTTP_303_SEE_OTHER)

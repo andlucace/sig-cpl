@@ -8,11 +8,14 @@ from app.core.rbac import PAPEIS_PROJETO_GESTAO, PAPEIS_PROJETO_LEITURA, verific
 from app.db.session import get_db
 from app.models.cpl import CPL
 from app.models.enums import StatusDemanda
-from app.models.projeto import DemandaProjeto, Projeto
+from app.models.projeto import DemandaProjeto, EtapaProjeto, Projeto
 from app.models.usuario import Usuario
 from app.schemas.projeto import (
     DemandaProjetoCreate,
     DemandaProjetoRead,
+    EtapaProjetoCreate,
+    EtapaProjetoRead,
+    EtapaProjetoUpdate,
     ProjetoCreate,
     ProjetoRead,
     ProjetoUpdate,
@@ -40,6 +43,13 @@ def _get_projeto_or_404(db: Session, projeto_id: uuid.UUID) -> Projeto:
     if projeto is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
     return projeto
+
+
+def _get_etapa_or_404(db: Session, etapa_id: uuid.UUID) -> EtapaProjeto:
+    etapa = db.get(EtapaProjeto, etapa_id)
+    if etapa is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Etapa de projeto não encontrada.")
+    return etapa
 
 
 # --- Demandas (RF-031) -------------------------------------------------------
@@ -185,3 +195,65 @@ def atualizar_projeto(
     db.commit()
     db.refresh(projeto)
     return projeto
+
+
+# --- Etapas do plano de trabalho (RF-034) -----------------------------------
+
+
+@router.post(
+    "/{projeto_id}/etapas", response_model=EtapaProjetoRead, status_code=status.HTTP_201_CREATED
+)
+def criar_etapa(
+    projeto_id: uuid.UUID,
+    dados: EtapaProjetoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> EtapaProjeto:
+    """RF-034: etapa (ou atividade — mesmo nível, ver docstring do
+    modelo) do plano de trabalho, com cronograma previsto. Entra no
+    fim da lista (maior `ordem` + 1)."""
+
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    maior_ordem = (
+        db.query(EtapaProjeto)
+        .filter(EtapaProjeto.projeto_id == projeto_id)
+        .count()
+    )
+    etapa = EtapaProjeto(projeto_id=projeto_id, ordem=maior_ordem, **dados.model_dump())
+    db.add(etapa)
+    db.commit()
+    db.refresh(etapa)
+    return etapa
+
+
+@router.get("/{projeto_id}/etapas", response_model=list[EtapaProjetoRead])
+def listar_etapas(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[EtapaProjeto]:
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_LEITURA, cpl_id=projeto.cpl_id)
+    return (
+        db.query(EtapaProjeto)
+        .filter(EtapaProjeto.projeto_id == projeto_id)
+        .order_by(EtapaProjeto.ordem)
+        .all()
+    )
+
+
+@router.patch("/etapas/{etapa_id}", response_model=EtapaProjetoRead)
+def atualizar_etapa(
+    etapa_id: uuid.UUID,
+    dados: EtapaProjetoUpdate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> EtapaProjeto:
+    etapa = _get_etapa_or_404(db, etapa_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=etapa.projeto.cpl_id)
+    for campo, valor in dados.model_dump(exclude_unset=True).items():
+        setattr(etapa, campo, valor)
+    db.commit()
+    db.refresh(etapa)
+    return etapa

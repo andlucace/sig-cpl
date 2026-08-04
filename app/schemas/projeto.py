@@ -1,9 +1,9 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.enums import EstagioProjeto, OrigemDemanda, PrioridadeProjeto, StatusDemanda
+from app.models.enums import EstagioProjeto, OrigemDemanda, PrioridadeProjeto, StatusDemanda, StatusTarefa
 
 # Demanda de projeto (RF-031)
 
@@ -81,4 +81,37 @@ class ProjetoRead(BaseModel):
     objetivos: str | None
     justificativa: str | None
     impactos: str | None
+    created_at: datetime
+
+
+# Etapas do plano de trabalho (RF-034)
+
+
+class EtapaProjetoCreate(BaseModel):
+    titulo: str
+    descricao: str | None = None
+    data_inicio: date | None = None
+    data_fim: date | None = None
+
+
+class EtapaProjetoUpdate(BaseModel):
+    titulo: str | None = None
+    descricao: str | None = None
+    ordem: int | None = None
+    data_inicio: date | None = None
+    data_fim: date | None = None
+    status: StatusTarefa | None = None
+
+
+class EtapaProjetoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    projeto_id: uuid.UUID
+    titulo: str
+    descricao: str | None
+    ordem: int
+    data_inicio: date | None
+    data_fim: date | None
+    status: StatusTarefa
     created_at: datetime

@@ -51,7 +51,7 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   `http://127.0.0.1:8010`** — confira com `netstat -ano | grep 8010` antes
   de subir outro, e mate o processo antigo antes de reiniciar (o servidor
   não usa `--reload`, então mudanças de código exigem restart manual).
-- **Migrações Alembic aplicadas:** 13 revisões, todas no banco atual:
+- **Migrações Alembic aplicadas:** 14 revisões, todas no banco atual:
   1. `18541dca0a36` — modelos base (CPL, Entidade, Pessoa, Usuário)
   2. `0ba4d1a10f9d` — módulo Governança
   3. `5dd913b79202` — módulo Planejamento Estratégico
@@ -76,6 +76,9 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
       portfólio)
   13. `55267d31bbca` — plano de trabalho básico do projeto (RF-033:
       `introducao`, `objeto`, `objetivos`, `justificativa`, `impactos`)
+  14. `336459855cb9` — tabela `etapas_projeto` (RF-034 parcial: etapas/
+      atividades com cronograma) — precisou de ajuste manual (enum
+      `statustarefa` reaproveitado, ver gotcha novo abaixo)
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos)
 
@@ -641,6 +644,43 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     campos são `Text` nullable, sem `server_default` necessário (só
     populado quando editado, mesmo padrão dos vários outros campos
     opcionais adicionados a tabelas já existentes nesta sessão).
+22. **Etapas e cronograma do projeto** (RF-034, parcial) — usuário disse
+    "seguir para implementar a RF-034". RF-034 pede etapas, atividades,
+    cronograma, metas quanti/qualitativas, resultados, indicadores,
+    riscos e impactos socioambientais — grande demais pra uma fatia só
+    (o mesmo raciocínio já aplicado a RF-032/033/RF-048/RF-045). Decidi
+    sozinho e expliquei depois (mesmo padrão dos itens 19/21 — decisão
+    de sequenciamento dentro de um módulo já aprovado): construí só
+    "etapas/atividades/cronograma", a camada estrutural que todo o
+    resto (metas, resultados, indicadores) precisaria referenciar de
+    qualquer forma. Deixei riscos de fora deliberadamente mesmo sendo
+    citado no RF-034 — o RF-040 (Execução) pede risco com muito mais
+    detalhe (probabilidade, impacto, evidência de mitigação), e criar
+    um modelo simplificado agora só pra depois trocar por um mais
+    completo pareceu pior que não ter nada ainda.
+    Modelo novo `EtapaProjeto` — "etapa" e "atividade" tratadas como o
+    mesmo nível (sem hierarquia de dois níveis), mesma simplificação já
+    usada em `TarefaGovernanca`. `ordem` é auto-incrementada no
+    servidor (conta quantas etapas já existem pro projeto e usa esse
+    número) — decisão deliberada de não expor um campo de ordem manual
+    no formulário, mais uma fonte de erro de usuário do que valor.
+    **Gotcha que já era conhecido e aconteceu de novo, mesmo assim**:
+    rodei `alembic upgrade head` sem revisar o autogenerate primeiro
+    (confiança excessiva depois de várias migrações seguidas darem
+    certo sem ajuste manual) e caiu exatamente no gotcha já documentado
+    — `sa.Enum('PENDENTE', ...)` dentro de `create_table` tentando
+    `CREATE TYPE statustarefa`, que já existe desde o módulo de
+    Governança. Erro real do Postgres
+    (`DuplicateObject: type "statustarefa" already exists`), rollback
+    limpo (DDL transacional — `alembic current` continuou na revisão
+    anterior, tabela não ficou pela metade), corrigido trocando pra
+    `postgresql.ENUM(..., create_type=False)` e reaplicado com sucesso.
+    **Reforça a lição, de novo**: **sempre** revisar o arquivo de
+    migração autogerado antes de rodar `upgrade head`, procurando por
+    `sa.Enum(...)` — não só quando "parece" que pode ser um enum
+    reaproveitado, porque mesmo sabendo do gotcha eu ainda deixei passar
+    dessa vez. Considerar até grepar `sa.Enum(` no diff da migração como
+    parte do fluxo padrão antes de aplicar, em vez de confiar na memória.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -670,6 +710,14 @@ só porque é um módulo novo).
    `alembic/versions/5dd913b79202_*.py` como exemplo de correção já feita.
    **Sempre rode `alembic upgrade head` logo após gerar uma migração nova
    com enums reaproveitados** e cheque o traceback antes de assumir sucesso.
+   **Aconteceu de novo em `336459855cb9`** (etapas de projeto, RF-034,
+   reaproveitando `StatusTarefa`) mesmo já documentado — confiança
+   excessiva depois de várias migrações seguidas sem precisar de ajuste
+   manual. Rollback foi limpo (DDL transacional), mas o ideal é nunca
+   deixar acontecer: **grep `sa.Enum(` no arquivo de migração gerado
+   antes de rodar `upgrade head`**, todas as vezes, não só quando "acha
+   que" o enum é reaproveitado — é fácil esquecer justamente quando
+   parece rotina.
 3. **Portas ocupadas por outros projetos do usuário** — o usuário tem outro
    projeto (`rh-nepen`) rodando via Docker que ocupa a porta 5432 (Postgres)
    e 8000 (backend). Por isso este projeto usa 5433 e (nas sessões de teste)
@@ -856,16 +904,19 @@ ordem recomendada para o que vem depois:
    `app/services/geracao_documentos.py` já procurava desde antes, então
    nenhum código mudou.
 5. ~~Iniciar módulo de Projetos~~ — **fundação + plano de trabalho
-   básico feitos** (itens 20 e 21 da seção "Ordem em que este projeto
-   foi construído"): `DemandaProjeto` (RF-031), `Projeto`/portfólio
-   (RF-032) e informações básicas do plano de trabalho (RF-033), em
-   `/painel/projetos`. Segue pendente, sem relação com este trabalho:
-   edital de fomento com cronograma/recursos (RF-029/030), etapas/
-   cronograma/metas/indicadores/riscos (RF-034), equipe/aquisições/
-   recursos (RF-035), orçamento/cotações/desembolsos (RF-036 a
-   RF-038), execução física/financeira (RF-039/040) e prestação de
-   contas (RF-041) — "relatório de projeto" (RF-048) e o restante da
-   Fase 2 dependem desses.
+   básico + etapas/cronograma feitos** (itens 20, 21 e 22 da seção
+   "Ordem em que este projeto foi construído"): `DemandaProjeto`
+   (RF-031), `Projeto`/portfólio (RF-032), informações básicas do plano
+   de trabalho (RF-033) e `EtapaProjeto` com cronograma (RF-034,
+   parcial), em `/painel/projetos`. Segue pendente, sem relação com
+   este trabalho: edital de fomento com cronograma/recursos
+   (RF-029/030), metas/resultados/indicadores/riscos/impactos
+   socioambientais (resto do RF-034 — riscos em particular fica pro
+   RF-040, que pede mais detalhe), equipe/aquisições/recursos
+   (RF-035), orçamento/cotações/desembolsos (RF-036 a RF-038), execução
+   física/financeira (RF-039/040) e prestação de contas (RF-041) —
+   "relatório de projeto" (RF-048) e o restante da Fase 2 dependem
+   desses.
 6. ~~Deploy na VPS Hostinger~~ — **feito nesta sessão** (numa sessão
    anterior a esta), ver seção "Deploy em produção" abaixo para todos os
    detalhes (como foi feito, segredos, como reimplantar).

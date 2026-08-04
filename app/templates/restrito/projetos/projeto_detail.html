@@ -81,8 +81,8 @@
         </div>
         <div class="card-body">
             <p class="text-body-secondary small">
-                Etapas, cronograma, metas, indicadores, equipe e orçamento detalhados ainda
-                não fazem parte deste módulo (RF-034/035).
+                Metas, resultados, indicadores, riscos, impactos socioambientais (RF-034),
+                equipe e orçamento detalhados (RF-035) ainda não fazem parte deste módulo.
             </p>
             <form method="post" action="/painel/projetos/{{ projeto.id }}/plano-de-trabalho">
                 <div class="mb-3">
@@ -109,6 +109,92 @@
                     <i class="bi bi-check-lg me-1"></i>Salvar plano de trabalho
                 </button>
             </form>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-list-ol me-2"></i>Etapas
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Etapa</th>
+                                <th>Início</th>
+                                <th>Fim</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for etapa in etapas %}
+                                <tr>
+                                    <td>
+                                        {{ etapa.titulo }}
+                                        {% if etapa.descricao %}<div class="text-body-secondary small">{{ etapa.descricao }}</div>{% endif %}
+                                    </td>
+                                    <td class="small">{{ etapa.data_inicio.strftime('%d/%m/%Y') if etapa.data_inicio else "—" }}</td>
+                                    <td class="small">{{ etapa.data_fim.strftime('%d/%m/%Y') if etapa.data_fim else "—" }}</td>
+                                    <td>
+                                        <span class="badge {% if etapa.status.value == 'concluida' %}text-bg-success{% elif etapa.status.value in ['atrasada', 'cancelada'] %}text-bg-danger{% else %}text-bg-info{% endif %}">
+                                            {{ etapa.status.value.replace('_', ' ') }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <form method="post" action="/painel/projetos/etapas/{{ etapa.id }}/status" class="d-flex gap-1">
+                                            <select class="form-select form-select-sm" name="status" style="width: auto;">
+                                                {% for s in status_opcoes %}
+                                                    <option value="{{ s.value }}" {% if s == etapa.status %}selected{% endif %}>{{ s.value.replace('_', ' ') }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                <i class="bi bi-check-lg"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="5" class="text-body-secondary">Nenhuma etapa cadastrada ainda.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Nova etapa
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/painel/projetos/{{ projeto.id }}/etapas">
+                        <div class="mb-3">
+                            <label class="form-label">Título</label>
+                            <input type="text" class="form-control" name="titulo" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="2"></textarea>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label">Início previsto</label>
+                                <input type="date" class="form-control" name="data_inicio">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Fim previsto</label>
+                                <input type="date" class="form-control" name="data_fim">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mt-3">
+                            <i class="bi bi-plus-lg me-1"></i>Adicionar etapa
+                        </button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 {% endblock %}

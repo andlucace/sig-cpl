@@ -1,11 +1,12 @@
 import uuid
+from datetime import date
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import Date, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import TimestampedBase
-from app.models.enums import EstagioProjeto, OrigemDemanda, PrioridadeProjeto, StatusDemanda
+from app.models.enums import EstagioProjeto, OrigemDemanda, PrioridadeProjeto, StatusDemanda, StatusTarefa
 
 
 class DemandaProjeto(TimestampedBase):
@@ -72,3 +73,31 @@ class Projeto(TimestampedBase):
     demanda_origem: Mapped["DemandaProjeto | None"] = relationship(back_populates="projeto")
     responsavel: Mapped["Pessoa | None"] = relationship()
     objetivo_estrategico: Mapped["ObjetivoEstrategico | None"] = relationship()
+    etapas: Mapped[list["EtapaProjeto"]] = relationship(
+        back_populates="projeto", order_by="EtapaProjeto.ordem"
+    )
+
+
+class EtapaProjeto(TimestampedBase):
+    """RF-034: etapa (com atividades) do plano de trabalho — cronograma
+    previsto (`data_inicio`/`data_fim`) e status de execução. "Etapas" e
+    "atividades" do requisito são tratadas como o mesmo nível — uma
+    linha por etapa/atividade, sem hierarquia de dois níveis — mesma
+    simplificação já usada em `TarefaGovernanca` (sem sub-tarefas).
+    Metas quantitativas/qualitativas, resultados, indicadores, riscos e
+    impactos socioambientais (resto do RF-034) ficam para uma próxima
+    fatia; riscos em particular também é pedido de novo no RF-040
+    (Execução) com mais detalhe (probabilidade/impacto/evidência de
+    mitigação) — melhor não duplicar um modelo simplificado agora."""
+
+    __tablename__ = "etapas_projeto"
+
+    projeto_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projetos.id"), nullable=False)
+    titulo: Mapped[str] = mapped_column(String(255), nullable=False)
+    descricao: Mapped[str | None] = mapped_column(Text)
+    ordem: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    data_inicio: Mapped[date | None] = mapped_column(Date)
+    data_fim: Mapped[date | None] = mapped_column(Date)
+    status: Mapped[StatusTarefa] = mapped_column(default=StatusTarefa.PENDENTE, nullable=False)
+
+    projeto: Mapped["Projeto"] = relationship(back_populates="etapas")
