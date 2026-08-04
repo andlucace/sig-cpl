@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -57,6 +58,8 @@ class ProjetoCreate(BaseModel):
     justificativa: str | None = None
     impactos: str | None = None
     impactos_socioambientais: str | None = None
+    continuidade: str | None = None
+    escalabilidade: str | None = None
 
 
 class ProjetoUpdate(BaseModel):
@@ -73,6 +76,8 @@ class ProjetoUpdate(BaseModel):
     justificativa: str | None = None
     impactos: str | None = None
     impactos_socioambientais: str | None = None
+    continuidade: str | None = None
+    escalabilidade: str | None = None
 
 
 class ProjetoRead(BaseModel):
@@ -94,6 +99,8 @@ class ProjetoRead(BaseModel):
     justificativa: str | None
     impactos: str | None
     impactos_socioambientais: str | None
+    continuidade: str | None
+    escalabilidade: str | None
     created_at: datetime
 
 
@@ -228,4 +235,62 @@ class RiscoProjetoRead(BaseModel):
     resposta: str | None
     responsavel_id: uuid.UUID | None
     status: StatusRisco
+    created_at: datetime
+
+
+# Equipe do projeto (RF-035)
+
+
+class EquipeProjetoCreate(BaseModel):
+    pessoa_id: uuid.UUID
+    funcao: str
+    data_inicio: date
+    data_fim: date | None = None
+
+
+class EquipeProjetoUpdate(BaseModel):
+    funcao: str | None = None
+    data_fim: date | None = None
+    ativo: bool | None = None
+
+
+class EquipeProjetoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    projeto_id: uuid.UUID
+    pessoa_id: uuid.UUID
+    funcao: str
+    data_inicio: date
+    data_fim: date | None
+    ativo: bool
+    created_at: datetime
+
+
+# Origem dos recursos do projeto (RF-035)
+
+
+class OrigemRecursoProjetoCreate(BaseModel):
+    fonte: str
+    valor: Decimal
+    contrapartida: bool = False
+    descricao: str | None = None
+
+
+class OrigemRecursoProjetoUpdate(BaseModel):
+    fonte: str | None = None
+    valor: Decimal | None = None
+    contrapartida: bool | None = None
+    descricao: str | None = None
+
+
+class OrigemRecursoProjetoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    projeto_id: uuid.UUID
+    fonte: str
+    valor: Decimal
+    contrapartida: bool
+    descricao: str | None
     created_at: datetime

@@ -8,11 +8,23 @@ from app.core.rbac import PAPEIS_PROJETO_GESTAO, PAPEIS_PROJETO_LEITURA, verific
 from app.db.session import get_db
 from app.models.cpl import CPL
 from app.models.enums import StatusDemanda
-from app.models.projeto import DemandaProjeto, EtapaProjeto, IndicadorProjeto, MetaProjeto, Projeto, RiscoProjeto
+from app.models.projeto import (
+    DemandaProjeto,
+    EquipeProjeto,
+    EtapaProjeto,
+    IndicadorProjeto,
+    MetaProjeto,
+    OrigemRecursoProjeto,
+    Projeto,
+    RiscoProjeto,
+)
 from app.models.usuario import Usuario
 from app.schemas.projeto import (
     DemandaProjetoCreate,
     DemandaProjetoRead,
+    EquipeProjetoCreate,
+    EquipeProjetoRead,
+    EquipeProjetoUpdate,
     EtapaProjetoCreate,
     EtapaProjetoRead,
     EtapaProjetoUpdate,
@@ -22,6 +34,9 @@ from app.schemas.projeto import (
     MetaProjetoCreate,
     MetaProjetoRead,
     MetaProjetoUpdate,
+    OrigemRecursoProjetoCreate,
+    OrigemRecursoProjetoRead,
+    OrigemRecursoProjetoUpdate,
     ProjetoCreate,
     ProjetoRead,
     ProjetoUpdate,
@@ -80,6 +95,20 @@ def _get_risco_or_404(db: Session, risco_id: uuid.UUID) -> RiscoProjeto:
     if risco is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Risco de projeto não encontrado.")
     return risco
+
+
+def _get_membro_equipe_or_404(db: Session, membro_id: uuid.UUID) -> EquipeProjeto:
+    membro = db.get(EquipeProjeto, membro_id)
+    if membro is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Membro de equipe do projeto não encontrado.")
+    return membro
+
+
+def _get_origem_recurso_or_404(db: Session, origem_id: uuid.UUID) -> OrigemRecursoProjeto:
+    origem = db.get(OrigemRecursoProjeto, origem_id)
+    if origem is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Origem de recurso do projeto não encontrada.")
+    return origem
 
 
 # --- Demandas (RF-031) -------------------------------------------------------
@@ -449,3 +478,115 @@ def atualizar_risco(
     db.commit()
     db.refresh(risco)
     return risco
+
+
+# --- Equipe do projeto (RF-035) ---------------------------------------------
+
+
+@router.post("/{projeto_id}/equipe", response_model=EquipeProjetoRead, status_code=status.HTTP_201_CREATED)
+def adicionar_membro_equipe(
+    projeto_id: uuid.UUID,
+    dados: EquipeProjetoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> EquipeProjeto:
+    """RF-035: adiciona uma pessoa à equipe do projeto, com função e
+    vigência — mesmo padrão de `MembroOrgao` (RF-016)."""
+
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    membro = EquipeProjeto(projeto_id=projeto_id, **dados.model_dump())
+    db.add(membro)
+    db.commit()
+    db.refresh(membro)
+    return membro
+
+
+@router.get("/{projeto_id}/equipe", response_model=list[EquipeProjetoRead])
+def listar_equipe(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[EquipeProjeto]:
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_LEITURA, cpl_id=projeto.cpl_id)
+    return (
+        db.query(EquipeProjeto)
+        .filter(EquipeProjeto.projeto_id == projeto_id)
+        .order_by(EquipeProjeto.created_at)
+        .all()
+    )
+
+
+@router.patch("/equipe/{membro_id}", response_model=EquipeProjetoRead)
+def atualizar_membro_equipe(
+    membro_id: uuid.UUID,
+    dados: EquipeProjetoUpdate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> EquipeProjeto:
+    membro = _get_membro_equipe_or_404(db, membro_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=membro.projeto.cpl_id)
+    for campo, valor in dados.model_dump(exclude_unset=True).items():
+        setattr(membro, campo, valor)
+    db.commit()
+    db.refresh(membro)
+    return membro
+
+
+# --- Origem dos recursos do projeto (RF-035) --------------------------------
+
+
+@router.post(
+    "/{projeto_id}/origens-recurso",
+    response_model=OrigemRecursoProjetoRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def criar_origem_recurso(
+    projeto_id: uuid.UUID,
+    dados: OrigemRecursoProjetoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> OrigemRecursoProjeto:
+    """RF-035: registra uma fonte de recursos do projeto (própria, edital,
+    parceria etc.) e o valor previsto."""
+
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    origem = OrigemRecursoProjeto(projeto_id=projeto_id, **dados.model_dump())
+    db.add(origem)
+    db.commit()
+    db.refresh(origem)
+    return origem
+
+
+@router.get("/{projeto_id}/origens-recurso", response_model=list[OrigemRecursoProjetoRead])
+def listar_origens_recurso(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[OrigemRecursoProjeto]:
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_LEITURA, cpl_id=projeto.cpl_id)
+    return (
+        db.query(OrigemRecursoProjeto)
+        .filter(OrigemRecursoProjeto.projeto_id == projeto_id)
+        .order_by(OrigemRecursoProjeto.created_at)
+        .all()
+    )
+
+
+@router.patch("/origens-recurso/{origem_id}", response_model=OrigemRecursoProjetoRead)
+def atualizar_origem_recurso(
+    origem_id: uuid.UUID,
+    dados: OrigemRecursoProjetoUpdate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> OrigemRecursoProjeto:
+    origem = _get_origem_recurso_or_404(db, origem_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=origem.projeto.cpl_id)
+    for campo, valor in dados.model_dump(exclude_unset=True).items():
+        setattr(origem, campo, valor)
+    db.commit()
+    db.refresh(origem)
+    return origem

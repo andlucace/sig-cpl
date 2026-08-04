@@ -525,11 +525,13 @@ que já está no banco:
   deliberado pra não introduzir um context processor Jinja2 (mecanismo
   não usado em nenhum outro lugar do projeto) só para isso.
 
-O bloco **Projetos** (RF-031 a RF-034) cobre a **fundação** do módulo de
+O bloco **Projetos** (RF-031 a RF-035) cobre a **fundação** do módulo de
 Projetos e Fomento (demanda/oportunidade → conversão em projeto →
 portfólio → plano de trabalho) **completa**, incluindo o RF-034 inteiro
-(etapas/cronograma, metas, indicadores, riscos, impactos socioambientais).
-Equipe/aquisições/recursos (RF-035), financeiro (RF-036 a RF-038),
+(etapas/cronograma, metas, indicadores, riscos, impactos socioambientais)
+e a fundação do RF-035 (continuidade, escalabilidade, equipe, origem dos
+recursos). Edital de fomento (RF-029/030), aquisições e cronograma
+físico-financeiro (resto do RF-035), financeiro (RF-036 a RF-038),
 execução (RF-039/040) e prestação de contas (RF-041) **não** fazem parte
 desta fatia — o módulo completo tem 13 requisitos em 6 sub-áreas (editais,
 demandas/portfólio, plano de trabalho, financeiro, execução, prestação de
@@ -608,6 +610,37 @@ sessão a sessão, sempre a camada mais fundamental que ainda falta.
   - UI: tabela + form de criação + atualização inline pra cada um dos
     três recursos (metas/indicadores/riscos), no mesmo padrão visual das
     etapas, tudo na mesma tela de detalhe do projeto.
+- **RF-035, fundação** — "continuidade, escalabilidade, equipe,
+  aquisições, origem dos recursos e cronograma físico-financeiro", de
+  novo grande demais pra uma fatia só.
+  - **Continuidade e escalabilidade** — campos `Text` a mais em
+    `Projeto`, mesmo padrão narrativo do RF-033/034, no mesmo form de
+    plano de trabalho.
+  - **Equipe** — `EquipeProjeto`: pessoa, função (texto livre — funções
+    variam demais entre projetos pra caber num enum fechado, mesmo
+    raciocínio de `eixo_sp_produz`) e vigência (`data_inicio`/
+    `data_fim`, `ativo`) — mirror exato de `MembroOrgao` (RF-016). Não
+    reaproveita `PessoaVinculo` (RF-007): aquele é sobre papel de acesso
+    numa entidade/CPL, um conceito diferente de "função exercida neste
+    projeto". `POST/GET /api/projetos/{id}/equipe`,
+    `PATCH /api/projetos/equipe/{id}`.
+  - **Origem dos recursos** — `OrigemRecursoProjeto`: fonte (texto
+    livre — recursos próprios, edital, parceria etc., sem lista fechada
+    no documento), valor previsto e se exige contrapartida. **Primeiro
+    campo monetário do sistema** — `Numeric(14, 2)`/`Decimal` de
+    verdade, diferente do `valor_alvo` textual de `MetaProjeto` (que
+    aceita metas não-numéricas). `POST/GET /api/projetos/{id}/origens-recurso`,
+    `PATCH /api/projetos/origens-recurso/{id}`.
+  - **Aquisições e cronograma físico-financeiro ficaram de fora
+    deliberadamente**: aquisições se sobrepõe ao RF-037 (cotações/
+    pesquisa de preço), e cronograma físico-financeiro é essencialmente
+    as etapas do RF-034 cruzadas com valores financeiros por etapa, que
+    só faz sentido depois que o RF-036 (itens de despesa) existir —
+    mesmo raciocínio já usado pra riscos no RF-034 (não duplicar um
+    modelo simplificado que logo seria substituído).
+  - UI: tabela + form de criação (e "encerrar" pra equipe) pra cada
+    recurso, mesmo padrão visual das seções anteriores, na mesma tela de
+    detalhe do projeto.
 - **Edital de fomento é um conceito diferente do `Edital` de
   maturidade** — o `Edital` que já existe (`app/models/maturidade.py`)
   guarda critérios/pesos/notas de corte pra avaliação de maturidade; o
@@ -1011,17 +1044,19 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    trabalho/financeiro do módulo de Projetos (item 7), ainda não
    construído.
 7. ~~Iniciar módulo de Projetos~~ — **fundação + plano de trabalho +
-   RF-034 completo feitos**: `DemandaProjeto` (RF-031), `Projeto`/
-   portfólio (RF-032), plano de trabalho (RF-033/034) e RF-034 completo
-   (`EtapaProjeto`, `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`) —
-   ver seção "Projetos" acima. Falta o resto do módulo (RF-029/030 e
-   RF-035 a RF-041): edital de fomento com cronograma/recursos,
-   equipe/aquisições/origem de recursos (RF-035), orçamento e cotações,
-   desembolsos/conciliação, execução física/financeira (RF-039/040 —
-   deve reaproveitar `RiscoProjeto`/`StatusRisco`, não duplicar) e
-   prestação de contas. "Simular cenários" (RF-026) e "habilitação
-   jurídica" (RF-027) também ficaram de fora do que foi construído em
-   Maturidade (ver seção do módulo acima).
+   RF-034 completo + RF-035 (fundação) feitos**: `DemandaProjeto`
+   (RF-031), `Projeto`/portfólio (RF-032), plano de trabalho completo
+   (RF-033/034/035), RF-034 completo (`EtapaProjeto`, `MetaProjeto`,
+   `IndicadorProjeto`, `RiscoProjeto`) e RF-035 fundação (`EquipeProjeto`,
+   `OrigemRecursoProjeto`) — ver seção "Projetos" acima. Falta o resto do
+   módulo (RF-029/030 e resto do RF-035 a RF-041): edital de fomento com
+   cronograma/recursos, aquisições e cronograma físico-financeiro (resto
+   do RF-035), orçamento e cotações, desembolsos/conciliação, execução
+   física/financeira (RF-039/040 — deve reaproveitar
+   `RiscoProjeto`/`StatusRisco`, não duplicar) e prestação de contas.
+   "Simular cenários" (RF-026) e "habilitação jurídica" (RF-027) também
+   ficaram de fora do que foi construído em Maturidade (ver seção do
+   módulo acima).
 8. ~~Notificações automáticas (RF-049)~~ — **feito**: reunião próxima,
    tarefa/meta com prazo vencendo, documento perdendo validade e
    recadastramento de CPL vencendo — ver seção "Notificações" acima.

@@ -83,6 +83,10 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
       `riscos_projeto` + coluna `projetos.impactos_socioambientais`
       (finalização do RF-034) — de novo precisou de ajuste manual
       (`metas_projeto.status` reaproveita `statustarefa`)
+  16. `d798be587a1c` — tabelas `equipe_projeto`, `origens_recurso_projeto`
+      + colunas `projetos.continuidade`/`escalabilidade` (RF-035,
+      fundação) — sem enum reaproveitado desta vez, aplicada sem ajuste
+      manual
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos)
 
@@ -716,6 +720,43 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     `projeto_rf034_final_shot.js` no diretório de scratch de screenshots,
     padrão do item 4 de "Armadilhas já resolvidas"), sem erros de
     console nem 500 reais no log do servidor local.
+24. **RF-035, fundação** (continuidade, escalabilidade, equipe, origem
+    dos recursos) — usuário disse "seguir com a implementação dos
+    próximos requisitos recomendados", uma continuação genérica sem
+    apontar um requisito específico. Decidi sozinho, sem perguntar: o
+    RF-035 era o próximo item explicitamente listado como "falta" logo
+    após a finalização do RF-034 (mesmo raciocínio de sequenciamento já
+    usado nos itens 19/21/22 — dentro de um módulo já aprovado, decisão
+    de "o que vem a seguir" não exige pausa). RF-035 pede "continuidade,
+    escalabilidade, equipe, aquisições, origem dos recursos e cronograma
+    físico-financeiro" — de novo grande demais pra uma fatia só (mesmo
+    padrão do RF-034). Escopo desta fatia: **continuidade/
+    escalabilidade** (campos `Text` a mais em `Projeto`, mesmo padrão
+    narrativo do RF-033/034, adicionados ao mesmo form de plano de
+    trabalho), **equipe** (`EquipeProjeto` — pessoa, função texto livre,
+    vigência — mirror exato de `MembroOrgao` do RF-016, não reaproveitei
+    `PessoaVinculo` porque aquele é sobre papel de acesso/RBAC numa
+    entidade ou CPL, um conceito diferente de "função exercida neste
+    projeto específico") e **origem dos recursos**
+    (`OrigemRecursoProjeto` — fonte texto livre, valor, contrapartida
+    booleana). **Aquisições e cronograma físico-financeiro ficaram de
+    fora deliberadamente**: aquisições se sobrepõe ao RF-037 (cotações/
+    pesquisa de preço), e cronograma físico-financeiro é essencialmente
+    etapas (já existem, RF-034) cruzadas com valores financeiros por
+    etapa, que só faz sentido depois que RF-036 (itens de despesa)
+    existir — mesmo raciocínio já usado para riscos no item 22 (não
+    duplicar um modelo simplificado que logo será substituído).
+    **Primeiro campo monetário do sistema**: `OrigemRecursoProjeto.valor`
+    usa `Numeric(14, 2)`/`Decimal` de verdade, diferente do padrão
+    `String` usado em `valor_alvo` de `MetaProjeto` (que aceita metas
+    não-numéricas como "30 empresas") — aqui é sempre dinheiro.
+    Migração `d798be587a1c`, sem enum nenhum envolvido (`funcao` e
+    `fonte` são texto livre, mesmo raciocínio de `eixo_sp_produz`), então
+    sem o gotcha de sempre — mas segui o hábito de grepar `sa.Enum(`
+    antes de aplicar de qualquer forma, como reforçado no item 23.
+    Testado via curl (criar/listar/atualizar/encerrar, web e API JSON) e
+    via Playwright (`projeto_rf035_shot.js`, mesmo diretório de scratch),
+    sem erros de console nem 500 reais no log.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -944,18 +985,22 @@ ordem recomendada para o que vem depois:
    `app/services/geracao_documentos.py` já procurava desde antes, então
    nenhum código mudou.
 5. ~~Iniciar módulo de Projetos~~ — **fundação + plano de trabalho +
-   RF-034 completo feitos** (itens 20, 21, 22 e 23 da seção "Ordem em
-   que este projeto foi construído"): `DemandaProjeto` (RF-031),
-   `Projeto`/portfólio (RF-032), plano de trabalho — informações
-   básicas + impactos socioambientais (RF-033/034) e RF-034 completo
-   (`EtapaProjeto`, `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`),
-   em `/painel/projetos`. Segue pendente, sem relação com este
-   trabalho: edital de fomento com cronograma/recursos (RF-029/030),
-   equipe/aquisições/recursos (RF-035), orçamento/cotações/desembolsos
-   (RF-036 a RF-038), execução física/financeira (RF-039/040 — deve
-   reaproveitar `RiscoProjeto`/`StatusRisco`, não duplicar) e prestação
-   de contas (RF-041) — "relatório de projeto" (RF-048) e o restante da
-   Fase 2 dependem desses.
+   RF-034 completo + RF-035 (fundação) feitos** (itens 20 a 24 da seção
+   "Ordem em que este projeto foi construído"): `DemandaProjeto`
+   (RF-031), `Projeto`/portfólio (RF-032), plano de trabalho completo —
+   informações básicas, impactos socioambientais, continuidade e
+   escalabilidade (RF-033/034/035), RF-034 completo (`EtapaProjeto`,
+   `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`) e RF-035 fundação
+   (`EquipeProjeto`, `OrigemRecursoProjeto`), em `/painel/projetos`.
+   Segue pendente, sem relação com este trabalho: edital de fomento com
+   cronograma/recursos (RF-029/030), aquisições e cronograma
+   físico-financeiro (resto do RF-035 — aquisições se sobrepõe ao
+   RF-037, cronograma físico-financeiro depende do RF-036 existir),
+   orçamento/cotações/desembolsos (RF-036 a RF-038), execução
+   física/financeira (RF-039/040 — deve reaproveitar
+   `RiscoProjeto`/`StatusRisco`, não duplicar) e prestação de contas
+   (RF-041) — "relatório de projeto" (RF-048) e o restante da Fase 2
+   dependem desses.
 6. ~~Deploy na VPS Hostinger~~ — **feito nesta sessão** (numa sessão
    anterior a esta), ver seção "Deploy em produção" abaixo para todos os
    detalhes (como foi feito, segredos, como reimplantar).

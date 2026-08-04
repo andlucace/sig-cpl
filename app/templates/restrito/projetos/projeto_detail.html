@@ -81,7 +81,7 @@
         </div>
         <div class="card-body">
             <p class="text-body-secondary small">
-                Equipe, aquisições e orçamento detalhados (RF-035) ainda não fazem parte deste módulo.
+                Aquisições e cronograma físico-financeiro detalhado (resto do RF-035) ainda não fazem parte deste módulo.
             </p>
             <form method="post" action="/painel/projetos/{{ projeto.id }}/plano-de-trabalho">
                 <div class="mb-3">
@@ -107,6 +107,14 @@
                 <div class="mb-3">
                     <label class="form-label">Impactos socioambientais</label>
                     <textarea class="form-control" name="impactos_socioambientais" rows="2">{{ projeto.impactos_socioambientais or '' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Continuidade</label>
+                    <textarea class="form-control" name="continuidade" rows="2">{{ projeto.continuidade or '' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Escalabilidade</label>
+                    <textarea class="form-control" name="escalabilidade" rows="2">{{ projeto.escalabilidade or '' }}</textarea>
                 </div>
                 <button type="submit" class="btn btn-outline-primary">
                     <i class="bi bi-check-lg me-1"></i>Salvar plano de trabalho
@@ -478,6 +486,164 @@
                         </div>
                         <button type="submit" class="btn btn-primary w-100 mt-1">
                             <i class="bi bi-plus-lg me-1"></i>Adicionar risco
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-people me-2"></i>Equipe
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Pessoa</th>
+                                <th>Função</th>
+                                <th>Início</th>
+                                <th>Fim</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for membro in equipe %}
+                                <tr>
+                                    <td>{{ membro.pessoa.nome }}</td>
+                                    <td class="small">{{ membro.funcao }}</td>
+                                    <td class="small">{{ membro.data_inicio.strftime('%d/%m/%Y') }}</td>
+                                    <td class="small">{{ membro.data_fim.strftime('%d/%m/%Y') if membro.data_fim else "—" }}</td>
+                                    <td>
+                                        <span class="badge {% if membro.ativo %}text-bg-success{% else %}text-bg-secondary{% endif %}">
+                                            {{ "ativo" if membro.ativo else "encerrado" }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if membro.ativo %}
+                                            <form method="post" action="/painel/projetos/equipe/{{ membro.id }}/encerrar" class="d-flex gap-1">
+                                                <input type="date" class="form-control form-control-sm" name="data_fim" style="width: auto;">
+                                                <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                    <i class="bi bi-check-lg"></i>
+                                                </button>
+                                            </form>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="6" class="text-body-secondary">Nenhum membro de equipe cadastrado ainda.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Novo membro de equipe
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/painel/projetos/{{ projeto.id }}/equipe">
+                        <div class="mb-3">
+                            <label class="form-label">Pessoa</label>
+                            <select class="form-select" name="pessoa_id" required>
+                                {% for pessoa in pessoas %}
+                                    <option value="{{ pessoa.id }}">{{ pessoa.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Função</label>
+                            <input type="text" class="form-control" name="funcao" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Início</label>
+                            <input type="date" class="form-control" name="data_inicio" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mt-1">
+                            <i class="bi bi-plus-lg me-1"></i>Adicionar à equipe
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-cash-coin me-2"></i>Origem dos recursos
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Fonte</th>
+                                <th>Valor</th>
+                                <th>Contrapartida</th>
+                                <th>Descrição</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for origem in origens_recurso %}
+                                <tr>
+                                    <td>{{ origem.fonte }}</td>
+                                    <td class="small">R$ {{ "%.2f"|format(origem.valor) }}</td>
+                                    <td>
+                                        <span class="badge {% if origem.contrapartida %}text-bg-info{% else %}text-bg-secondary{% endif %}">
+                                            {{ "sim" if origem.contrapartida else "não" }}
+                                        </span>
+                                    </td>
+                                    <td class="small">{{ origem.descricao or "—" }}</td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="4" class="text-body-secondary">Nenhuma origem de recurso cadastrada ainda.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                        {% if origens_recurso %}
+                            <tfoot>
+                                <tr class="fw-semibold">
+                                    <td>Total</td>
+                                    <td class="small">R$ {{ "%.2f"|format(origens_recurso|sum(attribute="valor")) }}</td>
+                                    <td colspan="2"></td>
+                                </tr>
+                            </tfoot>
+                        {% endif %}
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Nova origem de recurso
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/painel/projetos/{{ projeto.id }}/origens-recurso">
+                        <div class="mb-3">
+                            <label class="form-label">Fonte</label>
+                            <input type="text" class="form-control" name="fonte" placeholder="Recursos próprios, edital, parceria..." required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Valor previsto (R$)</label>
+                            <input type="number" step="0.01" min="0" class="form-control" name="valor" required>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input type="checkbox" class="form-check-input" name="contrapartida" value="true" id="contrapartida-check">
+                            <label class="form-check-label" for="contrapartida-check">Exige contrapartida</label>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="2"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mt-1">
+                            <i class="bi bi-plus-lg me-1"></i>Adicionar origem de recurso
                         </button>
                     </form>
                 </div>

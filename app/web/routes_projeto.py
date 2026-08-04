@@ -1,5 +1,6 @@
 import uuid
 from datetime import date
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -22,7 +23,16 @@ from app.models.enums import (
 )
 from app.models.pessoa import Pessoa
 from app.models.planejamento import ObjetivoEstrategico, PlanejamentoEstrategico
-from app.models.projeto import DemandaProjeto, EtapaProjeto, IndicadorProjeto, MetaProjeto, Projeto, RiscoProjeto
+from app.models.projeto import (
+    DemandaProjeto,
+    EquipeProjeto,
+    EtapaProjeto,
+    IndicadorProjeto,
+    MetaProjeto,
+    OrigemRecursoProjeto,
+    Projeto,
+    RiscoProjeto,
+)
 from app.models.usuario import Usuario
 from app.web.templates import templates
 
@@ -276,6 +286,18 @@ def detalhe_projeto(
         .order_by(RiscoProjeto.created_at)
         .all()
     )
+    equipe = (
+        db.query(EquipeProjeto)
+        .filter(EquipeProjeto.projeto_id == projeto_id)
+        .order_by(EquipeProjeto.created_at)
+        .all()
+    )
+    origens_recurso = (
+        db.query(OrigemRecursoProjeto)
+        .filter(OrigemRecursoProjeto.projeto_id == projeto_id)
+        .order_by(OrigemRecursoProjeto.created_at)
+        .all()
+    )
     return templates.TemplateResponse(
         request,
         "restrito/projetos/projeto_detail.html",
@@ -295,6 +317,8 @@ def detalhe_projeto(
             "probabilidades_risco": list(ProbabilidadeRisco),
             "impactos_risco": list(ImpactoRisco),
             "status_risco_opcoes": list(StatusRisco),
+            "equipe": equipe,
+            "origens_recurso": origens_recurso,
             "usuario": usuario,
             "pagina_ativa": "projetos",
         },
@@ -340,12 +364,15 @@ def atualizar_plano_de_trabalho(
     justificativa: str | None = Form(None),
     impactos: str | None = Form(None),
     impactos_socioambientais: str | None = Form(None),
+    continuidade: str | None = Form(None),
+    escalabilidade: str | None = Form(None),
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user_optional),
 ):
-    """RF-033/034: informações básicas do plano de trabalho — separado do
-    form de portfólio pra não misturar edição rápida de estágio/
-    prioridade com o preenchimento mais longo do plano de trabalho."""
+    """RF-033/034/035: informações básicas do plano de trabalho —
+    separado do form de portfólio pra não misturar edição rápida de
+    estágio/prioridade com o preenchimento mais longo do plano de
+    trabalho."""
 
     if redir := _exigir_login(usuario):
         return redir
@@ -359,6 +386,8 @@ def atualizar_plano_de_trabalho(
     projeto.justificativa = justificativa or None
     projeto.impactos = impactos or None
     projeto.impactos_socioambientais = impactos_socioambientais or None
+    projeto.continuidade = continuidade or None
+    projeto.escalabilidade = escalabilidade or None
     db.commit()
     return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -564,3 +593,82 @@ def atualizar_status_risco(
     risco.status = status_risco
     db.commit()
     return RedirectResponse(f"/painel/projetos/{risco.projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{projeto_id}/equipe")
+def adicionar_membro_equipe(
+    projeto_id: uuid.UUID,
+    pessoa_id: str = Form(...),
+    funcao: str = Form(...),
+    data_inicio: str = Form(...),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-035: adiciona uma pessoa à equipe do projeto, com função e
+    vigência — mesmo padrão de `MembroOrgao` (RF-016)."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    projeto = db.get(Projeto, projeto_id)
+    if projeto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    membro = EquipeProjeto(
+        projeto_id=projeto_id,
+        pessoa_id=uuid.UUID(pessoa_id),
+        funcao=funcao,
+        data_inicio=date.fromisoformat(data_inicio),
+    )
+    db.add(membro)
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/equipe/{membro_id}/encerrar")
+def encerrar_membro_equipe(
+    membro_id: uuid.UUID,
+    data_fim: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    membro = db.get(EquipeProjeto, membro_id)
+    if membro is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Membro de equipe do projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=membro.projeto.cpl_id)
+    membro.data_fim = date.fromisoformat(data_fim) if data_fim else date.today()
+    membro.ativo = False
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{membro.projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{projeto_id}/origens-recurso")
+def criar_origem_recurso(
+    projeto_id: uuid.UUID,
+    fonte: str = Form(...),
+    valor: str = Form(...),
+    contrapartida: bool = Form(False),
+    descricao: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-035: registra uma fonte de recursos do projeto (própria, edital,
+    parceria etc.) e o valor previsto."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    projeto = db.get(Projeto, projeto_id)
+    if projeto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    origem = OrigemRecursoProjeto(
+        projeto_id=projeto_id,
+        fonte=fonte,
+        valor=Decimal(valor),
+        contrapartida=contrapartida,
+        descricao=descricao or None,
+    )
+    db.add(origem)
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
