@@ -80,9 +80,6 @@
             <i class="bi bi-file-text me-2"></i>Plano de trabalho — informações básicas
         </div>
         <div class="card-body">
-            <p class="text-body-secondary small">
-                Aquisições e cronograma físico-financeiro detalhado (resto do RF-035) ainda não fazem parte deste módulo.
-            </p>
             <form method="post" action="/painel/projetos/{{ projeto.id }}/plano-de-trabalho">
                 <div class="mb-3">
                     <label class="form-label">Introdução</label>
@@ -136,6 +133,8 @@
                                 <th>Etapa</th>
                                 <th>Início</th>
                                 <th>Fim</th>
+                                <th>Previsto</th>
+                                <th>Executado</th>
                                 <th>Status</th>
                                 <th></th>
                             </tr>
@@ -149,6 +148,8 @@
                                     </td>
                                     <td class="small">{{ etapa.data_inicio.strftime('%d/%m/%Y') if etapa.data_inicio else "—" }}</td>
                                     <td class="small">{{ etapa.data_fim.strftime('%d/%m/%Y') if etapa.data_fim else "—" }}</td>
+                                    <td class="small">{{ "R$ %.2f"|format(etapa.valor_previsto) if etapa.valor_previsto is not none else "—" }}</td>
+                                    <td class="small">{{ "R$ %.2f"|format(etapa.valor_executado) if etapa.valor_executado is not none else "—" }}</td>
                                     <td>
                                         <span class="badge {% if etapa.status.value == 'concluida' %}text-bg-success{% elif etapa.status.value in ['atrasada', 'cancelada'] %}text-bg-danger{% else %}text-bg-info{% endif %}">
                                             {{ etapa.status.value.replace('_', ' ') }}
@@ -156,6 +157,7 @@
                                     </td>
                                     <td>
                                         <form method="post" action="/painel/projetos/etapas/{{ etapa.id }}/status" class="d-flex gap-1">
+                                            <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="valor_executado" value="{{ etapa.valor_executado if etapa.valor_executado is not none else '' }}" placeholder="Executado" style="width: 100px;">
                                             <select class="form-select form-select-sm" name="status" style="width: auto;">
                                                 {% for s in status_opcoes %}
                                                     <option value="{{ s.value }}" {% if s == etapa.status %}selected{% endif %}>{{ s.value.replace('_', ' ') }}</option>
@@ -168,9 +170,19 @@
                                     </td>
                                 </tr>
                             {% else %}
-                                <tr><td colspan="5" class="text-body-secondary">Nenhuma etapa cadastrada ainda.</td></tr>
+                                <tr><td colspan="7" class="text-body-secondary">Nenhuma etapa cadastrada ainda.</td></tr>
                             {% endfor %}
                         </tbody>
+                        {% if etapas %}
+                            <tfoot>
+                                <tr class="fw-semibold">
+                                    <td colspan="3">Total</td>
+                                    <td class="small">R$ {{ "%.2f"|format(etapas|selectattr("valor_previsto", "ne", none)|sum(attribute="valor_previsto")) }}</td>
+                                    <td class="small">R$ {{ "%.2f"|format(etapas|selectattr("valor_executado", "ne", none)|sum(attribute="valor_executado")) }}</td>
+                                    <td colspan="2"></td>
+                                </tr>
+                            </tfoot>
+                        {% endif %}
                     </table>
                 </div>
             </div>
@@ -200,7 +212,11 @@
                                 <input type="date" class="form-control" name="data_fim">
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-primary w-100 mt-3">
+                        <div class="mb-3 mt-2">
+                            <label class="form-label">Valor previsto (R$)</label>
+                            <input type="number" step="0.01" min="0" class="form-control" name="valor_previsto">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mt-1">
                             <i class="bi bi-plus-lg me-1"></i>Adicionar etapa
                         </button>
                     </form>
@@ -776,4 +792,120 @@
             </div>
         </div>
     {% endif %}
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-cart me-2"></i>Aquisições
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Item</th>
+                                <th>Categoria</th>
+                                <th>Quantidade</th>
+                                <th>Valor estimado</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for aquisicao in aquisicoes %}
+                                <tr>
+                                    <td>
+                                        {{ aquisicao.item }}
+                                        {% if aquisicao.descricao %}<div class="text-body-secondary small">{{ aquisicao.descricao }}</div>{% endif %}
+                                    </td>
+                                    <td class="small">{{ aquisicao.categoria or "—" }}</td>
+                                    <td class="small">{{ aquisicao.quantidade or "—" }}</td>
+                                    <td class="small">{{ "R$ %.2f"|format(aquisicao.valor_estimado) if aquisicao.valor_estimado is not none else "—" }}</td>
+                                    <td>
+                                        <span class="badge {% if aquisicao.status.value == 'concluida' %}text-bg-success{% elif aquisicao.status.value in ['atrasada', 'cancelada'] %}text-bg-danger{% else %}text-bg-info{% endif %}">
+                                            {{ aquisicao.status.value.replace('_', ' ') }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <form method="post" action="/painel/projetos/aquisicoes/{{ aquisicao.id }}/status" class="d-flex gap-1">
+                                            <select class="form-select form-select-sm" name="status" style="width: auto;">
+                                                {% for s in status_opcoes %}
+                                                    <option value="{{ s.value }}" {% if s == aquisicao.status %}selected{% endif %}>{{ s.value.replace('_', ' ') }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                <i class="bi bi-check-lg"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="6" class="text-body-secondary">Nenhuma aquisição cadastrada ainda.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                        {% if aquisicoes %}
+                            <tfoot>
+                                <tr class="fw-semibold">
+                                    <td colspan="3">Total estimado</td>
+                                    <td class="small">R$ {{ "%.2f"|format(aquisicoes|selectattr("valor_estimado", "ne", none)|sum(attribute="valor_estimado")) }}</td>
+                                    <td colspan="2"></td>
+                                </tr>
+                            </tfoot>
+                        {% endif %}
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Nova aquisição
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/painel/projetos/{{ projeto.id }}/aquisicoes">
+                        <div class="mb-3">
+                            <label class="form-label">Item</label>
+                            <input type="text" class="form-control" name="item" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="2"></textarea>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label">Categoria</label>
+                                <input type="text" class="form-control" name="categoria">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Quantidade</label>
+                                <input type="text" class="form-control" name="quantidade" placeholder="ex.: 10 unidades">
+                            </div>
+                        </div>
+                        <div class="row g-2 mt-0">
+                            <div class="col-6">
+                                <label class="form-label">Valor estimado (R$)</label>
+                                <input type="number" step="0.01" min="0" class="form-control" name="valor_estimado">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Data prevista</label>
+                                <input type="date" class="form-control" name="data_prevista">
+                            </div>
+                        </div>
+                        <div class="mb-3 mt-2">
+                            <label class="form-label">Responsável</label>
+                            <select class="form-select" name="responsavel_id">
+                                <option value="">Não definido</option>
+                                {% for pessoa in pessoas %}
+                                    <option value="{{ pessoa.id }}">{{ pessoa.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mt-1">
+                            <i class="bi bi-plus-lg me-1"></i>Adicionar aquisição
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
 {% endblock %}

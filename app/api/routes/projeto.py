@@ -10,6 +10,7 @@ from app.db.session import get_db
 from app.models.cpl import CPL
 from app.models.enums import EstagioProjeto, StatusDemanda
 from app.models.projeto import (
+    AquisicaoProjeto,
     DemandaProjeto,
     EditalFomento,
     EquipeProjeto,
@@ -23,6 +24,9 @@ from app.models.projeto import (
 )
 from app.models.usuario import Usuario
 from app.schemas.projeto import (
+    AquisicaoProjetoCreate,
+    AquisicaoProjetoRead,
+    AquisicaoProjetoUpdate,
     DemandaProjetoCreate,
     DemandaProjetoRead,
     EditalFomentoCreate,
@@ -133,6 +137,13 @@ def _get_recurso_submissao_or_404(db: Session, recurso_id: uuid.UUID) -> Recurso
     if recurso is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Recurso de submissão não encontrado.")
     return recurso
+
+
+def _get_aquisicao_or_404(db: Session, aquisicao_id: uuid.UUID) -> AquisicaoProjeto:
+    aquisicao = db.get(AquisicaoProjeto, aquisicao_id)
+    if aquisicao is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Aquisição de projeto não encontrada.")
+    return aquisicao
 
 
 # --- Demandas (RF-031) -------------------------------------------------------
@@ -761,3 +772,59 @@ def decidir_recurso_submissao(
     db.commit()
     db.refresh(recurso)
     return recurso
+
+
+# --- Aquisições do projeto (RF-035) ------------------------------------------
+
+
+@router.post(
+    "/{projeto_id}/aquisicoes", response_model=AquisicaoProjetoRead, status_code=status.HTTP_201_CREATED
+)
+def criar_aquisicao(
+    projeto_id: uuid.UUID,
+    dados: AquisicaoProjetoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> AquisicaoProjeto:
+    """RF-035: item de aquisição planejado do projeto — desenhado pra
+    ser estendido por cotações quando o RF-037 for construído."""
+
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    aquisicao = AquisicaoProjeto(projeto_id=projeto_id, **dados.model_dump())
+    db.add(aquisicao)
+    db.commit()
+    db.refresh(aquisicao)
+    return aquisicao
+
+
+@router.get("/{projeto_id}/aquisicoes", response_model=list[AquisicaoProjetoRead])
+def listar_aquisicoes(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[AquisicaoProjeto]:
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_LEITURA, cpl_id=projeto.cpl_id)
+    return (
+        db.query(AquisicaoProjeto)
+        .filter(AquisicaoProjeto.projeto_id == projeto_id)
+        .order_by(AquisicaoProjeto.created_at)
+        .all()
+    )
+
+
+@router.patch("/aquisicoes/{aquisicao_id}", response_model=AquisicaoProjetoRead)
+def atualizar_aquisicao(
+    aquisicao_id: uuid.UUID,
+    dados: AquisicaoProjetoUpdate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> AquisicaoProjeto:
+    aquisicao = _get_aquisicao_or_404(db, aquisicao_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=aquisicao.projeto.cpl_id)
+    for campo, valor in dados.model_dump(exclude_unset=True).items():
+        setattr(aquisicao, campo, valor)
+    db.commit()
+    db.refresh(aquisicao)
+    return aquisicao

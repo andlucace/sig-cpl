@@ -525,18 +525,18 @@ que já está no banco:
   deliberado pra não introduzir um context processor Jinja2 (mecanismo
   não usado em nenhum outro lugar do projeto) só para isso.
 
-O bloco **Projetos** (RF-029 a RF-035, exceto o resto do RF-035) cobre a
-**fundação completa** do módulo de Projetos e Fomento: editais de
-fomento com submissão, recursos/contrarrazões/diligências (RF-029/030),
-demanda/oportunidade → conversão em projeto → portfólio → plano de
-trabalho completo, incluindo o RF-034 inteiro (etapas/cronograma, metas,
-indicadores, riscos, impactos socioambientais) e a fundação do RF-035
-(continuidade, escalabilidade, equipe, origem dos recursos). Aquisições e
-cronograma físico-financeiro (resto do RF-035), financeiro (RF-036 a
-RF-038), execução (RF-039/040) e prestação de contas (RF-041) **não**
-fazem parte desta fatia — o módulo completo tem 13 requisitos em 6
-sub-áreas (editais, demandas/portfólio, plano de trabalho, financeiro,
-execução, prestação de contas), grande demais pra uma entrega só;
+O bloco **Projetos** (RF-029 a RF-035) cobre o módulo de Projetos e
+Fomento **completo até o RF-035**: editais de fomento com submissão,
+recursos/contrarrazões/diligências (RF-029/030), demanda/oportunidade →
+conversão em projeto → portfólio → plano de trabalho completo,
+incluindo o RF-034 inteiro (etapas/cronograma, metas, indicadores,
+riscos, impactos socioambientais) e o RF-035 inteiro (continuidade,
+escalabilidade, equipe, origem dos recursos, aquisições e cronograma
+físico-financeiro). Financeiro (RF-036 a RF-038), execução (RF-039/040)
+e prestação de contas (RF-041) **não** fazem parte desta fatia — o
+módulo completo tem 13 requisitos em 6 sub-áreas (editais,
+demandas/portfólio, plano de trabalho, financeiro, execução, prestação
+de contas), grande demais pra uma entrega só;
 "sequência natural" escolhida sessão a sessão, sempre a camada mais
 fundamental que ainda falta.
 - **`DemandaProjeto`** (RF-031) — título, descrição, origem
@@ -612,9 +612,10 @@ fundamental que ainda falta.
   - UI: tabela + form de criação + atualização inline pra cada um dos
     três recursos (metas/indicadores/riscos), no mesmo padrão visual das
     etapas, tudo na mesma tela de detalhe do projeto.
-- **RF-035, fundação** — "continuidade, escalabilidade, equipe,
-  aquisições, origem dos recursos e cronograma físico-financeiro", de
-  novo grande demais pra uma fatia só.
+- **RF-035, completo** — "continuidade, escalabilidade, equipe,
+  aquisições, origem dos recursos e cronograma físico-financeiro",
+  construído em duas rodadas (fundação primeiro, depois o resto) por
+  ser grande demais pra uma fatia só.
   - **Continuidade e escalabilidade** — campos `Text` a mais em
     `Projeto`, mesmo padrão narrativo do RF-033/034, no mesmo form de
     plano de trabalho.
@@ -633,16 +634,29 @@ fundamental que ainda falta.
     verdade, diferente do `valor_alvo` textual de `MetaProjeto` (que
     aceita metas não-numéricas). `POST/GET /api/projetos/{id}/origens-recurso`,
     `PATCH /api/projetos/origens-recurso/{id}`.
-  - **Aquisições e cronograma físico-financeiro ficaram de fora
-    deliberadamente**: aquisições se sobrepõe ao RF-037 (cotações/
-    pesquisa de preço), e cronograma físico-financeiro é essencialmente
-    as etapas do RF-034 cruzadas com valores financeiros por etapa, que
-    só faz sentido depois que o RF-036 (itens de despesa) existir —
-    mesmo raciocínio já usado pra riscos no RF-034 (não duplicar um
-    modelo simplificado que logo seria substituído).
-  - UI: tabela + form de criação (e "encerrar" pra equipe) pra cada
+  - **Cronograma físico-financeiro** — não é uma entidade nova: dois
+    campos a mais (`valor_previsto`, `valor_executado`, `Numeric`) em
+    `EtapaProjeto`. O lado "físico" já existia (datas, status); o lado
+    "financeiro" completa a mesma linha, em vez de uma tabela separada
+    — cronograma físico-financeiro é fundamentalmente "etapa + dinheiro
+    por etapa".
+  - **Aquisições** — `AquisicaoProjeto`: item, descrição, categoria e
+    quantidade (texto livre — quantidade pode vir com unidade não
+    padronizada como "50 unidades" ou "200 kg", categoria não tem lista
+    fechada no documento), valor estimado, data prevista, responsável e
+    status (`StatusTarefa`, reaproveitado). Mais simples que o que o
+    RF-037 vai pedir (pesquisas de preço, cotações de múltiplos
+    fornecedores, validação de quantidade mínima, justificativa de
+    exceção) — desenhado pra ser estendido por uma `CotacaoAquisicao`
+    ligada a `aquisicao_id` quando RF-037 for construído, não
+    duplicado (mesmo raciocínio de `RiscoProjeto` pro RF-040).
+    `POST/GET /api/projetos/{id}/aquisicoes`,
+    `PATCH /api/projetos/aquisicoes/{id}`.
+  - UI: tabela + form de criação (e "encerrar" pra equipe, atualização
+    inline de status/valor executado pra etapas e aquisições) pra cada
     recurso, mesmo padrão visual das seções anteriores, na mesma tela de
-    detalhe do projeto.
+    detalhe do projeto — com totais somados nas tabelas de origem de
+    recursos, etapas (previsto/executado) e aquisições.
 - **Edital de fomento (RF-029/030)** — distinto do `Edital` de
   maturidade (`app/models/maturidade.py`, que guarda critérios/pesos/
   notas de corte pra avaliação de maturidade); mesmo nome em português,
@@ -1073,16 +1087,16 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    falta "de projeto"**, do mesmo RF-048 — precisa do plano de
    trabalho/financeiro do módulo de Projetos (item 7), ainda não
    construído.
-7. ~~Iniciar módulo de Projetos~~ — **fundação + plano de trabalho +
-   RF-034 completo + RF-035 (fundação) + RF-029/030 feitos**:
+7. ~~Iniciar módulo de Projetos~~ — **RF-029 a RF-035, todos completos**:
    `DemandaProjeto` (RF-031), `Projeto`/portfólio (RF-032), plano de
    trabalho completo (RF-033/034/035), RF-034 completo (`EtapaProjeto`,
-   `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`), RF-035 fundação
-   (`EquipeProjeto`, `OrigemRecursoProjeto`) e RF-029/030 completos
+   `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`), RF-035 completo
+   (`EquipeProjeto`, `OrigemRecursoProjeto`, `AquisicaoProjeto`,
+   cronograma físico-financeiro) e RF-029/030 completos
    (`EditalFomento`, submissão, `RecursoSubmissaoProjeto`) — ver seção
-   "Projetos" acima. Falta o resto do módulo (resto do RF-035 a
-   RF-041): aquisições e cronograma físico-financeiro (resto do
-   RF-035), orçamento e cotações, desembolsos/conciliação, execução
+   "Projetos" acima. Falta o resto do módulo (RF-036 a RF-041):
+   orçamento e cotações (`AquisicaoProjeto` já desenhado pra ser
+   estendido quando RF-037 chegar), desembolsos/conciliação, execução
    física/financeira (RF-039/040 — deve reaproveitar
    `RiscoProjeto`/`StatusRisco`, não duplicar) e prestação de contas.
    "Simular cenários" (RF-026) e "habilitação jurídica" (RF-027) também

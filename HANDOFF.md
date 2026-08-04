@@ -91,6 +91,11 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
       + coluna `projetos.edital_fomento_id` (RF-029/030) — precisou de
       ajuste manual (`recursos_submissao_projeto.status` reaproveita
       `statusrecurso`, criado originalmente pra `RecursoAvaliacao`/RF-027)
+  18. `bcae54b40941` — tabela `aquisicoes_projeto` + colunas
+      `etapas_projeto.valor_previsto`/`valor_executado` (RF-035,
+      finalização — aquisições e cronograma físico-financeiro) —
+      precisou de ajuste manual (`aquisicoes_projeto.status` reaproveita
+      `statustarefa`)
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos)
 
@@ -827,6 +832,42 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     recurso/contrarrazão/diligência, decidir, tudo via web e API JSON) e
     via Playwright (`projeto_rf029_030_shot.js`), sem erros de console
     nem 500 reais no log.
+26. **RF-035, finalização** (aquisições e cronograma físico-financeiro)
+    — usuário disse "implementar o restante da RF-035", desta vez
+    pedindo explicitamente a parte que eu tinha decidido adiar nos itens
+    22/24 (raciocínio anterior: aquisições se sobrepõe ao RF-037,
+    cronograma físico-financeiro depende do RF-036 existir). Como o
+    pedido agora é explícito, construí uma versão do RF-035 completo
+    sem esperar RF-036/037 existirem — mesmo padrão já usado em
+    `RiscoProjeto` (modelo simplificado agora, desenhado pra ser
+    estendido depois, não duplicado).
+    **Cronograma físico-financeiro**: não é uma entidade nova — são só
+    dois campos a mais (`valor_previsto`, `valor_executado`,
+    `Numeric(14,2)`) em `EtapaProjeto`. Cronograma físico-financeiro é
+    fundamentalmente "etapa (já tem datas/status = lado físico) +
+    dinheiro por etapa (lado financeiro)", então juntar na mesma linha
+    fez mais sentido que criar uma tabela separada — mesma lógica já
+    usada pra `impactos_socioambientais`/continuidade/escalabilidade
+    virarem colunas a mais em vez de entidades novas.
+    **Aquisições**: `AquisicaoProjeto` — item, descrição, categoria e
+    quantidade (texto livre, mesmo raciocínio de `eixo_sp_produz`:
+    quantidade pode vir com unidade não padronizada — "50 unidades",
+    "200 kg" — e categoria não tem lista fechada no documento), valor
+    estimado (`Numeric`, dinheiro de verdade), data prevista,
+    responsável e status (`StatusTarefa`, reaproveitado). Desenhado pra
+    ser estendido por uma `CotacaoAquisicao` ligada a `aquisicao_id`
+    quando o RF-037 (pesquisas de preço, cotações de múltiplos
+    fornecedores, validação de quantidade mínima) for construído — não
+    duplicar.
+    Migração `bcae54b40941`, com o gotcha de enum reaproveitado de
+    sempre (`statustarefa` em `aquisicoes_projeto.status`) — pego antes
+    de aplicar via grep, sem rollback.
+    Testado via curl (criar/atualizar aquisições e etapas com valores
+    financeiros, web e API JSON, conferindo os totais somados nas
+    tabelas) e via Playwright (`projeto_rf035_final_shot.js`), sem erros
+    de console nem 500 reais no log. Com esta fatia, **o RF-035 está
+    100% implementado** — não fica mais nenhum campo do requisito
+    pendente, só o resto do módulo de Projetos (RF-036 a RF-041).
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -1073,24 +1114,23 @@ ordem recomendada para o que vem depois:
    `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf` — caminho que
    `app/services/geracao_documentos.py` já procurava desde antes, então
    nenhum código mudou.
-5. ~~Iniciar módulo de Projetos~~ — **fundação + plano de trabalho +
-   RF-034 completo + RF-035 (fundação) + RF-029/030 feitos** (itens 20 a
-   25 da seção "Ordem em que este projeto foi construído"):
+5. ~~Iniciar módulo de Projetos~~ — **RF-029 a RF-035, todos completos**
+   (itens 20 a 26 da seção "Ordem em que este projeto foi construído"):
    `DemandaProjeto` (RF-031), `Projeto`/portfólio (RF-032), plano de
    trabalho completo — informações básicas, impactos socioambientais,
    continuidade e escalabilidade (RF-033/034/035), RF-034 completo
    (`EtapaProjeto`, `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`),
-   RF-035 fundação (`EquipeProjeto`, `OrigemRecursoProjeto`) e RF-029/030
-   completos (`EditalFomento`, submissão de projeto, `RecursoSubmissaoProjeto`
-   com recursos/contrarrazões/diligências), em `/painel/projetos`. Segue
-   pendente, sem relação com este trabalho: aquisições e cronograma
-   físico-financeiro (resto do RF-035 — aquisições se sobrepõe ao
-   RF-037, cronograma físico-financeiro depende do RF-036 existir),
-   orçamento/cotações/desembolsos (RF-036 a RF-038), execução
-   física/financeira (RF-039/040 — deve reaproveitar
-   `RiscoProjeto`/`StatusRisco`, não duplicar) e prestação de contas
-   (RF-041) — "relatório de projeto" (RF-048) e o restante da Fase 2
-   dependem desses.
+   RF-035 completo (`EquipeProjeto`, `OrigemRecursoProjeto`,
+   `AquisicaoProjeto`, cronograma físico-financeiro em `EtapaProjeto`)
+   e RF-029/030 completos (`EditalFomento`, submissão de projeto,
+   `RecursoSubmissaoProjeto` com recursos/contrarrazões/diligências),
+   em `/painel/projetos`. Segue pendente, sem relação com este
+   trabalho: orçamento/cotações/desembolsos (RF-036 a RF-038 —
+   `AquisicaoProjeto` já desenhado pra ser estendido por cotações
+   quando RF-037 chegar), execução física/financeira (RF-039/040 —
+   deve reaproveitar `RiscoProjeto`/`StatusRisco`, não duplicar) e
+   prestação de contas (RF-041) — "relatório de projeto" (RF-048) e o
+   restante da Fase 2 dependem desses.
 6. ~~Deploy na VPS Hostinger~~ — **feito nesta sessão** (numa sessão
    anterior a esta), ver seção "Deploy em produção" abaixo para todos os
    detalhes (como foi feito, segredos, como reimplantar).

@@ -115,6 +115,7 @@ class EtapaProjetoCreate(BaseModel):
     descricao: str | None = None
     data_inicio: date | None = None
     data_fim: date | None = None
+    valor_previsto: Decimal | None = None
 
 
 class EtapaProjetoUpdate(BaseModel):
@@ -124,6 +125,8 @@ class EtapaProjetoUpdate(BaseModel):
     data_inicio: date | None = None
     data_fim: date | None = None
     status: StatusTarefa | None = None
+    valor_previsto: Decimal | None = None
+    valor_executado: Decimal | None = None
 
 
 class EtapaProjetoRead(BaseModel):
@@ -137,6 +140,8 @@ class EtapaProjetoRead(BaseModel):
     data_inicio: date | None
     data_fim: date | None
     status: StatusTarefa
+    valor_previsto: Decimal | None
+    valor_executado: Decimal | None
     created_at: datetime
 
 
@@ -371,4 +376,44 @@ class RecursoSubmissaoProjetoRead(BaseModel):
     parecer_decisao: str | None
     decidido_por_id: uuid.UUID | None
     data_decisao: date | None
+    created_at: datetime
+
+
+# Aquisições do projeto (RF-035)
+
+
+class AquisicaoProjetoCreate(BaseModel):
+    item: str
+    descricao: str | None = None
+    categoria: str | None = None
+    quantidade: str | None = None
+    valor_estimado: Decimal | None = None
+    data_prevista: date | None = None
+    responsavel_id: uuid.UUID | None = None
+
+
+class AquisicaoProjetoUpdate(BaseModel):
+    item: str | None = None
+    descricao: str | None = None
+    categoria: str | None = None
+    quantidade: str | None = None
+    valor_estimado: Decimal | None = None
+    data_prevista: date | None = None
+    responsavel_id: uuid.UUID | None = None
+    status: StatusTarefa | None = None
+
+
+class AquisicaoProjetoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    projeto_id: uuid.UUID
+    item: str
+    descricao: str | None
+    categoria: str | None
+    quantidade: str | None
+    valor_estimado: Decimal | None
+    data_prevista: date | None
+    responsavel_id: uuid.UUID | None
+    status: StatusTarefa
     created_at: datetime

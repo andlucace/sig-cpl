@@ -53,9 +53,9 @@ class Projeto(TimestampedBase):
     socioambientais do RF-034 e continuidade/escalabilidade do RF-035
     moram nos mesmos campos da tabela, sem uma entidade
     `PlanoDeTrabalho` separada — é 1:1 com o projeto, não haveria ganho
-    em separar. Aquisições e cronograma físico-financeiro (resto do
-    RF-035), financeiro (RF-036 a RF-038) e execução (RF-039/040) ficam
-    para as próximas fatias deste módulo.
+    em separar. Financeiro detalhado (RF-036 a RF-038, itens de despesa
+    com cotações) e execução (RF-039/040) ficam para as próximas fatias
+    deste módulo.
 
     `eixo_sp_produz` é texto livre, não um enum fechado — o documento de
     requisitos não define a lista de eixos do programa."""
@@ -114,14 +114,20 @@ class Projeto(TimestampedBase):
     origens_recurso: Mapped[list["OrigemRecursoProjeto"]] = relationship(back_populates="projeto")
     edital_fomento: Mapped["EditalFomento | None"] = relationship(back_populates="projetos_submetidos")
     recursos_submissao: Mapped[list["RecursoSubmissaoProjeto"]] = relationship(back_populates="projeto")
+    aquisicoes: Mapped[list["AquisicaoProjeto"]] = relationship(back_populates="projeto")
 
 
 class EtapaProjeto(TimestampedBase):
-    """RF-034: etapa (com atividades) do plano de trabalho — cronograma
-    previsto (`data_inicio`/`data_fim`) e status de execução. "Etapas" e
-    "atividades" do requisito são tratadas como o mesmo nível — uma
-    linha por etapa/atividade, sem hierarquia de dois níveis — mesma
-    simplificação já usada em `TarefaGovernanca` (sem sub-tarefas)."""
+    """RF-034/035: etapa (com atividades) do plano de trabalho —
+    cronograma previsto (`data_inicio`/`data_fim`) e status de execução
+    formam o lado "físico" do cronograma físico-financeiro do RF-035;
+    `valor_previsto`/`valor_executado` completam o lado "financeiro" na
+    mesma linha, em vez de uma entidade separada — cronograma
+    físico-financeiro é fundamentalmente "etapa + dinheiro por etapa",
+    não um conceito à parte. "Etapas" e "atividades" do requisito são
+    tratadas como o mesmo nível — uma linha por etapa/atividade, sem
+    hierarquia de dois níveis — mesma simplificação já usada em
+    `TarefaGovernanca` (sem sub-tarefas)."""
 
     __tablename__ = "etapas_projeto"
 
@@ -132,6 +138,10 @@ class EtapaProjeto(TimestampedBase):
     data_inicio: Mapped[date | None] = mapped_column(Date)
     data_fim: Mapped[date | None] = mapped_column(Date)
     status: Mapped[StatusTarefa] = mapped_column(default=StatusTarefa.PENDENTE, nullable=False)
+    # RF-035: cronograma físico-financeiro — valor previsto (orçado pra
+    # esta etapa) e executado (efetivamente gasto até agora).
+    valor_previsto: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    valor_executado: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
 
     projeto: Mapped["Projeto"] = relationship(back_populates="etapas")
 
@@ -305,3 +315,35 @@ class RecursoSubmissaoProjeto(TimestampedBase):
     data_decisao: Mapped[date | None] = mapped_column(Date)
 
     projeto: Mapped["Projeto"] = relationship(back_populates="recursos_submissao")
+
+
+class AquisicaoProjeto(TimestampedBase):
+    """RF-035: item de aquisição planejado do projeto — o que precisa ser
+    comprado/contratado, quanto e por quanto. Mais simples que o que o
+    RF-037 vai pedir (pesquisas de preço, cotações de múltiplos
+    fornecedores, validação de quantidade mínima, justificativa de
+    exceção) — desenhado pra ser estendido por uma `CotacaoAquisicao`
+    ligada a `aquisicao_id` quando RF-037 for construído, não duplicado
+    (mesmo raciocínio já usado em `RiscoProjeto` para o RF-040).
+
+    `quantidade` e `categoria` são texto livre — quantidade porque pode
+    vir com unidade não-padronizada ("50 unidades", "200 kg", "10
+    horas técnicas"), categoria pelo mesmo motivo de `eixo_sp_produz`
+    (documento não define uma lista fechada de categorias de compra)."""
+
+    __tablename__ = "aquisicoes_projeto"
+
+    projeto_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projetos.id"), nullable=False)
+    item: Mapped[str] = mapped_column(String(255), nullable=False)
+    descricao: Mapped[str | None] = mapped_column(Text)
+    categoria: Mapped[str | None] = mapped_column(String(150))
+    quantidade: Mapped[str | None] = mapped_column(String(100))
+    valor_estimado: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    data_prevista: Mapped[date | None] = mapped_column(Date)
+    responsavel_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pessoas.id"), nullable=True
+    )
+    status: Mapped[StatusTarefa] = mapped_column(default=StatusTarefa.PENDENTE, nullable=False)
+
+    projeto: Mapped["Projeto"] = relationship(back_populates="aquisicoes")
+    responsavel: Mapped["Pessoa | None"] = relationship()

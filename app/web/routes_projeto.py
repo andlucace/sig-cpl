@@ -32,6 +32,7 @@ from app.models.enums import (
 from app.models.pessoa import Pessoa
 from app.models.planejamento import ObjetivoEstrategico, PlanejamentoEstrategico
 from app.models.projeto import (
+    AquisicaoProjeto,
     DemandaProjeto,
     EditalFomento,
     EquipeProjeto,
@@ -430,6 +431,12 @@ def detalhe_projeto(
         .order_by(RecursoSubmissaoProjeto.created_at)
         .all()
     )
+    aquisicoes = (
+        db.query(AquisicaoProjeto)
+        .filter(AquisicaoProjeto.projeto_id == projeto_id)
+        .order_by(AquisicaoProjeto.created_at)
+        .all()
+    )
     return templates.TemplateResponse(
         request,
         "restrito/projetos/projeto_detail.html",
@@ -455,6 +462,7 @@ def detalhe_projeto(
             "recursos_submissao": recursos_submissao,
             "tipos_recurso_submissao": list(TipoRecursoSubmissao),
             "status_recurso_opcoes": list(StatusRecurso),
+            "aquisicoes": aquisicoes,
             "e_administrador": _e_administrador(db, usuario),
             "usuario": usuario,
             "pagina_ativa": "projetos",
@@ -536,11 +544,13 @@ def criar_etapa(
     descricao: str | None = Form(None),
     data_inicio: str | None = Form(None),
     data_fim: str | None = Form(None),
+    valor_previsto: str | None = Form(None),
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user_optional),
 ):
-    """RF-034: etapa (ou atividade — mesmo nível) do plano de trabalho,
-    com cronograma previsto. Entra no fim da lista."""
+    """RF-034/035: etapa (ou atividade — mesmo nível) do plano de
+    trabalho, com cronograma previsto e valor orçado (cronograma
+    físico-financeiro). Entra no fim da lista."""
 
     if redir := _exigir_login(usuario):
         return redir
@@ -556,6 +566,7 @@ def criar_etapa(
         ordem=maior_ordem,
         data_inicio=date.fromisoformat(data_inicio) if data_inicio else None,
         data_fim=date.fromisoformat(data_fim) if data_fim else None,
+        valor_previsto=Decimal(valor_previsto) if valor_previsto else None,
     )
     db.add(etapa)
     db.commit()
@@ -566,6 +577,7 @@ def criar_etapa(
 def atualizar_status_etapa(
     etapa_id: uuid.UUID,
     status_etapa: StatusTarefa = Form(..., alias="status"),
+    valor_executado: str | None = Form(None),
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user_optional),
 ):
@@ -576,6 +588,7 @@ def atualizar_status_etapa(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Etapa de projeto não encontrada.")
     verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=etapa.projeto.cpl_id)
     etapa.status = status_etapa
+    etapa.valor_executado = Decimal(valor_executado) if valor_executado else None
     db.commit()
     return RedirectResponse(f"/painel/projetos/{etapa.projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -891,3 +904,57 @@ def decidir_recurso_submissao(
     recurso.data_decisao = date.today()
     db.commit()
     return RedirectResponse(f"/painel/projetos/{recurso.projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{projeto_id}/aquisicoes")
+def criar_aquisicao(
+    projeto_id: uuid.UUID,
+    item: str = Form(...),
+    descricao: str | None = Form(None),
+    categoria: str | None = Form(None),
+    quantidade: str | None = Form(None),
+    valor_estimado: str | None = Form(None),
+    data_prevista: str | None = Form(None),
+    responsavel_id: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-035: item de aquisição planejado do projeto."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    projeto = db.get(Projeto, projeto_id)
+    if projeto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    aquisicao = AquisicaoProjeto(
+        projeto_id=projeto_id,
+        item=item,
+        descricao=descricao or None,
+        categoria=categoria or None,
+        quantidade=quantidade or None,
+        valor_estimado=Decimal(valor_estimado) if valor_estimado else None,
+        data_prevista=date.fromisoformat(data_prevista) if data_prevista else None,
+        responsavel_id=_opt_uuid(responsavel_id),
+    )
+    db.add(aquisicao)
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/aquisicoes/{aquisicao_id}/status")
+def atualizar_status_aquisicao(
+    aquisicao_id: uuid.UUID,
+    status_aquisicao: StatusTarefa = Form(..., alias="status"),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    aquisicao = db.get(AquisicaoProjeto, aquisicao_id)
+    if aquisicao is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Aquisição de projeto não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=aquisicao.projeto.cpl_id)
+    aquisicao.status = status_aquisicao
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{aquisicao.projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
