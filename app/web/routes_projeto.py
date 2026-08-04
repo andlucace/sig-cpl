@@ -33,7 +33,9 @@ from app.models.pessoa import Pessoa
 from app.models.planejamento import ObjetivoEstrategico, PlanejamentoEstrategico
 from app.models.projeto import (
     AquisicaoProjeto,
+    CotacaoAquisicao,
     DemandaProjeto,
+    DesembolsoProjeto,
     EditalFomento,
     EquipeProjeto,
     EtapaProjeto,
@@ -48,6 +50,13 @@ from app.models.usuario import Usuario
 from app.web.templates import templates
 
 router = APIRouter(prefix="/painel/projetos", tags=["Área restrita — Projetos"])
+
+# RF-037: mesmo valor documentado em app/api/routes/projeto.py — sem
+# módulo de serviço compartilhado pro domínio de Projetos ainda, então a
+# constante é duplicada nas duas camadas, mesmo padrão já usado pra
+# outras regras de negócio deste módulo (ex.: transição de status de
+# StatusDemanda em criar/converter demanda).
+MINIMO_COTACOES = 3
 
 
 def _exigir_login(usuario: Usuario | None) -> RedirectResponse | None:
@@ -437,6 +446,26 @@ def detalhe_projeto(
         .order_by(AquisicaoProjeto.created_at)
         .all()
     )
+    desembolsos = (
+        db.query(DesembolsoProjeto)
+        .filter(DesembolsoProjeto.projeto_id == projeto_id)
+        .order_by(DesembolsoProjeto.data)
+        .all()
+    )
+    cotacoes = (
+        db.query(CotacaoAquisicao)
+        .join(AquisicaoProjeto, CotacaoAquisicao.aquisicao_id == AquisicaoProjeto.id)
+        .filter(AquisicaoProjeto.projeto_id == projeto_id)
+        .order_by(CotacaoAquisicao.created_at)
+        .all()
+    )
+    # RF-038: "saldos" — calculado na hora (valor da origem menos a soma
+    # dos desembolsos ligados a ela), não armazenado, pra nunca ficar
+    # dessincronizado.
+    saldos_por_origem = {
+        origem.id: origem.valor - sum((d.valor for d in desembolsos if d.origem_recurso_id == origem.id), Decimal("0"))
+        for origem in origens_recurso
+    }
     return templates.TemplateResponse(
         request,
         "restrito/projetos/projeto_detail.html",
@@ -463,6 +492,10 @@ def detalhe_projeto(
             "tipos_recurso_submissao": list(TipoRecursoSubmissao),
             "status_recurso_opcoes": list(StatusRecurso),
             "aquisicoes": aquisicoes,
+            "minimo_cotacoes": MINIMO_COTACOES,
+            "cotacoes": cotacoes,
+            "desembolsos": desembolsos,
+            "saldos_por_origem": saldos_por_origem,
             "e_administrador": _e_administrador(db, usuario),
             "usuario": usuario,
             "pagina_ativa": "projetos",
@@ -914,12 +947,16 @@ def criar_aquisicao(
     categoria: str | None = Form(None),
     quantidade: str | None = Form(None),
     valor_estimado: str | None = Form(None),
+    contrapartida: bool = Form(False),
     data_prevista: str | None = Form(None),
     responsavel_id: str | None = Form(None),
+    etapa_id: str | None = Form(None),
+    origem_recurso_id: str | None = Form(None),
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user_optional),
 ):
-    """RF-035: item de aquisição planejado do projeto."""
+    """RF-035/036: item de aquisição/despesa planejado do projeto,
+    opcionalmente vinculado a uma etapa e a uma origem de recursos."""
 
     if redir := _exigir_login(usuario):
         return redir
@@ -934,8 +971,11 @@ def criar_aquisicao(
         categoria=categoria or None,
         quantidade=quantidade or None,
         valor_estimado=Decimal(valor_estimado) if valor_estimado else None,
+        contrapartida=contrapartida,
         data_prevista=date.fromisoformat(data_prevista) if data_prevista else None,
         responsavel_id=_opt_uuid(responsavel_id),
+        etapa_id=_opt_uuid(etapa_id),
+        origem_recurso_id=_opt_uuid(origem_recurso_id),
     )
     db.add(aquisicao)
     db.commit()
@@ -958,3 +998,122 @@ def atualizar_status_aquisicao(
     aquisicao.status = status_aquisicao
     db.commit()
     return RedirectResponse(f"/painel/projetos/{aquisicao.projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{projeto_id}/cotacoes")
+def criar_cotacao(
+    projeto_id: uuid.UUID,
+    aquisicao_id: str = Form(...),
+    fornecedor: str = Form(...),
+    valor: str = Form(...),
+    observacao: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-037: cotação de um fornecedor pra uma aquisição — a aquisição
+    é escolhida por um `<select>` no form em vez de path param, pra não
+    precisar de JS pra montar a URL de submissão dinamicamente."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    aquisicao = db.get(AquisicaoProjeto, uuid.UUID(aquisicao_id))
+    if aquisicao is None or aquisicao.projeto_id != projeto_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Aquisição de projeto não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=aquisicao.projeto.cpl_id)
+    cotacao = CotacaoAquisicao(
+        aquisicao_id=aquisicao.id,
+        fornecedor=fornecedor,
+        valor=Decimal(valor),
+        observacao=observacao or None,
+    )
+    db.add(cotacao)
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/cotacoes/{cotacao_id}/selecionar")
+def selecionar_cotacao(
+    cotacao_id: uuid.UUID,
+    justificativa_excecao: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-037: seleciona a cotação vencedora — exige justificativa de
+    exceção se houver menos que `MINIMO_COTACOES` registradas."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    cotacao = db.get(CotacaoAquisicao, cotacao_id)
+    if cotacao is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cotação de aquisição não encontrada.")
+    aquisicao = cotacao.aquisicao
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=aquisicao.projeto.cpl_id)
+    total_cotacoes = (
+        db.query(CotacaoAquisicao).filter(CotacaoAquisicao.aquisicao_id == aquisicao.id).count()
+    )
+    if total_cotacoes < MINIMO_COTACOES and not justificativa_excecao:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Menos de {MINIMO_COTACOES} cotações registradas — justificativa de exceção é obrigatória.",
+        )
+    db.query(CotacaoAquisicao).filter(CotacaoAquisicao.aquisicao_id == aquisicao.id).update(
+        {"selecionada": False}
+    )
+    cotacao.selecionada = True
+    if justificativa_excecao:
+        aquisicao.justificativa_excecao = justificativa_excecao
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{aquisicao.projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{projeto_id}/desembolsos")
+def criar_desembolso(
+    projeto_id: uuid.UUID,
+    data_desembolso: str = Form(..., alias="data"),
+    valor: str = Form(...),
+    descricao: str | None = Form(None),
+    bem_adquirido: str | None = Form(None),
+    aquisicao_id: str | None = Form(None),
+    origem_recurso_id: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-038: desembolso efetivo de recursos do projeto."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    projeto = db.get(Projeto, projeto_id)
+    if projeto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    desembolso = DesembolsoProjeto(
+        projeto_id=projeto_id,
+        data=date.fromisoformat(data_desembolso),
+        valor=Decimal(valor),
+        descricao=descricao or None,
+        bem_adquirido=bem_adquirido or None,
+        aquisicao_id=_opt_uuid(aquisicao_id),
+        origem_recurso_id=_opt_uuid(origem_recurso_id),
+    )
+    db.add(desembolso)
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/desembolsos/{desembolso_id}/conciliar")
+def conciliar_desembolso(
+    desembolso_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    desembolso = db.get(DesembolsoProjeto, desembolso_id)
+    if desembolso is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Desembolso de projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=desembolso.projeto.cpl_id)
+    desembolso.conciliado = not desembolso.conciliado
+    db.commit()
+    return RedirectResponse(
+        f"/painel/projetos/{desembolso.projeto_id}", status_code=status.HTTP_303_SEE_OTHER
+    )

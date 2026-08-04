@@ -40,7 +40,9 @@ from app.models.planejamento import (
 )
 from app.models.projeto import (
     AquisicaoProjeto,
+    CotacaoAquisicao,
     DemandaProjeto,
+    DesembolsoProjeto,
     EditalFomento,
     EquipeProjeto,
     EtapaProjeto,
@@ -102,4 +104,6 @@ __all__ = [
     "EditalFomento",
     "RecursoSubmissaoProjeto",
     "AquisicaoProjeto",
+    "CotacaoAquisicao",
+    "DesembolsoProjeto",
 ]

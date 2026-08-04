@@ -11,7 +11,9 @@ from app.models.cpl import CPL
 from app.models.enums import EstagioProjeto, StatusDemanda
 from app.models.projeto import (
     AquisicaoProjeto,
+    CotacaoAquisicao,
     DemandaProjeto,
+    DesembolsoProjeto,
     EditalFomento,
     EquipeProjeto,
     EtapaProjeto,
@@ -27,8 +29,13 @@ from app.schemas.projeto import (
     AquisicaoProjetoCreate,
     AquisicaoProjetoRead,
     AquisicaoProjetoUpdate,
+    CotacaoAquisicaoCreate,
+    CotacaoAquisicaoRead,
     DemandaProjetoCreate,
     DemandaProjetoRead,
+    DesembolsoProjetoCreate,
+    DesembolsoProjetoRead,
+    DesembolsoProjetoUpdate,
     EditalFomentoCreate,
     EditalFomentoRead,
     EditalFomentoUpdate,
@@ -56,6 +63,7 @@ from app.schemas.projeto import (
     RiscoProjetoCreate,
     RiscoProjetoRead,
     RiscoProjetoUpdate,
+    SelecaoCotacaoCreate,
     SubmissaoProjetoCreate,
 )
 
@@ -144,6 +152,26 @@ def _get_aquisicao_or_404(db: Session, aquisicao_id: uuid.UUID) -> AquisicaoProj
     if aquisicao is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Aquisição de projeto não encontrada.")
     return aquisicao
+
+
+def _get_cotacao_or_404(db: Session, cotacao_id: uuid.UUID) -> CotacaoAquisicao:
+    cotacao = db.get(CotacaoAquisicao, cotacao_id)
+    if cotacao is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cotação de aquisição não encontrada.")
+    return cotacao
+
+
+def _get_desembolso_or_404(db: Session, desembolso_id: uuid.UUID) -> DesembolsoProjeto:
+    desembolso = db.get(DesembolsoProjeto, desembolso_id)
+    if desembolso is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Desembolso de projeto não encontrado.")
+    return desembolso
+
+
+# RF-037: quantidade mínima de cotações pra dispensar justificativa de
+# exceção — não fixado no documento de requisitos; 3 é prática comum de
+# pesquisa de mercado no setor público brasileiro.
+MINIMO_COTACOES = 3
 
 
 # --- Demandas (RF-031) -------------------------------------------------------
@@ -828,3 +856,139 @@ def atualizar_aquisicao(
     db.commit()
     db.refresh(aquisicao)
     return aquisicao
+
+
+# --- Cotações de aquisição (RF-037) ------------------------------------------
+
+
+@router.post(
+    "/aquisicoes/{aquisicao_id}/cotacoes",
+    response_model=CotacaoAquisicaoRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def criar_cotacao(
+    aquisicao_id: uuid.UUID,
+    dados: CotacaoAquisicaoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> CotacaoAquisicao:
+    """RF-037: cotação de um fornecedor pra uma aquisição — pesquisa de
+    preço, com anexo opcional do repositório de Documentos."""
+
+    aquisicao = _get_aquisicao_or_404(db, aquisicao_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=aquisicao.projeto.cpl_id)
+    cotacao = CotacaoAquisicao(aquisicao_id=aquisicao_id, **dados.model_dump())
+    db.add(cotacao)
+    db.commit()
+    db.refresh(cotacao)
+    return cotacao
+
+
+@router.get("/aquisicoes/{aquisicao_id}/cotacoes", response_model=list[CotacaoAquisicaoRead])
+def listar_cotacoes(
+    aquisicao_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[CotacaoAquisicao]:
+    aquisicao = _get_aquisicao_or_404(db, aquisicao_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_LEITURA, cpl_id=aquisicao.projeto.cpl_id)
+    return (
+        db.query(CotacaoAquisicao)
+        .filter(CotacaoAquisicao.aquisicao_id == aquisicao_id)
+        .order_by(CotacaoAquisicao.created_at)
+        .all()
+    )
+
+
+@router.post("/cotacoes/{cotacao_id}/selecionar", response_model=CotacaoAquisicaoRead)
+def selecionar_cotacao(
+    cotacao_id: uuid.UUID,
+    dados: SelecaoCotacaoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> CotacaoAquisicao:
+    """RF-037: seleciona a cotação vencedora — valida quantidade mínima
+    de fornecedores (`MINIMO_COTACOES`); abaixo disso, exige
+    `justificativa_excecao`. Desmarca qualquer outra cotação selecionada
+    antes pra mesma aquisição."""
+
+    cotacao = _get_cotacao_or_404(db, cotacao_id)
+    aquisicao = cotacao.aquisicao
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=aquisicao.projeto.cpl_id)
+    total_cotacoes = (
+        db.query(CotacaoAquisicao).filter(CotacaoAquisicao.aquisicao_id == aquisicao.id).count()
+    )
+    if total_cotacoes < MINIMO_COTACOES and not dados.justificativa_excecao:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Menos de {MINIMO_COTACOES} cotações registradas — justificativa de exceção é obrigatória.",
+        )
+    db.query(CotacaoAquisicao).filter(CotacaoAquisicao.aquisicao_id == aquisicao.id).update(
+        {"selecionada": False}
+    )
+    cotacao.selecionada = True
+    if dados.justificativa_excecao:
+        aquisicao.justificativa_excecao = dados.justificativa_excecao
+    db.commit()
+    db.refresh(cotacao)
+    return cotacao
+
+
+# --- Desembolsos do projeto (RF-038) -----------------------------------------
+
+
+@router.post(
+    "/{projeto_id}/desembolsos", response_model=DesembolsoProjetoRead, status_code=status.HTTP_201_CREATED
+)
+def criar_desembolso(
+    projeto_id: uuid.UUID,
+    dados: DesembolsoProjetoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> DesembolsoProjeto:
+    """RF-038: desembolso efetivo de recursos — data, valor, origem dos
+    recursos, aquisição paga, bem adquirido e comprovante."""
+
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    desembolso = DesembolsoProjeto(projeto_id=projeto_id, **dados.model_dump())
+    db.add(desembolso)
+    db.commit()
+    db.refresh(desembolso)
+    return desembolso
+
+
+@router.get("/{projeto_id}/desembolsos", response_model=list[DesembolsoProjetoRead])
+def listar_desembolsos(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[DesembolsoProjeto]:
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_LEITURA, cpl_id=projeto.cpl_id)
+    return (
+        db.query(DesembolsoProjeto)
+        .filter(DesembolsoProjeto.projeto_id == projeto_id)
+        .order_by(DesembolsoProjeto.data)
+        .all()
+    )
+
+
+@router.patch("/desembolsos/{desembolso_id}", response_model=DesembolsoProjetoRead)
+def atualizar_desembolso(
+    desembolso_id: uuid.UUID,
+    dados: DesembolsoProjetoUpdate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> DesembolsoProjeto:
+    """Usado principalmente pra marcar `conciliado` e anexar o
+    comprovante — dados financeiros (valor/data/origem) não são
+    editáveis depois de criado, só os campos de acompanhamento."""
+
+    desembolso = _get_desembolso_or_404(db, desembolso_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=desembolso.projeto.cpl_id)
+    for campo, valor in dados.model_dump(exclude_unset=True).items():
+        setattr(desembolso, campo, valor)
+    db.commit()
+    db.refresh(desembolso)
+    return desembolso

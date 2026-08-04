@@ -602,6 +602,7 @@
                             <tr>
                                 <th>Fonte</th>
                                 <th>Valor</th>
+                                <th>Saldo</th>
                                 <th>Contrapartida</th>
                                 <th>Descrição</th>
                             </tr>
@@ -611,6 +612,7 @@
                                 <tr>
                                     <td>{{ origem.fonte }}</td>
                                     <td class="small">R$ {{ "%.2f"|format(origem.valor) }}</td>
+                                    <td class="small">R$ {{ "%.2f"|format(saldos_por_origem[origem.id]) }}</td>
                                     <td>
                                         <span class="badge {% if origem.contrapartida %}text-bg-info{% else %}text-bg-secondary{% endif %}">
                                             {{ "sim" if origem.contrapartida else "não" }}
@@ -619,7 +621,7 @@
                                     <td class="small">{{ origem.descricao or "—" }}</td>
                                 </tr>
                             {% else %}
-                                <tr><td colspan="4" class="text-body-secondary">Nenhuma origem de recurso cadastrada ainda.</td></tr>
+                                <tr><td colspan="5" class="text-body-secondary">Nenhuma origem de recurso cadastrada ainda.</td></tr>
                             {% endfor %}
                         </tbody>
                         {% if origens_recurso %}
@@ -627,6 +629,7 @@
                                 <tr class="fw-semibold">
                                     <td>Total</td>
                                     <td class="small">R$ {{ "%.2f"|format(origens_recurso|sum(attribute="valor")) }}</td>
+                                    <td class="small">R$ {{ "%.2f"|format(saldos_por_origem.values()|sum) }}</td>
                                     <td colspan="2"></td>
                                 </tr>
                             </tfoot>
@@ -817,6 +820,10 @@
                                     <td>
                                         {{ aquisicao.item }}
                                         {% if aquisicao.descricao %}<div class="text-body-secondary small">{{ aquisicao.descricao }}</div>{% endif %}
+                                        {% if aquisicao.etapa %}<div class="text-body-secondary small">Etapa: {{ aquisicao.etapa.titulo }}</div>{% endif %}
+                                        {% if aquisicao.origem_recurso %}<div class="text-body-secondary small">Origem: {{ aquisicao.origem_recurso.fonte }}</div>{% endif %}
+                                        {% if aquisicao.contrapartida %}<span class="badge text-bg-info">contrapartida</span>{% endif %}
+                                        {% if aquisicao.justificativa_excecao %}<div class="text-body-secondary small">Exceção: {{ aquisicao.justificativa_excecao }}</div>{% endif %}
                                     </td>
                                     <td class="small">{{ aquisicao.categoria or "—" }}</td>
                                     <td class="small">{{ aquisicao.quantidade or "—" }}</td>
@@ -891,7 +898,31 @@
                                 <input type="date" class="form-control" name="data_prevista">
                             </div>
                         </div>
-                        <div class="mb-3 mt-2">
+                        <div class="row g-2 mt-0">
+                            <div class="col-6">
+                                <label class="form-label">Etapa</label>
+                                <select class="form-select" name="etapa_id">
+                                    <option value="">Nenhuma</option>
+                                    {% for etapa in etapas %}
+                                        <option value="{{ etapa.id }}">{{ etapa.titulo }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Origem de recurso</label>
+                                <select class="form-select" name="origem_recurso_id">
+                                    <option value="">Nenhuma</option>
+                                    {% for origem in origens_recurso %}
+                                        <option value="{{ origem.id }}">{{ origem.fonte }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-check mb-3 mt-2">
+                            <input type="checkbox" class="form-check-input" name="contrapartida" value="true" id="aquisicao-contrapartida-check">
+                            <label class="form-check-label" for="aquisicao-contrapartida-check">É contrapartida</label>
+                        </div>
+                        <div class="mb-3">
                             <label class="form-label">Responsável</label>
                             <select class="form-select" name="responsavel_id">
                                 <option value="">Não definido</option>
@@ -902,6 +933,213 @@
                         </div>
                         <button type="submit" class="btn btn-primary w-100 mt-1">
                             <i class="bi bi-plus-lg me-1"></i>Adicionar aquisição
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-receipt me-2"></i>Cotações
+                </div>
+                <p class="text-body-secondary small px-3 pt-2 mb-0">
+                    Pesquisa de preço por aquisição — mínimo recomendado de {{ minimo_cotacoes }} cotações;
+                    abaixo disso, selecionar a vencedora exige justificativa de exceção.
+                </p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Aquisição</th>
+                                <th>Fornecedor</th>
+                                <th>Valor</th>
+                                <th>Situação</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for cotacao in cotacoes %}
+                                <tr>
+                                    <td class="small">{{ cotacao.aquisicao.item }}</td>
+                                    <td>
+                                        {{ cotacao.fornecedor }}
+                                        {% if cotacao.observacao %}<div class="text-body-secondary small">{{ cotacao.observacao }}</div>{% endif %}
+                                    </td>
+                                    <td class="small">R$ {{ "%.2f"|format(cotacao.valor) }}</td>
+                                    <td>
+                                        <span class="badge {% if cotacao.selecionada %}text-bg-success{% else %}text-bg-secondary{% endif %}">
+                                            {{ "vencedora" if cotacao.selecionada else "—" }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if not cotacao.selecionada %}
+                                            <form method="post" action="/painel/projetos/cotacoes/{{ cotacao.id }}/selecionar" class="d-flex gap-1">
+                                                <input type="text" class="form-control form-control-sm" name="justificativa_excecao" placeholder="Justificativa (se < {{ minimo_cotacoes }})" style="width: 160px;">
+                                                <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                    <i class="bi bi-check-lg"></i>
+                                                </button>
+                                            </form>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="5" class="text-body-secondary">Nenhuma cotação registrada ainda.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Nova cotação
+                </div>
+                <div class="card-body">
+                    {% if aquisicoes %}
+                        <form method="post" action="/painel/projetos/{{ projeto.id }}/cotacoes">
+                            <div class="mb-3">
+                                <label class="form-label">Aquisição</label>
+                                <select class="form-select" name="aquisicao_id" required>
+                                    {% for aquisicao in aquisicoes %}
+                                        <option value="{{ aquisicao.id }}">{{ aquisicao.item }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Fornecedor</label>
+                                <input type="text" class="form-control" name="fornecedor" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Valor (R$)</label>
+                                <input type="number" step="0.01" min="0" class="form-control" name="valor" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Observação</label>
+                                <textarea class="form-control" name="observacao" rows="2"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 mt-1">
+                                <i class="bi bi-plus-lg me-1"></i>Adicionar cotação
+                            </button>
+                        </form>
+                    {% else %}
+                        <p class="text-body-secondary small mb-0">Cadastre uma aquisição primeiro pra poder registrar cotações.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-wallet2 me-2"></i>Desembolsos
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Data</th>
+                                <th>Valor</th>
+                                <th>Origem</th>
+                                <th>Bem adquirido</th>
+                                <th>Conciliado</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for desembolso in desembolsos %}
+                                <tr>
+                                    <td class="small">{{ desembolso.data.strftime('%d/%m/%Y') }}</td>
+                                    <td class="small">
+                                        R$ {{ "%.2f"|format(desembolso.valor) }}
+                                        {% if desembolso.aquisicao %}<div class="text-body-secondary">{{ desembolso.aquisicao.item }}</div>{% endif %}
+                                        {% if desembolso.descricao %}<div class="text-body-secondary">{{ desembolso.descricao }}</div>{% endif %}
+                                    </td>
+                                    <td class="small">{{ desembolso.origem_recurso.fonte if desembolso.origem_recurso else "—" }}</td>
+                                    <td class="small">{{ desembolso.bem_adquirido or "—" }}</td>
+                                    <td>
+                                        <span class="badge {% if desembolso.conciliado %}text-bg-success{% else %}text-bg-secondary{% endif %}">
+                                            {{ "sim" if desembolso.conciliado else "não" }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <form method="post" action="/painel/projetos/desembolsos/{{ desembolso.id }}/conciliar">
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                <i class="bi bi-arrow-repeat"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="6" class="text-body-secondary">Nenhum desembolso registrado ainda.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                        {% if desembolsos %}
+                            <tfoot>
+                                <tr class="fw-semibold">
+                                    <td>Total</td>
+                                    <td class="small">R$ {{ "%.2f"|format(desembolsos|sum(attribute="valor")) }}</td>
+                                    <td colspan="4"></td>
+                                </tr>
+                            </tfoot>
+                        {% endif %}
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Novo desembolso
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/painel/projetos/{{ projeto.id }}/desembolsos">
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label">Data</label>
+                                <input type="date" class="form-control" name="data" required>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Valor (R$)</label>
+                                <input type="number" step="0.01" min="0" class="form-control" name="valor" required>
+                            </div>
+                        </div>
+                        <div class="row g-2 mt-0">
+                            <div class="col-6">
+                                <label class="form-label">Aquisição</label>
+                                <select class="form-select" name="aquisicao_id">
+                                    <option value="">Nenhuma</option>
+                                    {% for aquisicao in aquisicoes %}
+                                        <option value="{{ aquisicao.id }}">{{ aquisicao.item }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Origem de recurso</label>
+                                <select class="form-select" name="origem_recurso_id">
+                                    <option value="">Nenhuma</option>
+                                    {% for origem in origens_recurso %}
+                                        <option value="{{ origem.id }}">{{ origem.fonte }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3 mt-2">
+                            <label class="form-label">Bem adquirido</label>
+                            <input type="text" class="form-control" name="bem_adquirido" placeholder="Se aplicável">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="2"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mt-1">
+                            <i class="bi bi-plus-lg me-1"></i>Registrar desembolso
                         </button>
                     </form>
                 </div>

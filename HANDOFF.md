@@ -96,6 +96,16 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
       finalização — aquisições e cronograma físico-financeiro) —
       precisou de ajuste manual (`aquisicoes_projeto.status` reaproveita
       `statustarefa`)
+  19. `94d2ed47a842` — tabelas `cotacoes_aquisicao`, `desembolsos_projeto`
+      + colunas `aquisicoes_projeto.etapa_id`/`origem_recurso_id`/
+      `contrapartida`/`justificativa_excecao` (RF-036/037/038) —
+      precisou de ajuste manual diferente do de sempre: `contrapartida`
+      é `Boolean NOT NULL` numa tabela (`aquisicoes_projeto`) que já
+      tinha linhas, e o autogenerate não adiciona `server_default`
+      sozinho (só olha pra `server_default` do modelo, não pro
+      `default=` do Python/ORM) — sem isso o `ALTER TABLE` falharia
+      contra as linhas existentes. Corrigido adicionando
+      `server_default=sa.text('false')` na coluna
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos)
 
@@ -868,6 +878,61 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     de console nem 500 reais no log. Com esta fatia, **o RF-035 está
     100% implementado** — não fica mais nenhum campo do requisito
     pendente, só o resto do módulo de Projetos (RF-036 a RF-041).
+27. **RF-036/037/038: financeiro do projeto** (itens de despesa,
+    cotações, desembolsos) — usuário disse "seguir para as RFs 036-038",
+    os três nomeados juntos, então construí os três nesta mesma fatia
+    (mesmo padrão do item 25/RF-029-030 — quando o pedido já vem
+    agrupado, não recorto sozinho).
+    **RF-036 não é uma tabela nova**: "cadastrar itens de despesa,
+    quantidades, valores, categorias, fontes, contrapartida e
+    vinculação a etapas" é o `AquisicaoProjeto` do RF-035 visto pelo
+    ângulo financeiro — por isso a extensão foi adicionar
+    `etapa_id`/`origem_recurso_id`/`contrapartida` na mesma tabela, não
+    criar um `ItemDespesaProjeto` duplicado.
+    **RF-037** — `CotacaoAquisicao` (fornecedor, valor, anexo opcional
+    via Documentos, `selecionada`), exatamente a extensão já anunciada
+    na docstring de `AquisicaoProjeto` desde o item 24. "Validar
+    quantidade mínima de fornecedores" virou uma regra de negócio de
+    verdade, não só descritiva: `POST /cotacoes/{id}/selecionar` conta
+    quantas cotações a aquisição tem e, se for menos que
+    `MINIMO_COTACOES` (constante `= 3`, **não fixado no documento de
+    requisitos** — é prática comum de pesquisa de mercado no setor
+    público brasileiro, decisão minha, documentada no código), exige
+    `justificativa_excecao` (senão 400) — testado nos dois sentidos
+    (bloqueia com 2 cotações sem justificativa, libera com 3+ sem
+    exigir nada). A seleção desmarca qualquer cotação selecionada
+    anterior da mesma aquisição (só uma vencedora por vez).
+    **RF-038** — `DesembolsoProjeto` (data, valor, aquisição e origem de
+    recursos ligadas, bem adquirido, comprovante via Documentos,
+    `conciliado`). **"Saldos" não é armazenado** — é `OrigemRecursoProjeto.valor`
+    menos a soma dos desembolsos ligados àquela origem, calculado a
+    cada carregamento da tela (`saldos_por_origem` no web route), pra
+    nunca ficar dessincronizado do que realmente foi gasto. "Conciliação
+    por projeto" também não é uma entidade — é a leitura agregada da
+    tabela de desembolsos com o toggle `conciliado` por linha.
+    **Padrão de UI evitando JS**: a princípio desenhei o form de "nova
+    cotação" fazendo o usuário escolher a aquisição por um `<select>` e
+    submetendo pra uma URL com `{aquisicao_id}` no path — isso exigiria
+    JS pra montar a URL dinamicamente antes do submit, que não é um
+    padrão usado em nenhum outro lugar deste projeto (só forms HTML
+    puros). Corrigido antes de testar: a rota web virou
+    `POST /{projeto_id}/cotacoes` com `aquisicao_id` como campo de form
+    normal (igual ao padrão de `responsavel_id` em outros forms), não
+    path param — a API manteve `/aquisicoes/{id}/cotacoes` (REST de
+    verdade, sem o mesmo problema pra um cliente HTTP). **Se precisar de
+    novo de um form que "cria X pra um Y escolhido num select", sempre
+    usar `Y_id` como campo de form, nunca um path param dinâmico
+    montado por JS.**
+    Migração `94d2ed47a842` — gotcha novo, ver "Armadilhas já
+    resolvidas" (coluna `Boolean NOT NULL` nova numa tabela já populada
+    precisa de `server_default` explícito, autogenerate não resolve
+    sozinho a partir do `default=` do Python).
+    Testado via curl (criar aquisição vinculada a etapa/origem, criar
+    cotações, validar a regra de mínimo com e sem justificativa,
+    registrar desembolso, conferir saldo calculado, conciliar — web e
+    API JSON) e via Playwright (`projeto_rf036_038_shot.js`, incluindo o
+    form de cotação sem JS de fato funcionando pelo navegador), sem
+    erros de console nem 500 reais no log.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -1089,6 +1154,43 @@ só porque é um módulo novo).
     router que já tem uma rota `GET /{algo}` genérica no mesmo nível,
     registre a rota fixa ANTES da genérica — e teste com curl direto na
     API (não só a UI web) pra pegar colisões desse tipo cedo.
+14. **Alembic autogenerate não adiciona `server_default` sozinho ao
+    adicionar uma coluna `Boolean`/`NOT NULL` nova a uma tabela já
+    populada** — ele só copia o `server_default` que estiver explícito
+    no `mapped_column(...)` do modelo; o `default=False` do
+    SQLAlchemy/Python (aplicado só em `INSERT`s novos feitos pelo ORM)
+    é invisível pro autogenerate. Ao adicionar
+    `AquisicaoProjeto.contrapartida` (`Boolean, default=False,
+    nullable=False`) numa tabela (`aquisicoes_projeto`) que já tinha
+    linhas de sessões de teste anteriores, a migração gerada teria
+    falhado com violação de `NOT NULL` nas linhas existentes. Pego
+    antes de aplicar (revisão de rotina do arquivo gerado, mesmo hábito
+    que virou automático pro gotcha de enum) — corrigido adicionando
+    `server_default=sa.text('false')` na chamada `op.add_column(...)`.
+    **Sempre que adicionar uma coluna `NOT NULL` sem explicit
+    `server_default` no modelo a uma tabela que já existe (não é
+    `create_table`), revisar se a tabela pode ter linhas e, se sim,
+    adicionar `server_default` manualmente na migração** — o
+    autogenerate não avisa, só falha na hora de aplicar.
+15. **Form HTML que precisa "criar X pra um Y escolhido num select" não
+    deve montar a URL de submissão dinamicamente com JS** — ao desenhar
+    o form de nova cotação (RF-037, item 27), a primeira versão tinha
+    `<select name=aquisicao_id>` mas submetia pra
+    `/aquisicoes/{aquisicao_id}/cotacoes` (path param), o que exigiria
+    JS (`onsubmit` reescrevendo `this.action`) pra funcionar — único
+    lugar do projeto que precisaria disso, quebrando o padrão de forms
+    HTML puros usado em todo o resto do sistema. Corrigido antes de
+    testar: a rota web mudou pra aceitar `aquisicao_id` como campo de
+    form normal (`POST /{projeto_id}/cotacoes`), igual a
+    `responsavel_id`/`etapa_id`/`origem_recurso_id` em outros forms —
+    zero JS. A API manteve o path param (`/aquisicoes/{id}/cotacoes`),
+    que é o design REST correto pra um cliente HTTP, sem o mesmo
+    problema. **Regra geral**: se uma entidade relacionada precisa ser
+    escolhida num `<select>` antes de submeter, ela é sempre um campo de
+    form, nunca parte do path da action — path params dinâmicos vêm só
+    de links (`href`) ou de IDs já conhecidos no momento em que a
+    página renderiza (ex.: `/etapas/{etapa.id}/status`, onde `etapa.id`
+    já existe fixo em cada linha da tabela).
 
 ## O que falta (priorizado)
 
@@ -1114,23 +1216,24 @@ ordem recomendada para o que vem depois:
    `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf` — caminho que
    `app/services/geracao_documentos.py` já procurava desde antes, então
    nenhum código mudou.
-5. ~~Iniciar módulo de Projetos~~ — **RF-029 a RF-035, todos completos**
-   (itens 20 a 26 da seção "Ordem em que este projeto foi construído"):
+5. ~~Iniciar módulo de Projetos~~ — **RF-029 a RF-038, todos completos**
+   (itens 20 a 27 da seção "Ordem em que este projeto foi construído"):
    `DemandaProjeto` (RF-031), `Projeto`/portfólio (RF-032), plano de
    trabalho completo — informações básicas, impactos socioambientais,
    continuidade e escalabilidade (RF-033/034/035), RF-034 completo
    (`EtapaProjeto`, `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`),
    RF-035 completo (`EquipeProjeto`, `OrigemRecursoProjeto`,
-   `AquisicaoProjeto`, cronograma físico-financeiro em `EtapaProjeto`)
-   e RF-029/030 completos (`EditalFomento`, submissão de projeto,
-   `RecursoSubmissaoProjeto` com recursos/contrarrazões/diligências),
-   em `/painel/projetos`. Segue pendente, sem relação com este
-   trabalho: orçamento/cotações/desembolsos (RF-036 a RF-038 —
-   `AquisicaoProjeto` já desenhado pra ser estendido por cotações
-   quando RF-037 chegar), execução física/financeira (RF-039/040 —
-   deve reaproveitar `RiscoProjeto`/`StatusRisco`, não duplicar) e
-   prestação de contas (RF-041) — "relatório de projeto" (RF-048) e o
-   restante da Fase 2 dependem desses.
+   `AquisicaoProjeto`, cronograma físico-financeiro em `EtapaProjeto`),
+   RF-029/030 completos (`EditalFomento`, submissão de projeto,
+   `RecursoSubmissaoProjeto` com recursos/contrarrazões/diligências) e
+   RF-036/037/038 completos (`AquisicaoProjeto` estendido com
+   etapa/origem/contrapartida, `CotacaoAquisicao` com validação de
+   mínimo de fornecedores, `DesembolsoProjeto` com saldo calculado e
+   conciliação), em `/painel/projetos`. Segue pendente, sem relação com
+   este trabalho: execução física/financeira (RF-039/040 — deve
+   reaproveitar `RiscoProjeto`/`StatusRisco`, não duplicar) e prestação
+   de contas (RF-041) — "relatório de projeto" (RF-048) depende desses
+   dois últimos.
 6. ~~Deploy na VPS Hostinger~~ — **feito nesta sessão** (numa sessão
    anterior a esta), ver seção "Deploy em produção" abaixo para todos os
    detalhes (como foi feito, segredos, como reimplantar).

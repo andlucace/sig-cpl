@@ -525,18 +525,20 @@ que já está no banco:
   deliberado pra não introduzir um context processor Jinja2 (mecanismo
   não usado em nenhum outro lugar do projeto) só para isso.
 
-O bloco **Projetos** (RF-029 a RF-035) cobre o módulo de Projetos e
-Fomento **completo até o RF-035**: editais de fomento com submissão,
+O bloco **Projetos** (RF-029 a RF-038) cobre o módulo de Projetos e
+Fomento **completo até o RF-038**: editais de fomento com submissão,
 recursos/contrarrazões/diligências (RF-029/030), demanda/oportunidade →
 conversão em projeto → portfólio → plano de trabalho completo,
 incluindo o RF-034 inteiro (etapas/cronograma, metas, indicadores,
-riscos, impactos socioambientais) e o RF-035 inteiro (continuidade,
+riscos, impactos socioambientais), o RF-035 inteiro (continuidade,
 escalabilidade, equipe, origem dos recursos, aquisições e cronograma
-físico-financeiro). Financeiro (RF-036 a RF-038), execução (RF-039/040)
-e prestação de contas (RF-041) **não** fazem parte desta fatia — o
-módulo completo tem 13 requisitos em 6 sub-áreas (editais,
-demandas/portfólio, plano de trabalho, financeiro, execução, prestação
-de contas), grande demais pra uma entrega só;
+físico-financeiro) e o financeiro completo (RF-036 a RF-038: itens de
+despesa, cotações com validação de mínimo de fornecedores, desembolsos
+com saldo calculado e conciliação). Execução (RF-039/040) e prestação
+de contas (RF-041) **não** fazem parte desta fatia — o módulo completo
+tem 13 requisitos em 6 sub-áreas (editais, demandas/portfólio, plano de
+trabalho, financeiro, execução, prestação de contas), grande demais pra
+uma entrega só;
 "sequência natural" escolhida sessão a sessão, sempre a camada mais
 fundamental que ainda falta.
 - **`DemandaProjeto`** (RF-031) — título, descrição, origem
@@ -644,19 +646,55 @@ fundamental que ainda falta.
     quantidade (texto livre — quantidade pode vir com unidade não
     padronizada como "50 unidades" ou "200 kg", categoria não tem lista
     fechada no documento), valor estimado, data prevista, responsável e
-    status (`StatusTarefa`, reaproveitado). Mais simples que o que o
-    RF-037 vai pedir (pesquisas de preço, cotações de múltiplos
-    fornecedores, validação de quantidade mínima, justificativa de
-    exceção) — desenhado pra ser estendido por uma `CotacaoAquisicao`
-    ligada a `aquisicao_id` quando RF-037 for construído, não
-    duplicado (mesmo raciocínio de `RiscoProjeto` pro RF-040).
-    `POST/GET /api/projetos/{id}/aquisicoes`,
+    status (`StatusTarefa`, reaproveitado). Ver RF-036/037/038 abaixo
+    para os campos de extensão (etapa, origem de recurso, contrapartida,
+    cotações). `POST/GET /api/projetos/{id}/aquisicoes`,
     `PATCH /api/projetos/aquisicoes/{id}`.
   - UI: tabela + form de criação (e "encerrar" pra equipe, atualização
     inline de status/valor executado pra etapas e aquisições) pra cada
     recurso, mesmo padrão visual das seções anteriores, na mesma tela de
     detalhe do projeto — com totais somados nas tabelas de origem de
     recursos, etapas (previsto/executado) e aquisições.
+- **Financeiro do projeto (RF-036/037/038)** — "cadastrar itens de
+  despesa... e vinculação a etapas" (RF-036), "cotações... e validar
+  quantidade mínima de fornecedores" (RF-037) e "controlar desembolsos,
+  saldos, comprovações, bens adquiridos e conciliação" (RF-038).
+  - **RF-036 não é uma tabela nova** — é `AquisicaoProjeto` (RF-035)
+    visto pelo ângulo financeiro: `etapa_id` (vínculo a etapa),
+    `origem_recurso_id` (fonte) e `contrapartida` foram adicionados à
+    mesma tabela em vez de um `ItemDespesaProjeto` duplicado.
+  - **RF-037** — `CotacaoAquisicao`: fornecedor, valor, anexo opcional
+    via Documentos (RF-042, mesmo padrão de
+    `AvaliacaoCriterio.evidencia_documento_id`), `selecionada`. A
+    "validação de quantidade mínima" é regra de negócio de verdade, não
+    só descritiva: `POST /api/projetos/cotacoes/{id}/selecionar` conta
+    as cotações da aquisição e, com menos que `MINIMO_COTACOES` (`= 3`
+    — **não fixado no documento de requisitos**, prática comum de
+    pesquisa de mercado no setor público brasileiro), exige
+    `justificativa_excecao` (senão `400`); a seleção desmarca qualquer
+    cotação vencedora anterior da mesma aquisição. `justificativa_excecao`
+    fica gravada em `AquisicaoProjeto`, não em `CotacaoAquisicao` — é
+    uma propriedade do processo de aquisição, não de uma cotação
+    específica. `POST/GET /api/projetos/aquisicoes/{id}/cotacoes`.
+  - **RF-038** — `DesembolsoProjeto`: data, valor, aquisição e origem de
+    recursos ligadas (opcionais), bem adquirido (texto livre — nem toda
+    aquisição gera um bem patrimonial rastreável), comprovante via
+    Documentos, `conciliado` (booleano). **"Saldos" não é armazenado**
+    — é `OrigemRecursoProjeto.valor` menos a soma dos desembolsos
+    ligados àquela origem, calculado a cada carregamento da tela, nunca
+    dessincronizado. "Conciliação por projeto" também não é uma
+    entidade própria — é a leitura agregada da tabela de desembolsos
+    com o toggle `conciliado` por linha.
+    `POST/GET /api/projetos/{id}/desembolsos`,
+    `PATCH /api/projetos/desembolsos/{id}`.
+  - **Form web sem JS** — a "nova cotação" escolhe a aquisição por um
+    `<select>`; pra não precisar de JS montando a URL de submissão
+    dinamicamente (único lugar do projeto que precisaria disso), a rota
+    web recebe `aquisicao_id` como campo de form normal
+    (`POST /{id}/cotacoes`), não como path param — mesmo padrão de
+    `responsavel_id`/`etapa_id` em outros forms. A API mantém o path
+    param (`/aquisicoes/{id}/cotacoes`), que é o design REST correto
+    pra um cliente HTTP.
 - **Edital de fomento (RF-029/030)** — distinto do `Edital` de
   maturidade (`app/models/maturidade.py`, que guarda critérios/pesos/
   notas de corte pra avaliação de maturidade); mesmo nome em português,
@@ -1087,18 +1125,18 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    falta "de projeto"**, do mesmo RF-048 — precisa do plano de
    trabalho/financeiro do módulo de Projetos (item 7), ainda não
    construído.
-7. ~~Iniciar módulo de Projetos~~ — **RF-029 a RF-035, todos completos**:
+7. ~~Iniciar módulo de Projetos~~ — **RF-029 a RF-038, todos completos**:
    `DemandaProjeto` (RF-031), `Projeto`/portfólio (RF-032), plano de
    trabalho completo (RF-033/034/035), RF-034 completo (`EtapaProjeto`,
    `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`), RF-035 completo
    (`EquipeProjeto`, `OrigemRecursoProjeto`, `AquisicaoProjeto`,
-   cronograma físico-financeiro) e RF-029/030 completos
-   (`EditalFomento`, submissão, `RecursoSubmissaoProjeto`) — ver seção
-   "Projetos" acima. Falta o resto do módulo (RF-036 a RF-041):
-   orçamento e cotações (`AquisicaoProjeto` já desenhado pra ser
-   estendido quando RF-037 chegar), desembolsos/conciliação, execução
-   física/financeira (RF-039/040 — deve reaproveitar
-   `RiscoProjeto`/`StatusRisco`, não duplicar) e prestação de contas.
+   cronograma físico-financeiro), RF-029/030 completos
+   (`EditalFomento`, submissão, `RecursoSubmissaoProjeto`) e
+   RF-036/037/038 completos (`AquisicaoProjeto` estendido,
+   `CotacaoAquisicao`, `DesembolsoProjeto`) — ver seção "Projetos"
+   acima. Falta o resto do módulo (RF-039 a RF-041): execução
+   física/financeira (deve reaproveitar `RiscoProjeto`/`StatusRisco`,
+   não duplicar) e prestação de contas.
    "Simular cenários" (RF-026) e "habilitação jurídica" (RF-027) também
    ficaram de fora do que foi construído em Maturidade (ver seção do
    módulo acima).

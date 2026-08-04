@@ -388,8 +388,11 @@ class AquisicaoProjetoCreate(BaseModel):
     categoria: str | None = None
     quantidade: str | None = None
     valor_estimado: Decimal | None = None
+    contrapartida: bool = False
     data_prevista: date | None = None
     responsavel_id: uuid.UUID | None = None
+    etapa_id: uuid.UUID | None = None
+    origem_recurso_id: uuid.UUID | None = None
 
 
 class AquisicaoProjetoUpdate(BaseModel):
@@ -398,9 +401,13 @@ class AquisicaoProjetoUpdate(BaseModel):
     categoria: str | None = None
     quantidade: str | None = None
     valor_estimado: Decimal | None = None
+    contrapartida: bool | None = None
     data_prevista: date | None = None
     responsavel_id: uuid.UUID | None = None
+    etapa_id: uuid.UUID | None = None
+    origem_recurso_id: uuid.UUID | None = None
     status: StatusTarefa | None = None
+    justificativa_excecao: str | None = None
 
 
 class AquisicaoProjetoRead(BaseModel):
@@ -408,12 +415,79 @@ class AquisicaoProjetoRead(BaseModel):
 
     id: uuid.UUID
     projeto_id: uuid.UUID
+    etapa_id: uuid.UUID | None
+    origem_recurso_id: uuid.UUID | None
     item: str
     descricao: str | None
     categoria: str | None
     quantidade: str | None
     valor_estimado: Decimal | None
+    contrapartida: bool
     data_prevista: date | None
     responsavel_id: uuid.UUID | None
     status: StatusTarefa
+    justificativa_excecao: str | None
+    created_at: datetime
+
+
+# Cotações de aquisição (RF-037)
+
+
+class CotacaoAquisicaoCreate(BaseModel):
+    fornecedor: str
+    valor: Decimal
+    documento_id: uuid.UUID | None = None
+    observacao: str | None = None
+
+
+class CotacaoAquisicaoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    aquisicao_id: uuid.UUID
+    fornecedor: str
+    valor: Decimal
+    documento_id: uuid.UUID | None
+    selecionada: bool
+    observacao: str | None
+    created_at: datetime
+
+
+class SelecaoCotacaoCreate(BaseModel):
+    justificativa_excecao: str | None = None
+
+
+# Desembolsos do projeto (RF-038)
+
+
+class DesembolsoProjetoCreate(BaseModel):
+    aquisicao_id: uuid.UUID | None = None
+    origem_recurso_id: uuid.UUID | None = None
+    data: date
+    valor: Decimal
+    descricao: str | None = None
+    bem_adquirido: str | None = None
+    documento_comprovante_id: uuid.UUID | None = None
+
+
+class DesembolsoProjetoUpdate(BaseModel):
+    descricao: str | None = None
+    bem_adquirido: str | None = None
+    documento_comprovante_id: uuid.UUID | None = None
+    conciliado: bool | None = None
+
+
+class DesembolsoProjetoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    projeto_id: uuid.UUID
+    aquisicao_id: uuid.UUID | None
+    origem_recurso_id: uuid.UUID | None
+    data: date
+    valor: Decimal
+    descricao: str | None
+    bem_adquirido: str | None
+    documento_comprovante_id: uuid.UUID | None
+    conciliado: bool
     created_at: datetime

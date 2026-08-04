@@ -53,9 +53,8 @@ class Projeto(TimestampedBase):
     socioambientais do RF-034 e continuidade/escalabilidade do RF-035
     moram nos mesmos campos da tabela, sem uma entidade
     `PlanoDeTrabalho` separada — é 1:1 com o projeto, não haveria ganho
-    em separar. Financeiro detalhado (RF-036 a RF-038, itens de despesa
-    com cotações) e execução (RF-039/040) ficam para as próximas fatias
-    deste módulo.
+    em separar. Execução física/financeira (RF-039/040) fica para a
+    próxima fatia deste módulo.
 
     `eixo_sp_produz` é texto livre, não um enum fechado — o documento de
     requisitos não define a lista de eixos do programa."""
@@ -115,6 +114,7 @@ class Projeto(TimestampedBase):
     edital_fomento: Mapped["EditalFomento | None"] = relationship(back_populates="projetos_submetidos")
     recursos_submissao: Mapped[list["RecursoSubmissaoProjeto"]] = relationship(back_populates="projeto")
     aquisicoes: Mapped[list["AquisicaoProjeto"]] = relationship(back_populates="projeto")
+    desembolsos: Mapped[list["DesembolsoProjeto"]] = relationship(back_populates="projeto")
 
 
 class EtapaProjeto(TimestampedBase):
@@ -318,13 +318,21 @@ class RecursoSubmissaoProjeto(TimestampedBase):
 
 
 class AquisicaoProjeto(TimestampedBase):
-    """RF-035: item de aquisição planejado do projeto — o que precisa ser
-    comprado/contratado, quanto e por quanto. Mais simples que o que o
-    RF-037 vai pedir (pesquisas de preço, cotações de múltiplos
-    fornecedores, validação de quantidade mínima, justificativa de
-    exceção) — desenhado pra ser estendido por uma `CotacaoAquisicao`
-    ligada a `aquisicao_id` quando RF-037 for construído, não duplicado
-    (mesmo raciocínio já usado em `RiscoProjeto` para o RF-040).
+    """RF-035/036/037: item de aquisição/despesa planejado do projeto —
+    o que precisa ser comprado/contratado, quanto, por quanto, vinculado
+    a qual etapa e pago com qual origem de recursos. RF-036 ("cadastrar
+    itens de despesa, quantidades, valores, categorias, fontes,
+    contrapartida e vinculação a etapas") não é uma entidade nova — é
+    esta mesma tabela vista pelo ângulo financeiro, por isso
+    `etapa_id`/`origem_recurso_id`/`contrapartida` foram adicionados
+    aqui em vez de criar um `ItemDespesaProjeto` duplicado.
+
+    `justificativa_excecao` é do RF-037: quando a aquisição é finalizada
+    com menos que o mínimo de cotações exigido (`MINIMO_COTACOES` no
+    serviço/rota, não fixado no requisito — 3 é prática comum de
+    pesquisa de mercado no setor público brasileiro, mas não está escrito
+    no documento de requisitos), esse campo passa a ser obrigatório —
+    ver `POST /api/projetos/cotacoes/{id}/selecionar`.
 
     `quantidade` e `categoria` são texto livre — quantidade porque pode
     vir com unidade não-padronizada ("50 unidades", "200 kg", "10
@@ -334,16 +342,90 @@ class AquisicaoProjeto(TimestampedBase):
     __tablename__ = "aquisicoes_projeto"
 
     projeto_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projetos.id"), nullable=False)
+    etapa_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("etapas_projeto.id"), nullable=True
+    )
+    origem_recurso_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("origens_recurso_projeto.id"), nullable=True
+    )
     item: Mapped[str] = mapped_column(String(255), nullable=False)
     descricao: Mapped[str | None] = mapped_column(Text)
     categoria: Mapped[str | None] = mapped_column(String(150))
     quantidade: Mapped[str | None] = mapped_column(String(100))
     valor_estimado: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    contrapartida: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     data_prevista: Mapped[date | None] = mapped_column(Date)
     responsavel_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("pessoas.id"), nullable=True
     )
     status: Mapped[StatusTarefa] = mapped_column(default=StatusTarefa.PENDENTE, nullable=False)
+    justificativa_excecao: Mapped[str | None] = mapped_column(Text)
 
     projeto: Mapped["Projeto"] = relationship(back_populates="aquisicoes")
+    etapa: Mapped["EtapaProjeto | None"] = relationship()
+    origem_recurso: Mapped["OrigemRecursoProjeto | None"] = relationship()
     responsavel: Mapped["Pessoa | None"] = relationship()
+    cotacoes: Mapped[list["CotacaoAquisicao"]] = relationship(back_populates="aquisicao")
+
+
+class CotacaoAquisicao(TimestampedBase):
+    """RF-037: cotação de um fornecedor pra uma aquisição — pesquisa de
+    preço. `documento_id` reaproveita o repositório de Documentos
+    (RF-042) pra guardar o anexo da cotação, mesmo padrão de
+    `AvaliacaoCriterio.evidencia_documento_id`. `selecionada` marca a
+    cotação vencedora (a rota de seleção desmarca qualquer outra
+    selecionada antes pra mesma aquisição, então é sempre no máximo
+    uma por aquisição, mas isso é regra de negócio na rota, não uma
+    constraint de banco)."""
+
+    __tablename__ = "cotacoes_aquisicao"
+
+    aquisicao_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("aquisicoes_projeto.id"), nullable=False
+    )
+    fornecedor: Mapped[str] = mapped_column(String(255), nullable=False)
+    valor: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    documento_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documentos.id"), nullable=True
+    )
+    selecionada: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    observacao: Mapped[str | None] = mapped_column(Text)
+
+    aquisicao: Mapped["AquisicaoProjeto"] = relationship(back_populates="cotacoes")
+    documento: Mapped["Documento | None"] = relationship()
+
+
+class DesembolsoProjeto(TimestampedBase):
+    """RF-038: desembolso efetivo de recursos do projeto — controla
+    saldos (calculado, não armazenado: `OrigemRecursoProjeto.valor` menos
+    a soma dos desembolsos ligados àquela origem), comprovações
+    (`documento_comprovante_id`, reaproveitando Documentos/RF-042, mesmo
+    padrão de `CotacaoAquisicao.documento_id`), bens adquiridos
+    (`bem_adquirido`, texto livre — nem toda aquisição gera um bem
+    patrimonial rastreável, então é opcional) e conciliação
+    (`conciliado`, booleano simples — "conciliação por projeto" do
+    requisito é uma leitura agregada dos desembolsos de um projeto, não
+    uma entidade própria)."""
+
+    __tablename__ = "desembolsos_projeto"
+
+    projeto_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projetos.id"), nullable=False)
+    aquisicao_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("aquisicoes_projeto.id"), nullable=True
+    )
+    origem_recurso_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("origens_recurso_projeto.id"), nullable=True
+    )
+    data: Mapped[date] = mapped_column(Date, nullable=False)
+    valor: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    descricao: Mapped[str | None] = mapped_column(Text)
+    bem_adquirido: Mapped[str | None] = mapped_column(String(255))
+    documento_comprovante_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documentos.id"), nullable=True
+    )
+    conciliado: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    projeto: Mapped["Projeto"] = relationship(back_populates="desembolsos")
+    aquisicao: Mapped["AquisicaoProjeto | None"] = relationship()
+    origem_recurso: Mapped["OrigemRecursoProjeto | None"] = relationship()
+    documento_comprovante: Mapped["Documento | None"] = relationship()
