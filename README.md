@@ -525,16 +525,16 @@ que já está no banco:
   deliberado pra não introduzir um context processor Jinja2 (mecanismo
   não usado em nenhum outro lugar do projeto) só para isso.
 
-O bloco **Projetos** (RF-031 a RF-033) é a **fundação** do módulo de
-Projetos e Fomento — demanda/oportunidade → conversão em projeto →
-portfólio → informações básicas do plano de trabalho. Etapas/cronograma/
-metas/indicadores/riscos (RF-034), equipe/aquisições/recursos (RF-035),
-financeiro (RF-036 a RF-038), execução (RF-039/040) e prestação de contas
-(RF-041) **não** fazem parte desta fatia — o módulo completo tem 13
-requisitos em 6 sub-áreas (editais, demandas/portfólio, plano de trabalho,
-financeiro, execução, prestação de contas), grande demais pra uma entrega
-só; "sequência natural" escolhida sessão a sessão, sempre a camada mais
-fundamental que ainda falta.
+O bloco **Projetos** (RF-031 a RF-034) cobre a **fundação** do módulo de
+Projetos e Fomento (demanda/oportunidade → conversão em projeto →
+portfólio → plano de trabalho) **completa**, incluindo o RF-034 inteiro
+(etapas/cronograma, metas, indicadores, riscos, impactos socioambientais).
+Equipe/aquisições/recursos (RF-035), financeiro (RF-036 a RF-038),
+execução (RF-039/040) e prestação de contas (RF-041) **não** fazem parte
+desta fatia — o módulo completo tem 13 requisitos em 6 sub-áreas (editais,
+demandas/portfólio, plano de trabalho, financeiro, execução, prestação de
+contas), grande demais pra uma entrega só; "sequência natural" escolhida
+sessão a sessão, sempre a camada mais fundamental que ainda falta.
 - **`DemandaProjeto`** (RF-031) — título, descrição, origem
   (`OrigemDemanda`: empresa/comissão/instituição/edital) com uma
   referência solta pra origem (`origem_id`/`origem_detalhe`, mesmo padrão
@@ -566,25 +566,48 @@ fundamental que ainda falta.
   ficar misturada com o preenchimento mais longo do plano de trabalho.
   Na API é o mesmo `PATCH /api/projetos/{id}` do portfólio (o schema
   `ProjetoUpdate` já inclui os campos novos).
-- **Etapas e cronograma** (RF-034, parcial) — `EtapaProjeto`, novo. RF-034
-  pede "etapas, atividades, cronograma, metas quantitativas e
-  qualitativas, resultados, indicadores, riscos e impactos
-  socioambientais" — um requisito grande demais pra uma fatia só, então
-  esta rodada cobre só a parte estrutural (etapas/atividades/cronograma),
-  a mais fundamental: metas/resultados/indicadores dependem de ter
-  etapas pra se referir, e riscos (também pedido com mais detalhe no
-  RF-040 — probabilidade, impacto, evidência de mitigação) e impactos
-  socioambientais ficaram de fora por decisão deliberada de não duplicar
-  um modelo simplificado agora. "Etapa" e "atividade" do requisito são
-  tratados como o mesmo nível — uma linha por etapa/atividade, sem
-  hierarquia de dois níveis — mesma simplificação já usada em
-  `TarefaGovernanca` (sem sub-tarefas). Cada etapa tem `data_inicio`/
-  `data_fim` previstos, `ordem` (auto-incrementada — sempre entra no fim
-  da lista, sem campo pro usuário gerenciar manualmente) e status
-  (`StatusTarefa`, reaproveitado, mesmo enum de tarefa/objetivo/meta).
-  `POST/GET /api/projetos/{id}/etapas`, `PATCH /api/projetos/etapas/{id}`
-  — UI com tabela de etapas + form de nova etapa + troca de status
-  inline, tudo na mesma tela de detalhe do projeto.
+- **RF-034 completo** — "etapas, atividades, cronograma, metas
+  quantitativas e qualitativas, resultados, indicadores, riscos e
+  impactos socioambientais", construído em duas rodadas (estrutural
+  primeiro, depois o resto) por ser grande demais pra uma fatia só.
+  - **Etapas e cronograma** — `EtapaProjeto`. "Etapa" e "atividade" do
+    requisito são tratados como o mesmo nível — uma linha por
+    etapa/atividade, sem hierarquia de dois níveis — mesma
+    simplificação já usada em `TarefaGovernanca` (sem sub-tarefas).
+    Cada etapa tem `data_inicio`/`data_fim` previstos, `ordem`
+    (auto-incrementada — sempre entra no fim da lista, sem campo pro
+    usuário gerenciar manualmente) e status (`StatusTarefa`,
+    reaproveitado). `POST/GET /api/projetos/{id}/etapas`,
+    `PATCH /api/projetos/etapas/{id}`.
+  - **Metas** — `MetaProjeto`, quantitativa ou qualitativa (`TipoMeta`),
+    com `valor_alvo`/`valor_alcancado` (só o valor mais recente, sem
+    série histórica própria — mesmo recorte de `IndicadorProjeto`
+    abaixo), `prazo`, responsável e status (`StatusTarefa`, de novo
+    reaproveitado). `POST/GET /api/projetos/{id}/metas`,
+    `PATCH /api/projetos/metas/{id}`.
+  - **Indicadores** — `IndicadorProjeto`, versão mais simples do que
+    `IndicadorEstrategico` (RF-044): nome, unidade de medida, meta e
+    valor atual, sem série histórica (`IndicadorValorHistorico`) — se
+    isso vier a ser necessário aqui também, seguir aquele padrão em vez
+    de inventar um novo. `POST/GET /api/projetos/{id}/indicadores`,
+    `PATCH /api/projetos/indicadores/{id}`.
+  - **Riscos** — `RiscoProjeto`: descrição, probabilidade
+    (`ProbabilidadeRisco`), impacto (`ImpactoRisco`), resposta/mitigação
+    e status (`StatusRisco`: ativo/mitigado/materializado/encerrado).
+    Deixado de fora deliberadamente na primeira rodada porque o RF-040
+    (Execução, ainda não construído) pede risco com mais detalhe — mas
+    o modelo aqui já foi desenhado pra ser estendido pelo RF-040 quando
+    chegar a vez (ex.: ligar evidência de mitigação ao repositório de
+    Documentos), não duplicado. `POST/GET /api/projetos/{id}/riscos`,
+    `PATCH /api/projetos/riscos/{id}`.
+  - **Impactos socioambientais** — campo `Text` a mais direto em
+    `Projeto` (mesmo padrão 1:1 do RF-033), com label próprio no form
+    de plano de trabalho — conceito distinto do campo "Impactos
+    esperados" do RF-033 (esse é sobre resultados/efeitos gerais do
+    projeto).
+  - UI: tabela + form de criação + atualização inline pra cada um dos
+    três recursos (metas/indicadores/riscos), no mesmo padrão visual das
+    etapas, tudo na mesma tela de detalhe do projeto.
 - **Edital de fomento é um conceito diferente do `Edital` de
   maturidade** — o `Edital` que já existe (`app/models/maturidade.py`)
   guarda critérios/pesos/notas de corte pra avaliação de maturidade; o
@@ -987,20 +1010,18 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    falta "de projeto"**, do mesmo RF-048 — precisa do plano de
    trabalho/financeiro do módulo de Projetos (item 7), ainda não
    construído.
-7. ~~Iniciar módulo de Projetos~~ — **fundação + plano de trabalho
-   básico + etapas/cronograma feitos**: `DemandaProjeto` (RF-031),
-   `Projeto`/portfólio (RF-032), informações básicas do plano de
-   trabalho (RF-033) e `EtapaProjeto` com cronograma (RF-034, parcial)
-   — ver seção "Projetos" acima. Falta o resto do módulo (RF-029/030,
-   resto do RF-034 e RF-035 a RF-041): edital de fomento com
-   cronograma/recursos, metas quantitativas/qualitativas, resultados,
-   indicadores, riscos e impactos socioambientais do plano de trabalho
-   (resto do RF-034), equipe/aquisições/origem de recursos (RF-035),
-   orçamento e cotações, desembolsos/conciliação, execução física/
-   financeira e prestação de contas. "Simular cenários" (RF-026) e
-   "habilitação jurídica" (RF-027) também ficaram de fora do que foi
-   construído em Maturidade
-   (ver seção do módulo acima).
+7. ~~Iniciar módulo de Projetos~~ — **fundação + plano de trabalho +
+   RF-034 completo feitos**: `DemandaProjeto` (RF-031), `Projeto`/
+   portfólio (RF-032), plano de trabalho (RF-033/034) e RF-034 completo
+   (`EtapaProjeto`, `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`) —
+   ver seção "Projetos" acima. Falta o resto do módulo (RF-029/030 e
+   RF-035 a RF-041): edital de fomento com cronograma/recursos,
+   equipe/aquisições/origem de recursos (RF-035), orçamento e cotações,
+   desembolsos/conciliação, execução física/financeira (RF-039/040 —
+   deve reaproveitar `RiscoProjeto`/`StatusRisco`, não duplicar) e
+   prestação de contas. "Simular cenários" (RF-026) e "habilitação
+   jurídica" (RF-027) também ficaram de fora do que foi construído em
+   Maturidade (ver seção do módulo acima).
 8. ~~Notificações automáticas (RF-049)~~ — **feito**: reunião próxima,
    tarefa/meta com prazo vencendo, documento perdendo validade e
    recadastramento de CPL vencendo — ver seção "Notificações" acima.

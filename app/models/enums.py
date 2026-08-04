@@ -262,3 +262,38 @@ class PrioridadeProjeto(str, enum.Enum):
     BAIXA = "baixa"
     MEDIA = "media"
     ALTA = "alta"
+
+
+class TipoMeta(str, enum.Enum):
+    """RF-034: meta quantitativa (valor numérico) ou qualitativa
+    (descritiva) do plano de trabalho."""
+
+    QUANTITATIVA = "quantitativa"
+    QUALITATIVA = "qualitativa"
+
+
+class ProbabilidadeRisco(str, enum.Enum):
+    """RF-034/040: probabilidade de um risco identificado se materializar."""
+
+    BAIXA = "baixa"
+    MEDIA = "media"
+    ALTA = "alta"
+
+
+class ImpactoRisco(str, enum.Enum):
+    """RF-034/040: impacto de um risco identificado, caso se materialize."""
+
+    BAIXO = "baixo"
+    MEDIO = "medio"
+    ALTO = "alto"
+
+
+class StatusRisco(str, enum.Enum):
+    """RF-034/040: ciclo de vida de um risco identificado — RF-040
+    (Execução, ainda não construído) deve reaproveitar este mesmo
+    modelo/enum quando chegar a vez, não criar um novo."""
+
+    ATIVO = "ativo"
+    MITIGADO = "mitigado"
+    MATERIALIZADO = "materializado"
+    ENCERRADO = "encerrado"

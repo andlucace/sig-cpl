@@ -3,7 +3,17 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.enums import EstagioProjeto, OrigemDemanda, PrioridadeProjeto, StatusDemanda, StatusTarefa
+from app.models.enums import (
+    EstagioProjeto,
+    ImpactoRisco,
+    OrigemDemanda,
+    PrioridadeProjeto,
+    ProbabilidadeRisco,
+    StatusDemanda,
+    StatusRisco,
+    StatusTarefa,
+    TipoMeta,
+)
 
 # Demanda de projeto (RF-031)
 
@@ -46,6 +56,7 @@ class ProjetoCreate(BaseModel):
     objetivos: str | None = None
     justificativa: str | None = None
     impactos: str | None = None
+    impactos_socioambientais: str | None = None
 
 
 class ProjetoUpdate(BaseModel):
@@ -61,6 +72,7 @@ class ProjetoUpdate(BaseModel):
     objetivos: str | None = None
     justificativa: str | None = None
     impactos: str | None = None
+    impactos_socioambientais: str | None = None
 
 
 class ProjetoRead(BaseModel):
@@ -81,6 +93,7 @@ class ProjetoRead(BaseModel):
     objetivos: str | None
     justificativa: str | None
     impactos: str | None
+    impactos_socioambientais: str | None
     created_at: datetime
 
 
@@ -114,4 +127,105 @@ class EtapaProjetoRead(BaseModel):
     data_inicio: date | None
     data_fim: date | None
     status: StatusTarefa
+    created_at: datetime
+
+
+# Metas do plano de trabalho (RF-034)
+
+
+class MetaProjetoCreate(BaseModel):
+    descricao: str
+    tipo: TipoMeta
+    valor_alvo: str | None = None
+    prazo: date | None = None
+    responsavel_id: uuid.UUID | None = None
+
+
+class MetaProjetoUpdate(BaseModel):
+    descricao: str | None = None
+    tipo: TipoMeta | None = None
+    valor_alvo: str | None = None
+    valor_alcancado: str | None = None
+    prazo: date | None = None
+    responsavel_id: uuid.UUID | None = None
+    status: StatusTarefa | None = None
+
+
+class MetaProjetoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    projeto_id: uuid.UUID
+    descricao: str
+    tipo: TipoMeta
+    valor_alvo: str | None
+    valor_alcancado: str | None
+    prazo: date | None
+    responsavel_id: uuid.UUID | None
+    status: StatusTarefa
+    created_at: datetime
+
+
+# Indicadores do plano de trabalho (RF-034)
+
+
+class IndicadorProjetoCreate(BaseModel):
+    nome: str
+    unidade_medida: str | None = None
+    meta_valor: str | None = None
+    responsavel_id: uuid.UUID | None = None
+
+
+class IndicadorProjetoUpdate(BaseModel):
+    nome: str | None = None
+    unidade_medida: str | None = None
+    meta_valor: str | None = None
+    valor_atual: str | None = None
+    responsavel_id: uuid.UUID | None = None
+
+
+class IndicadorProjetoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    projeto_id: uuid.UUID
+    nome: str
+    unidade_medida: str | None
+    meta_valor: str | None
+    valor_atual: str | None
+    responsavel_id: uuid.UUID | None
+    created_at: datetime
+
+
+# Riscos do plano de trabalho (RF-034)
+
+
+class RiscoProjetoCreate(BaseModel):
+    descricao: str
+    probabilidade: ProbabilidadeRisco
+    impacto: ImpactoRisco
+    resposta: str | None = None
+    responsavel_id: uuid.UUID | None = None
+
+
+class RiscoProjetoUpdate(BaseModel):
+    descricao: str | None = None
+    probabilidade: ProbabilidadeRisco | None = None
+    impacto: ImpactoRisco | None = None
+    resposta: str | None = None
+    responsavel_id: uuid.UUID | None = None
+    status: StatusRisco | None = None
+
+
+class RiscoProjetoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    projeto_id: uuid.UUID
+    descricao: str
+    probabilidade: ProbabilidadeRisco
+    impacto: ImpactoRisco
+    resposta: str | None
+    responsavel_id: uuid.UUID | None
+    status: StatusRisco
     created_at: datetime

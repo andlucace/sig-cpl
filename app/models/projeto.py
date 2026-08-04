@@ -6,7 +6,17 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import TimestampedBase
-from app.models.enums import EstagioProjeto, OrigemDemanda, PrioridadeProjeto, StatusDemanda, StatusTarefa
+from app.models.enums import (
+    EstagioProjeto,
+    ImpactoRisco,
+    OrigemDemanda,
+    PrioridadeProjeto,
+    ProbabilidadeRisco,
+    StatusDemanda,
+    StatusRisco,
+    StatusTarefa,
+    TipoMeta,
+)
 
 
 class DemandaProjeto(TimestampedBase):
@@ -36,12 +46,12 @@ class Projeto(TimestampedBase):
     """RF-032: projeto no portfólio de uma CPL — prioridade, estágio,
     eixo do Programa SP Produz e vínculo ao planejamento estratégico.
     RF-033 (informações básicas do plano de trabalho — introdução,
-    objeto, objetivos, justificativa, impactos) mora nos mesmos campos
-    da tabela, sem uma entidade `PlanoDeTrabalho` separada — é 1:1 com
-    o projeto, não haveria ganho em separar. Etapas/cronograma/
-    resultados/indicadores (RF-034), equipe/aquisições/recursos
-    (RF-035), financeiro (RF-036 a RF-038) e execução (RF-039/040)
-    ficam para as próximas fatias deste módulo.
+    objeto, objetivos, justificativa, impactos) e o campo de impactos
+    socioambientais do RF-034 moram nos mesmos campos da tabela, sem uma
+    entidade `PlanoDeTrabalho` separada — é 1:1 com o projeto, não
+    haveria ganho em separar. Equipe/aquisições/recursos (RF-035),
+    financeiro (RF-036 a RF-038) e execução (RF-039/040) ficam para as
+    próximas fatias deste módulo.
 
     `eixo_sp_produz` é texto livre, não um enum fechado — o documento de
     requisitos não define a lista de eixos do programa."""
@@ -69,6 +79,11 @@ class Projeto(TimestampedBase):
     objetivos: Mapped[str | None] = mapped_column(Text)
     justificativa: Mapped[str | None] = mapped_column(Text)
     impactos: Mapped[str | None] = mapped_column(Text)
+    # RF-034: impactos socioambientais — distinto do "impactos" geral do
+    # RF-033 (que é sobre efeitos/resultados esperados do projeto como um
+    # todo); este é especificamente sobre impacto socioambiental, um
+    # conceito próprio em avaliação de projetos públicos no Brasil.
+    impactos_socioambientais: Mapped[str | None] = mapped_column(Text)
 
     demanda_origem: Mapped["DemandaProjeto | None"] = relationship(back_populates="projeto")
     responsavel: Mapped["Pessoa | None"] = relationship()
@@ -76,6 +91,9 @@ class Projeto(TimestampedBase):
     etapas: Mapped[list["EtapaProjeto"]] = relationship(
         back_populates="projeto", order_by="EtapaProjeto.ordem"
     )
+    metas: Mapped[list["MetaProjeto"]] = relationship(back_populates="projeto")
+    indicadores: Mapped[list["IndicadorProjeto"]] = relationship(back_populates="projeto")
+    riscos: Mapped[list["RiscoProjeto"]] = relationship(back_populates="projeto")
 
 
 class EtapaProjeto(TimestampedBase):
@@ -83,12 +101,7 @@ class EtapaProjeto(TimestampedBase):
     previsto (`data_inicio`/`data_fim`) e status de execução. "Etapas" e
     "atividades" do requisito são tratadas como o mesmo nível — uma
     linha por etapa/atividade, sem hierarquia de dois níveis — mesma
-    simplificação já usada em `TarefaGovernanca` (sem sub-tarefas).
-    Metas quantitativas/qualitativas, resultados, indicadores, riscos e
-    impactos socioambientais (resto do RF-034) ficam para uma próxima
-    fatia; riscos em particular também é pedido de novo no RF-040
-    (Execução) com mais detalhe (probabilidade/impacto/evidência de
-    mitigação) — melhor não duplicar um modelo simplificado agora."""
+    simplificação já usada em `TarefaGovernanca` (sem sub-tarefas)."""
 
     __tablename__ = "etapas_projeto"
 
@@ -101,3 +114,72 @@ class EtapaProjeto(TimestampedBase):
     status: Mapped[StatusTarefa] = mapped_column(default=StatusTarefa.PENDENTE, nullable=False)
 
     projeto: Mapped["Projeto"] = relationship(back_populates="etapas")
+
+
+class MetaProjeto(TimestampedBase):
+    """RF-034: meta quantitativa ou qualitativa do plano de trabalho, com
+    o resultado alcançado registrado no mesmo lugar (`valor_alcancado`)
+    — não é uma série histórica como `IndicadorValorHistorico`, só o
+    valor mais recente, suficiente pro escopo desta fatia."""
+
+    __tablename__ = "metas_projeto"
+
+    projeto_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projetos.id"), nullable=False)
+    descricao: Mapped[str] = mapped_column(Text, nullable=False)
+    tipo: Mapped[TipoMeta] = mapped_column(nullable=False)
+    valor_alvo: Mapped[str | None] = mapped_column(String(255))
+    valor_alcancado: Mapped[str | None] = mapped_column(String(255))
+    prazo: Mapped[date | None] = mapped_column(Date)
+    responsavel_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pessoas.id"), nullable=True
+    )
+    status: Mapped[StatusTarefa] = mapped_column(default=StatusTarefa.PENDENTE, nullable=False)
+
+    projeto: Mapped["Projeto"] = relationship(back_populates="metas")
+    responsavel: Mapped["Pessoa | None"] = relationship()
+
+
+class IndicadorProjeto(TimestampedBase):
+    """RF-034: indicador de acompanhamento do projeto — versão mais
+    simples que `IndicadorEstrategico` (RF-044), sem série histórica
+    própria (só o valor mais recente); se isso vier a ser necessário,
+    seguir o mesmo padrão de `IndicadorValorHistorico`."""
+
+    __tablename__ = "indicadores_projeto"
+
+    projeto_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projetos.id"), nullable=False)
+    nome: Mapped[str] = mapped_column(String(255), nullable=False)
+    unidade_medida: Mapped[str | None] = mapped_column(String(100))
+    meta_valor: Mapped[str | None] = mapped_column(String(255))
+    valor_atual: Mapped[str | None] = mapped_column(String(255))
+    responsavel_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pessoas.id"), nullable=True
+    )
+
+    projeto: Mapped["Projeto"] = relationship(back_populates="indicadores")
+    responsavel: Mapped["Pessoa | None"] = relationship()
+
+
+class RiscoProjeto(TimestampedBase):
+    """RF-034/040: risco identificado do projeto — probabilidade, impacto
+    e resposta planejada (mitigação). Campos já cobrem o que o RF-040
+    (Execução, ainda não construído) pede a mais detalhe; quando esse
+    módulo for construído, a extensão natural é reaproveitar este
+    modelo (ex.: ligar evidência de mitigação ao repositório de
+    Documentos, como `AvaliacaoCriterio.evidencia_documento_id` já faz),
+    não duplicar."""
+
+    __tablename__ = "riscos_projeto"
+
+    projeto_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projetos.id"), nullable=False)
+    descricao: Mapped[str] = mapped_column(Text, nullable=False)
+    probabilidade: Mapped[ProbabilidadeRisco] = mapped_column(nullable=False)
+    impacto: Mapped[ImpactoRisco] = mapped_column(nullable=False)
+    resposta: Mapped[str | None] = mapped_column(Text)
+    responsavel_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pessoas.id"), nullable=True
+    )
+    status: Mapped[StatusRisco] = mapped_column(default=StatusRisco.ATIVO, nullable=False)
+
+    projeto: Mapped["Projeto"] = relationship(back_populates="riscos")
+    responsavel: Mapped["Pessoa | None"] = relationship()

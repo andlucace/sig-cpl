@@ -81,8 +81,7 @@
         </div>
         <div class="card-body">
             <p class="text-body-secondary small">
-                Metas, resultados, indicadores, riscos, impactos socioambientais (RF-034),
-                equipe e orçamento detalhados (RF-035) ainda não fazem parte deste módulo.
+                Equipe, aquisições e orçamento detalhados (RF-035) ainda não fazem parte deste módulo.
             </p>
             <form method="post" action="/painel/projetos/{{ projeto.id }}/plano-de-trabalho">
                 <div class="mb-3">
@@ -104,6 +103,10 @@
                 <div class="mb-3">
                     <label class="form-label">Impactos esperados</label>
                     <textarea class="form-control" name="impactos" rows="2">{{ projeto.impactos or '' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Impactos socioambientais</label>
+                    <textarea class="form-control" name="impactos_socioambientais" rows="2">{{ projeto.impactos_socioambientais or '' }}</textarea>
                 </div>
                 <button type="submit" class="btn btn-outline-primary">
                     <i class="bi bi-check-lg me-1"></i>Salvar plano de trabalho
@@ -191,6 +194,290 @@
                         </div>
                         <button type="submit" class="btn btn-primary w-100 mt-3">
                             <i class="bi bi-plus-lg me-1"></i>Adicionar etapa
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-flag me-2"></i>Metas
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Meta</th>
+                                <th>Tipo</th>
+                                <th>Alvo</th>
+                                <th>Alcançado</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for meta in metas %}
+                                <tr>
+                                    <td>{{ meta.descricao }}</td>
+                                    <td class="small">{{ meta.tipo.value }}</td>
+                                    <td class="small">{{ meta.valor_alvo or "—" }}</td>
+                                    <td class="small">{{ meta.valor_alcancado or "—" }}</td>
+                                    <td>
+                                        <span class="badge {% if meta.status.value == 'concluida' %}text-bg-success{% elif meta.status.value in ['atrasada', 'cancelada'] %}text-bg-danger{% else %}text-bg-info{% endif %}">
+                                            {{ meta.status.value.replace('_', ' ') }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <form method="post" action="/painel/projetos/metas/{{ meta.id }}" class="d-flex gap-1">
+                                            <input type="text" class="form-control form-control-sm" name="valor_alcancado" value="{{ meta.valor_alcancado or '' }}" placeholder="Alcançado" style="width: 110px;">
+                                            <select class="form-select form-select-sm" name="status" style="width: auto;">
+                                                {% for s in status_opcoes %}
+                                                    <option value="{{ s.value }}" {% if s == meta.status %}selected{% endif %}>{{ s.value.replace('_', ' ') }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                <i class="bi bi-check-lg"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="6" class="text-body-secondary">Nenhuma meta cadastrada ainda.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Nova meta
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/painel/projetos/{{ projeto.id }}/metas">
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="2" required></textarea>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label">Tipo</label>
+                                <select class="form-select" name="tipo">
+                                    {% for t in tipos_meta %}
+                                        <option value="{{ t.value }}">{{ t.value }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Valor alvo</label>
+                                <input type="text" class="form-control" name="valor_alvo">
+                            </div>
+                        </div>
+                        <div class="row g-2 mt-0">
+                            <div class="col-6">
+                                <label class="form-label">Prazo</label>
+                                <input type="date" class="form-control" name="prazo">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Responsável</label>
+                                <select class="form-select" name="responsavel_id">
+                                    <option value="">Não definido</option>
+                                    {% for pessoa in pessoas %}
+                                        <option value="{{ pessoa.id }}">{{ pessoa.nome }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mt-3">
+                            <i class="bi bi-plus-lg me-1"></i>Adicionar meta
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-graph-up me-2"></i>Indicadores
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Indicador</th>
+                                <th>Unidade</th>
+                                <th>Meta</th>
+                                <th>Atual</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for indicador in indicadores %}
+                                <tr>
+                                    <td>{{ indicador.nome }}</td>
+                                    <td class="small">{{ indicador.unidade_medida or "—" }}</td>
+                                    <td class="small">{{ indicador.meta_valor or "—" }}</td>
+                                    <td class="small">{{ indicador.valor_atual or "—" }}</td>
+                                    <td>
+                                        <form method="post" action="/painel/projetos/indicadores/{{ indicador.id }}" class="d-flex gap-1">
+                                            <input type="text" class="form-control form-control-sm" name="valor_atual" value="{{ indicador.valor_atual or '' }}" placeholder="Valor atual" style="width: 110px;">
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                <i class="bi bi-check-lg"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="5" class="text-body-secondary">Nenhum indicador cadastrado ainda.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Novo indicador
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/painel/projetos/{{ projeto.id }}/indicadores">
+                        <div class="mb-3">
+                            <label class="form-label">Nome</label>
+                            <input type="text" class="form-control" name="nome" required>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label">Unidade de medida</label>
+                                <input type="text" class="form-control" name="unidade_medida">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Meta</label>
+                                <input type="text" class="form-control" name="meta_valor">
+                            </div>
+                        </div>
+                        <div class="mb-3 mt-2">
+                            <label class="form-label">Responsável</label>
+                            <select class="form-select" name="responsavel_id">
+                                <option value="">Não definido</option>
+                                {% for pessoa in pessoas %}
+                                    <option value="{{ pessoa.id }}">{{ pessoa.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mt-1">
+                            <i class="bi bi-plus-lg me-1"></i>Adicionar indicador
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Riscos
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Risco</th>
+                                <th>Probabilidade</th>
+                                <th>Impacto</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for risco in riscos %}
+                                <tr>
+                                    <td>
+                                        {{ risco.descricao }}
+                                        {% if risco.resposta %}<div class="text-body-secondary small">Resposta: {{ risco.resposta }}</div>{% endif %}
+                                    </td>
+                                    <td class="small">{{ risco.probabilidade.value }}</td>
+                                    <td class="small">{{ risco.impacto.value }}</td>
+                                    <td>
+                                        <span class="badge {% if risco.status.value == 'encerrado' %}text-bg-success{% elif risco.status.value == 'materializado' %}text-bg-danger{% elif risco.status.value == 'mitigado' %}text-bg-info{% else %}text-bg-warning{% endif %}">
+                                            {{ risco.status.value }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <form method="post" action="/painel/projetos/riscos/{{ risco.id }}/status" class="d-flex gap-1">
+                                            <select class="form-select form-select-sm" name="status" style="width: auto;">
+                                                {% for s in status_risco_opcoes %}
+                                                    <option value="{{ s.value }}" {% if s == risco.status %}selected{% endif %}>{{ s.value }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                <i class="bi bi-check-lg"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="5" class="text-body-secondary">Nenhum risco cadastrado ainda.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Novo risco
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/painel/projetos/{{ projeto.id }}/riscos">
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="2" required></textarea>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label">Probabilidade</label>
+                                <select class="form-select" name="probabilidade">
+                                    {% for p in probabilidades_risco %}
+                                        <option value="{{ p.value }}">{{ p.value }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Impacto</label>
+                                <select class="form-select" name="impacto">
+                                    {% for i in impactos_risco %}
+                                        <option value="{{ i.value }}">{{ i.value }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3 mt-2">
+                            <label class="form-label">Resposta / mitigação</label>
+                            <textarea class="form-control" name="resposta" rows="2"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Responsável</label>
+                            <select class="form-select" name="responsavel_id">
+                                <option value="">Não definido</option>
+                                {% for pessoa in pessoas %}
+                                    <option value="{{ pessoa.id }}">{{ pessoa.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mt-1">
+                            <i class="bi bi-plus-lg me-1"></i>Adicionar risco
                         </button>
                     </form>
                 </div>

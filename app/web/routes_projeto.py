@@ -11,14 +11,18 @@ from app.db.session import get_db
 from app.models.cpl import CPL
 from app.models.enums import (
     EstagioProjeto,
+    ImpactoRisco,
     OrigemDemanda,
     PrioridadeProjeto,
+    ProbabilidadeRisco,
     StatusDemanda,
+    StatusRisco,
     StatusTarefa,
+    TipoMeta,
 )
 from app.models.pessoa import Pessoa
 from app.models.planejamento import ObjetivoEstrategico, PlanejamentoEstrategico
-from app.models.projeto import DemandaProjeto, EtapaProjeto, Projeto
+from app.models.projeto import DemandaProjeto, EtapaProjeto, IndicadorProjeto, MetaProjeto, Projeto, RiscoProjeto
 from app.models.usuario import Usuario
 from app.web.templates import templates
 
@@ -254,6 +258,24 @@ def detalhe_projeto(
         .order_by(EtapaProjeto.ordem)
         .all()
     )
+    metas = (
+        db.query(MetaProjeto)
+        .filter(MetaProjeto.projeto_id == projeto_id)
+        .order_by(MetaProjeto.created_at)
+        .all()
+    )
+    indicadores = (
+        db.query(IndicadorProjeto)
+        .filter(IndicadorProjeto.projeto_id == projeto_id)
+        .order_by(IndicadorProjeto.created_at)
+        .all()
+    )
+    riscos = (
+        db.query(RiscoProjeto)
+        .filter(RiscoProjeto.projeto_id == projeto_id)
+        .order_by(RiscoProjeto.created_at)
+        .all()
+    )
     return templates.TemplateResponse(
         request,
         "restrito/projetos/projeto_detail.html",
@@ -266,6 +288,13 @@ def detalhe_projeto(
             "objetivos": objetivos,
             "etapas": etapas,
             "status_opcoes": list(StatusTarefa),
+            "metas": metas,
+            "tipos_meta": list(TipoMeta),
+            "indicadores": indicadores,
+            "riscos": riscos,
+            "probabilidades_risco": list(ProbabilidadeRisco),
+            "impactos_risco": list(ImpactoRisco),
+            "status_risco_opcoes": list(StatusRisco),
             "usuario": usuario,
             "pagina_ativa": "projetos",
         },
@@ -310,10 +339,11 @@ def atualizar_plano_de_trabalho(
     objetivos: str | None = Form(None),
     justificativa: str | None = Form(None),
     impactos: str | None = Form(None),
+    impactos_socioambientais: str | None = Form(None),
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user_optional),
 ):
-    """RF-033: informações básicas do plano de trabalho — separado do
+    """RF-033/034: informações básicas do plano de trabalho — separado do
     form de portfólio pra não misturar edição rápida de estágio/
     prioridade com o preenchimento mais longo do plano de trabalho."""
 
@@ -328,6 +358,7 @@ def atualizar_plano_de_trabalho(
     projeto.objetivos = objetivos or None
     projeto.justificativa = justificativa or None
     projeto.impactos = impactos or None
+    projeto.impactos_socioambientais = impactos_socioambientais or None
     db.commit()
     return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -381,3 +412,155 @@ def atualizar_status_etapa(
     etapa.status = status_etapa
     db.commit()
     return RedirectResponse(f"/painel/projetos/{etapa.projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{projeto_id}/metas")
+def criar_meta(
+    projeto_id: uuid.UUID,
+    descricao: str = Form(...),
+    tipo: TipoMeta = Form(...),
+    valor_alvo: str | None = Form(None),
+    prazo: str | None = Form(None),
+    responsavel_id: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-034: meta quantitativa ou qualitativa do plano de trabalho."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    projeto = db.get(Projeto, projeto_id)
+    if projeto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    meta = MetaProjeto(
+        projeto_id=projeto_id,
+        descricao=descricao,
+        tipo=tipo,
+        valor_alvo=valor_alvo or None,
+        prazo=date.fromisoformat(prazo) if prazo else None,
+        responsavel_id=_opt_uuid(responsavel_id),
+    )
+    db.add(meta)
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/metas/{meta_id}")
+def atualizar_meta(
+    meta_id: uuid.UUID,
+    valor_alcancado: str | None = Form(None),
+    status_meta: StatusTarefa = Form(..., alias="status"),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    meta = db.get(MetaProjeto, meta_id)
+    if meta is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Meta de projeto não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=meta.projeto.cpl_id)
+    meta.valor_alcancado = valor_alcancado or None
+    meta.status = status_meta
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{meta.projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{projeto_id}/indicadores")
+def criar_indicador(
+    projeto_id: uuid.UUID,
+    nome: str = Form(...),
+    unidade_medida: str | None = Form(None),
+    meta_valor: str | None = Form(None),
+    responsavel_id: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-034: indicador de acompanhamento do projeto."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    projeto = db.get(Projeto, projeto_id)
+    if projeto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    indicador = IndicadorProjeto(
+        projeto_id=projeto_id,
+        nome=nome,
+        unidade_medida=unidade_medida or None,
+        meta_valor=meta_valor or None,
+        responsavel_id=_opt_uuid(responsavel_id),
+    )
+    db.add(indicador)
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/indicadores/{indicador_id}")
+def atualizar_indicador(
+    indicador_id: uuid.UUID,
+    valor_atual: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    indicador = db.get(IndicadorProjeto, indicador_id)
+    if indicador is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Indicador de projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=indicador.projeto.cpl_id)
+    indicador.valor_atual = valor_atual or None
+    db.commit()
+    return RedirectResponse(
+        f"/painel/projetos/{indicador.projeto_id}", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post("/{projeto_id}/riscos")
+def criar_risco(
+    projeto_id: uuid.UUID,
+    descricao: str = Form(...),
+    probabilidade: ProbabilidadeRisco = Form(...),
+    impacto: ImpactoRisco = Form(...),
+    resposta: str | None = Form(None),
+    responsavel_id: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-034/040: risco identificado do projeto."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    projeto = db.get(Projeto, projeto_id)
+    if projeto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    risco = RiscoProjeto(
+        projeto_id=projeto_id,
+        descricao=descricao,
+        probabilidade=probabilidade,
+        impacto=impacto,
+        resposta=resposta or None,
+        responsavel_id=_opt_uuid(responsavel_id),
+    )
+    db.add(risco)
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/riscos/{risco_id}/status")
+def atualizar_status_risco(
+    risco_id: uuid.UUID,
+    status_risco: StatusRisco = Form(..., alias="status"),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    risco = db.get(RiscoProjeto, risco_id)
+    if risco is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Risco de projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=risco.projeto.cpl_id)
+    risco.status = status_risco
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{risco.projeto_id}", status_code=status.HTTP_303_SEE_OTHER)

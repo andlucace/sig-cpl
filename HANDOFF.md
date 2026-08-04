@@ -79,6 +79,10 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   14. `336459855cb9` — tabela `etapas_projeto` (RF-034 parcial: etapas/
       atividades com cronograma) — precisou de ajuste manual (enum
       `statustarefa` reaproveitado, ver gotcha novo abaixo)
+  15. `777ba9fa79ad` — tabelas `metas_projeto`, `indicadores_projeto`,
+      `riscos_projeto` + coluna `projetos.impactos_socioambientais`
+      (finalização do RF-034) — de novo precisou de ajuste manual
+      (`metas_projeto.status` reaproveita `statustarefa`)
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos)
 
@@ -681,6 +685,37 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     reaproveitado, porque mesmo sabendo do gotcha eu ainda deixei passar
     dessa vez. Considerar até grepar `sa.Enum(` no diff da migração como
     parte do fluxo padrão antes de aplicar, em vez de confiar na memória.
+23. **Finalização do RF-034** (metas, indicadores, riscos, impactos
+    socioambientais) — usuário disse "seguir com a finalização da
+    RF-034", revertendo a decisão do item 22 de deixar riscos de fora.
+    Motivo da reversão: riscos ficou pedido explicitamente de novo pelo
+    usuário, então construí um modelo (`RiscoProjeto`:
+    descrição/probabilidade/impacto/resposta/responsável/status) já
+    projetado para ser estendido pelo RF-040 (Execução) em vez de
+    duplicado quando esse módulo for construído — ver docstring do
+    modelo. Também adicionados `MetaProjeto` (quanti/qualitativa, com
+    `valor_alvo`/`valor_alcancado` — só o valor mais recente, sem série
+    histórica) e `IndicadorProjeto` (mais simples que
+    `IndicadorEstrategico` do RF-044, também sem série histórica própria
+    por enquanto). `impactos_socioambientais` virou um campo a mais em
+    `projetos` (mesmo padrão 1:1 do RF-033), com um label próprio no
+    form de plano de trabalho — é conceitualmente distinto do campo
+    "Impactos esperados" do RF-033 (esse é sobre resultados/efeitos
+    gerais do projeto; o novo é especificamente sobre impacto
+    socioambiental).
+    **Gotcha do enum reaproveitado aconteceu de novo, pela 3ª vez**:
+    `MetaProjeto.status` reaproveita `StatusTarefa`, e o autogenerate
+    gerou `sa.Enum(...)` de novo — desta vez pego *antes* de aplicar
+    (segui a própria lição do item 22 e grepei `sa.Enum(` no arquivo
+    gerado antes de rodar `upgrade head`), corrigido pra
+    `postgresql.ENUM(..., create_type=False)` sem precisar de rollback.
+    Migração `777ba9fa79ad`.
+    Testado via curl (criar/listar/atualizar os 3 recursos novos, tanto
+    pelas rotas web quanto pela API JSON) e via Playwright (screenshot
+    com as 3 novas seções preenchidas — ver
+    `projeto_rf034_final_shot.js` no diretório de scratch de screenshots,
+    padrão do item 4 de "Armadilhas já resolvidas"), sem erros de
+    console nem 500 reais no log do servidor local.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -718,6 +753,11 @@ só porque é um módulo novo).
    antes de rodar `upgrade head`**, todas as vezes, não só quando "acha
    que" o enum é reaproveitado — é fácil esquecer justamente quando
    parece rotina.
+   **3ª ocorrência em `777ba9fa79ad`** (metas de projeto, finalização do
+   RF-034, de novo reaproveitando `StatusTarefa`) — desta vez o grep
+   preventivo funcionou e pegou antes de aplicar, sem rollback. A lição
+   "sempre grepar antes de aplicar" finalmente virou hábito automático
+   em vez de intenção; mantenha assim daqui pra frente.
 3. **Portas ocupadas por outros projetos do usuário** — o usuário tem outro
    projeto (`rh-nepen`) rodando via Docker que ocupa a porta 5432 (Postgres)
    e 8000 (backend). Por isso este projeto usa 5433 e (nas sessões de teste)
@@ -903,20 +943,19 @@ ordem recomendada para o que vem depois:
    `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf` — caminho que
    `app/services/geracao_documentos.py` já procurava desde antes, então
    nenhum código mudou.
-5. ~~Iniciar módulo de Projetos~~ — **fundação + plano de trabalho
-   básico + etapas/cronograma feitos** (itens 20, 21 e 22 da seção
-   "Ordem em que este projeto foi construído"): `DemandaProjeto`
-   (RF-031), `Projeto`/portfólio (RF-032), informações básicas do plano
-   de trabalho (RF-033) e `EtapaProjeto` com cronograma (RF-034,
-   parcial), em `/painel/projetos`. Segue pendente, sem relação com
-   este trabalho: edital de fomento com cronograma/recursos
-   (RF-029/030), metas/resultados/indicadores/riscos/impactos
-   socioambientais (resto do RF-034 — riscos em particular fica pro
-   RF-040, que pede mais detalhe), equipe/aquisições/recursos
-   (RF-035), orçamento/cotações/desembolsos (RF-036 a RF-038), execução
-   física/financeira (RF-039/040) e prestação de contas (RF-041) —
-   "relatório de projeto" (RF-048) e o restante da Fase 2 dependem
-   desses.
+5. ~~Iniciar módulo de Projetos~~ — **fundação + plano de trabalho +
+   RF-034 completo feitos** (itens 20, 21, 22 e 23 da seção "Ordem em
+   que este projeto foi construído"): `DemandaProjeto` (RF-031),
+   `Projeto`/portfólio (RF-032), plano de trabalho — informações
+   básicas + impactos socioambientais (RF-033/034) e RF-034 completo
+   (`EtapaProjeto`, `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`),
+   em `/painel/projetos`. Segue pendente, sem relação com este
+   trabalho: edital de fomento com cronograma/recursos (RF-029/030),
+   equipe/aquisições/recursos (RF-035), orçamento/cotações/desembolsos
+   (RF-036 a RF-038), execução física/financeira (RF-039/040 — deve
+   reaproveitar `RiscoProjeto`/`StatusRisco`, não duplicar) e prestação
+   de contas (RF-041) — "relatório de projeto" (RF-048) e o restante da
+   Fase 2 dependem desses.
 6. ~~Deploy na VPS Hostinger~~ — **feito nesta sessão** (numa sessão
    anterior a esta), ver seção "Deploy em produção" abaixo para todos os
    detalhes (como foi feito, segredos, como reimplantar).

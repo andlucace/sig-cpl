@@ -8,7 +8,7 @@ from app.core.rbac import PAPEIS_PROJETO_GESTAO, PAPEIS_PROJETO_LEITURA, verific
 from app.db.session import get_db
 from app.models.cpl import CPL
 from app.models.enums import StatusDemanda
-from app.models.projeto import DemandaProjeto, EtapaProjeto, Projeto
+from app.models.projeto import DemandaProjeto, EtapaProjeto, IndicadorProjeto, MetaProjeto, Projeto, RiscoProjeto
 from app.models.usuario import Usuario
 from app.schemas.projeto import (
     DemandaProjetoCreate,
@@ -16,9 +16,18 @@ from app.schemas.projeto import (
     EtapaProjetoCreate,
     EtapaProjetoRead,
     EtapaProjetoUpdate,
+    IndicadorProjetoCreate,
+    IndicadorProjetoRead,
+    IndicadorProjetoUpdate,
+    MetaProjetoCreate,
+    MetaProjetoRead,
+    MetaProjetoUpdate,
     ProjetoCreate,
     ProjetoRead,
     ProjetoUpdate,
+    RiscoProjetoCreate,
+    RiscoProjetoRead,
+    RiscoProjetoUpdate,
 )
 
 router = APIRouter(prefix="/projetos", tags=["Projetos"])
@@ -50,6 +59,27 @@ def _get_etapa_or_404(db: Session, etapa_id: uuid.UUID) -> EtapaProjeto:
     if etapa is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Etapa de projeto não encontrada.")
     return etapa
+
+
+def _get_meta_or_404(db: Session, meta_id: uuid.UUID) -> MetaProjeto:
+    meta = db.get(MetaProjeto, meta_id)
+    if meta is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Meta de projeto não encontrada.")
+    return meta
+
+
+def _get_indicador_or_404(db: Session, indicador_id: uuid.UUID) -> IndicadorProjeto:
+    indicador = db.get(IndicadorProjeto, indicador_id)
+    if indicador is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Indicador de projeto não encontrado.")
+    return indicador
+
+
+def _get_risco_or_404(db: Session, risco_id: uuid.UUID) -> RiscoProjeto:
+    risco = db.get(RiscoProjeto, risco_id)
+    if risco is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Risco de projeto não encontrado.")
+    return risco
 
 
 # --- Demandas (RF-031) -------------------------------------------------------
@@ -257,3 +287,165 @@ def atualizar_etapa(
     db.commit()
     db.refresh(etapa)
     return etapa
+
+
+# --- Metas do plano de trabalho (RF-034) ------------------------------------
+
+
+@router.post("/{projeto_id}/metas", response_model=MetaProjetoRead, status_code=status.HTTP_201_CREATED)
+def criar_meta(
+    projeto_id: uuid.UUID,
+    dados: MetaProjetoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> MetaProjeto:
+    """RF-034: meta quantitativa ou qualitativa do plano de trabalho."""
+
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    meta = MetaProjeto(projeto_id=projeto_id, **dados.model_dump())
+    db.add(meta)
+    db.commit()
+    db.refresh(meta)
+    return meta
+
+
+@router.get("/{projeto_id}/metas", response_model=list[MetaProjetoRead])
+def listar_metas(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[MetaProjeto]:
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_LEITURA, cpl_id=projeto.cpl_id)
+    return (
+        db.query(MetaProjeto)
+        .filter(MetaProjeto.projeto_id == projeto_id)
+        .order_by(MetaProjeto.created_at)
+        .all()
+    )
+
+
+@router.patch("/metas/{meta_id}", response_model=MetaProjetoRead)
+def atualizar_meta(
+    meta_id: uuid.UUID,
+    dados: MetaProjetoUpdate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> MetaProjeto:
+    meta = _get_meta_or_404(db, meta_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=meta.projeto.cpl_id)
+    for campo, valor in dados.model_dump(exclude_unset=True).items():
+        setattr(meta, campo, valor)
+    db.commit()
+    db.refresh(meta)
+    return meta
+
+
+# --- Indicadores do plano de trabalho (RF-034) ------------------------------
+
+
+@router.post(
+    "/{projeto_id}/indicadores", response_model=IndicadorProjetoRead, status_code=status.HTTP_201_CREATED
+)
+def criar_indicador(
+    projeto_id: uuid.UUID,
+    dados: IndicadorProjetoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> IndicadorProjeto:
+    """RF-034: indicador de acompanhamento do projeto."""
+
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    indicador = IndicadorProjeto(projeto_id=projeto_id, **dados.model_dump())
+    db.add(indicador)
+    db.commit()
+    db.refresh(indicador)
+    return indicador
+
+
+@router.get("/{projeto_id}/indicadores", response_model=list[IndicadorProjetoRead])
+def listar_indicadores(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[IndicadorProjeto]:
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_LEITURA, cpl_id=projeto.cpl_id)
+    return (
+        db.query(IndicadorProjeto)
+        .filter(IndicadorProjeto.projeto_id == projeto_id)
+        .order_by(IndicadorProjeto.created_at)
+        .all()
+    )
+
+
+@router.patch("/indicadores/{indicador_id}", response_model=IndicadorProjetoRead)
+def atualizar_indicador(
+    indicador_id: uuid.UUID,
+    dados: IndicadorProjetoUpdate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> IndicadorProjeto:
+    indicador = _get_indicador_or_404(db, indicador_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=indicador.projeto.cpl_id)
+    for campo, valor in dados.model_dump(exclude_unset=True).items():
+        setattr(indicador, campo, valor)
+    db.commit()
+    db.refresh(indicador)
+    return indicador
+
+
+# --- Riscos do plano de trabalho (RF-034) -----------------------------------
+
+
+@router.post("/{projeto_id}/riscos", response_model=RiscoProjetoRead, status_code=status.HTTP_201_CREATED)
+def criar_risco(
+    projeto_id: uuid.UUID,
+    dados: RiscoProjetoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> RiscoProjeto:
+    """RF-034/040: risco identificado do projeto — modelo pensado para
+    ser reaproveitado pelo RF-040 (Execução) quando for construído."""
+
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    risco = RiscoProjeto(projeto_id=projeto_id, **dados.model_dump())
+    db.add(risco)
+    db.commit()
+    db.refresh(risco)
+    return risco
+
+
+@router.get("/{projeto_id}/riscos", response_model=list[RiscoProjetoRead])
+def listar_riscos(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[RiscoProjeto]:
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_LEITURA, cpl_id=projeto.cpl_id)
+    return (
+        db.query(RiscoProjeto)
+        .filter(RiscoProjeto.projeto_id == projeto_id)
+        .order_by(RiscoProjeto.created_at)
+        .all()
+    )
+
+
+@router.patch("/riscos/{risco_id}", response_model=RiscoProjetoRead)
+def atualizar_risco(
+    risco_id: uuid.UUID,
+    dados: RiscoProjetoUpdate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> RiscoProjeto:
+    risco = _get_risco_or_404(db, risco_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=risco.projeto.cpl_id)
+    for campo, valor in dados.model_dump(exclude_unset=True).items():
+        setattr(risco, campo, valor)
+    db.commit()
+    db.refresh(risco)
+    return risco

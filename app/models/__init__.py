@@ -38,7 +38,14 @@ from app.models.planejamento import (
     ObjetivoEstrategico,
     PlanejamentoEstrategico,
 )
-from app.models.projeto import DemandaProjeto, EtapaProjeto, Projeto
+from app.models.projeto import (
+    DemandaProjeto,
+    EtapaProjeto,
+    IndicadorProjeto,
+    MetaProjeto,
+    Projeto,
+    RiscoProjeto,
+)
 from app.models.usuario import Usuario, UsuarioPapel
 
 __all__ = [
@@ -82,4 +89,7 @@ __all__ = [
     "DemandaProjeto",
     "Projeto",
     "EtapaProjeto",
+    "MetaProjeto",
+    "IndicadorProjeto",
+    "RiscoProjeto",
 ]
