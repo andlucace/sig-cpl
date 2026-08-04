@@ -23,4 +23,79 @@
             <div>Nenhuma CPL vinculada ao seu usuário ainda.</div>
         </div>
     {% endif %}
+
+    <h2 class="h4 mt-5 mb-1"><i class="bi bi-megaphone text-primary me-2"></i>Editais de fomento</h2>
+    <p class="text-body-secondary">
+        Editais de fomento do Programa SP Produz (RF-029) — globais, não escopados a uma CPL.
+        Não confundir com os editais de maturidade em <a href="/painel/maturidade">Maturidade</a>.
+    </p>
+    <div class="row g-4">
+        <div class="col-lg-7">
+            {% if editais_fomento %}
+                <div class="card">
+                    <div class="list-group list-group-flush">
+                        {% for edital in editais_fomento %}
+                            <a href="/painel/projetos/editais-fomento/{{ edital.id }}"
+                               class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                <span>
+                                    <i class="bi bi-file-earmark-text text-primary me-2"></i>{{ edital.titulo }}
+                                    {% if not edital.ativo %}<span class="badge text-bg-secondary ms-1">inativo</span>{% endif %}
+                                </span>
+                                <span class="small text-body-secondary">
+                                    {% if edital.data_encerramento %}até {{ edital.data_encerramento.strftime('%d/%m/%Y') }}{% endif %}
+                                </span>
+                            </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% else %}
+                <div class="alert alert-light border d-flex gap-2" role="alert">
+                    <i class="bi bi-info-circle"></i>
+                    <div>Nenhum edital de fomento cadastrado ainda.</div>
+                </div>
+            {% endif %}
+        </div>
+        {% if e_administrador %}
+            <div class="col-lg-5">
+                <div class="card">
+                    <div class="card-header bg-transparent fw-semibold">
+                        <i class="bi bi-plus-circle me-2"></i>Novo edital de fomento
+                    </div>
+                    <div class="card-body">
+                        <form method="post" action="/painel/projetos/editais-fomento">
+                            <div class="mb-3">
+                                <label class="form-label">Título</label>
+                                <input type="text" class="form-control" name="titulo" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Descrição</label>
+                                <textarea class="form-control" name="descricao" rows="2"></textarea>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label">Abertura</label>
+                                    <input type="date" class="form-control" name="data_abertura">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Encerramento (marco de submissão)</label>
+                                    <input type="date" class="form-control" name="data_encerramento">
+                                </div>
+                            </div>
+                            <div class="mb-3 mt-2">
+                                <label class="form-label">Requisitos</label>
+                                <textarea class="form-control" name="requisitos" rows="2"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Documentos exigidos</label>
+                                <textarea class="form-control" name="documentos_exigidos" rows="2"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 mt-1">
+                                <i class="bi bi-plus-lg me-1"></i>Adicionar edital de fomento
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
 {% endblock %}

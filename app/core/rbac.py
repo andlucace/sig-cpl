@@ -43,10 +43,15 @@ PAPEIS_IMPEDIMENTO_LEITURA = PAPEIS_GESTAO | {Papel.AUDITORIA_CONTROLE}
 restrita que o resto da governança; conselho/comissão não veem por padrão."""
 
 PAPEIS_EDITAL_GESTAO = {Papel.ADMINISTRADOR_PLATAFORMA}
-"""RF-024/RN-006: edital e critérios de maturidade são configuração
-compartilhada do Programa SP Produz, não algo que cada CPL cria pra si —
-só administrador da plataforma gerencia (chamado com cpl_id=None, já que
-não há CPL nenhuma envolvida em criar/editar um edital)."""
+"""RF-024/RN-006 e RF-029: edital de maturidade e edital de fomento (dois
+conceitos distintos que compartilham o nome, ver `EditalFomento`) são
+configuração compartilhada do Programa SP Produz, não algo que cada CPL
+cria pra si — só administrador da plataforma gerencia (chamado com
+cpl_id=None, já que não há CPL nenhuma envolvida em criar/editar um
+edital). RF-030 reaproveita o mesmo grupo pra decidir recursos/
+contrarrazões/diligências, mesmo raciocínio do RF-027 (`RecursoAvaliacao`):
+decisão é de quem administra o edital, autoridade diferente de quem gere
+o projeto que solicitou."""
 
 PAPEIS_AVALIACAO_EXECUCAO = PAPEIS_GESTAO | {Papel.ANALISTA_AVALIADOR}
 """RF-024/025: quem conduz uma avaliação de maturidade — lança nota e

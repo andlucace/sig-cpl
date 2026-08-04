@@ -650,4 +650,130 @@
             </div>
         </div>
     </div>
+
+    <div class="card mt-4">
+        <div class="card-header bg-transparent fw-semibold">
+            <i class="bi bi-send me-2"></i>Submissão a edital de fomento
+        </div>
+        <div class="card-body">
+            {% if projeto.edital_fomento %}
+                <p class="mb-0">
+                    Submetido ao edital
+                    <a href="/painel/projetos/editais-fomento/{{ projeto.edital_fomento_id }}">{{ projeto.edital_fomento.titulo }}</a>.
+                </p>
+            {% else %}
+                <form method="post" action="/painel/projetos/{{ projeto.id }}/submeter" class="d-flex gap-2">
+                    <select class="form-select" name="edital_fomento_id" required>
+                        <option value="" disabled selected>Selecione um edital de fomento aberto</option>
+                        {% for edital in editais_fomento_abertos %}
+                            <option value="{{ edital.id }}">{{ edital.titulo }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-primary text-nowrap">
+                        <i class="bi bi-send me-1"></i>Submeter
+                    </button>
+                </form>
+                {% if not editais_fomento_abertos %}
+                    <p class="text-body-secondary small mb-0 mt-2">Nenhum edital de fomento ativo no momento.</p>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+
+    {% if projeto.edital_fomento %}
+        <div class="row g-4 mt-1">
+            <div class="col-lg-7">
+                <div class="card">
+                    <div class="card-header bg-transparent fw-semibold">
+                        <i class="bi bi-file-earmark-diff me-2"></i>Recursos, contrarrazões e diligências
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Tipo</th>
+                                    <th>Protocolo</th>
+                                    <th>Prazo</th>
+                                    <th>Status</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for recurso in recursos_submissao %}
+                                    <tr>
+                                        <td>
+                                            {{ recurso.tipo.value.replace('_', ' ') }}
+                                            <div class="text-body-secondary small">{{ recurso.descricao }}</div>
+                                            {% if recurso.parecer_decisao %}<div class="text-body-secondary small">Parecer: {{ recurso.parecer_decisao }}</div>{% endif %}
+                                        </td>
+                                        <td class="small">{{ recurso.protocolo or "—" }}</td>
+                                        <td class="small">{{ recurso.prazo.strftime('%d/%m/%Y') if recurso.prazo else "—" }}</td>
+                                        <td>
+                                            <span class="badge {% if recurso.status.value == 'deferido' %}text-bg-success{% elif recurso.status.value == 'indeferido' %}text-bg-danger{% else %}text-bg-warning{% endif %}">
+                                                {{ recurso.status.value }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% if e_administrador and recurso.status.value == 'pendente' %}
+                                                <form method="post" action="/painel/projetos/recursos-submissao/{{ recurso.id }}/decidir" class="d-flex gap-1">
+                                                    <select class="form-select form-select-sm" name="status" style="width: auto;">
+                                                        {% for s in status_recurso_opcoes %}
+                                                            {% if s.value != 'pendente' %}
+                                                                <option value="{{ s.value }}">{{ s.value }}</option>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    </select>
+                                                    <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                        <i class="bi bi-check-lg"></i>
+                                                    </button>
+                                                </form>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% else %}
+                                    <tr><td colspan="5" class="text-body-secondary">Nenhum recurso, contrarrazão ou diligência registrado ainda.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="card">
+                    <div class="card-header bg-transparent fw-semibold">
+                        <i class="bi bi-plus-circle me-2"></i>Novo recurso/contrarrazão/diligência
+                    </div>
+                    <div class="card-body">
+                        <form method="post" action="/painel/projetos/{{ projeto.id }}/recursos-submissao">
+                            <div class="mb-3">
+                                <label class="form-label">Tipo</label>
+                                <select class="form-select" name="tipo">
+                                    {% for t in tipos_recurso_submissao %}
+                                        <option value="{{ t.value }}">{{ t.value.replace('_', ' ') }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Descrição</label>
+                                <textarea class="form-control" name="descricao" rows="2" required></textarea>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label">Protocolo</label>
+                                    <input type="text" class="form-control" name="protocolo">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Prazo</label>
+                                    <input type="date" class="form-control" name="prazo">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 mt-3">
+                                <i class="bi bi-plus-lg me-1"></i>Registrar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
 {% endblock %}

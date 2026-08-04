@@ -297,3 +297,12 @@ class StatusRisco(str, enum.Enum):
     MITIGADO = "mitigado"
     MATERIALIZADO = "materializado"
     ENCERRADO = "encerrado"
+
+
+class TipoRecursoSubmissao(str, enum.Enum):
+    """RF-030: natureza da manifestação no processo de submissão de um
+    projeto a um edital de fomento."""
+
+    RECURSO = "recurso"
+    CONTRARRAZAO = "contrarrazao"
+    DILIGENCIA = "diligencia"

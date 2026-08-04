@@ -87,6 +87,10 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
       + colunas `projetos.continuidade`/`escalabilidade` (RF-035,
       fundação) — sem enum reaproveitado desta vez, aplicada sem ajuste
       manual
+  17. `c0bdeb29e88f` — tabelas `editais_fomento`, `recursos_submissao_projeto`
+      + coluna `projetos.edital_fomento_id` (RF-029/030) — precisou de
+      ajuste manual (`recursos_submissao_projeto.status` reaproveita
+      `statusrecurso`, criado originalmente pra `RecursoAvaliacao`/RF-027)
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos)
 
@@ -757,6 +761,72 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     Testado via curl (criar/listar/atualizar/encerrar, web e API JSON) e
     via Playwright (`projeto_rf035_shot.js`, mesmo diretório de scratch),
     sem erros de console nem 500 reais no log.
+25. **RF-029/030: edital de fomento, submissão e recursos** — usuário
+    disse "seguir a sequência natural (RF-029/030)", apontando
+    explicitamente os dois requisitos juntos desta vez (diferente dos
+    itens 22/24, onde a fatia foi decidida por mim). Ao contrário de
+    RF-034/035 (que listam vários conceitos distintos num único
+    requisito, forçando um corte), RF-030 já é intrinsecamente uma coisa
+    só — "recursos, contrarrazões, diligências, respostas e decisões" é
+    o mesmo fluxo de ida-e-volta de um processo de submissão — então
+    RF-029 e RF-030 foram construídos juntos nesta fatia, sem deixar
+    nada deliberadamente de fora dentro desses dois requisitos.
+    **Modelo `EditalFomento`** (RF-029) — título, descrição, requisitos,
+    documentos exigidos (texto livre — documento não define um
+    checklist estruturado, e criar um checklist estruturado exigiria
+    mudar `Documento.cpl_id`, hoje `NOT NULL`, pra aceitar documento sem
+    CPL, mudança maior do que esta fatia pedia), datas de
+    abertura/encerramento (o encerramento é o "marco de submissão" do
+    requisito) e responsável. Global, não escopado a uma CPL — mesmo
+    padrão do `Edital` de maturidade (`app/models/maturidade.py`), que é
+    um conceito PROPOSITALMENTE diferente (critérios de avaliação de
+    maturidade, não financiamento) apesar do nome igual em português —
+    distinção já validada com o usuário antes de começar o módulo de
+    Projetos (ver item 20). RBAC de gestão reaproveita
+    `PAPEIS_EDITAL_GESTAO` (só `ADMINISTRADOR_PLATAFORMA`), mesmo grupo
+    do edital de maturidade — mesma autoridade, mesmo motivo (é
+    configuração compartilhada do programa, não algo que uma CPL
+    gerencia); leitura é `PAPEIS_PROJETO_LEITURA`.
+    **Vínculo projeto↔edital** — `Projeto.edital_fomento_id`, setado só
+    via a ação explícita `POST /{id}/submeter`, que também move
+    `estagio` pra `SUBMETIDO` na mesma transação (não editável pelo
+    PATCH genérico de portfólio, pra manter a submissão como um evento
+    deliberado, não um efeito colateral de editar outro campo).
+    **Modelo `RecursoSubmissaoProjeto`** (RF-030) — `tipo`
+    (`TipoRecursoSubmissao`: recurso/contrarrazão/diligência, enum
+    novo), protocolo e prazo (controle explícito pedido pelo
+    requisito), descrição, e decisão (reaproveita `StatusRecurso` —
+    pendente/deferido/indeferido — o mesmo enum de `RecursoAvaliacao`,
+    RF-027, mesmo conceito de ciclo de vida). Diferente de
+    `RecursoAvaliacao` (que é 1:1 com a avaliação, no máximo um
+    recurso), aqui é uma lista sem limite — o processo real vai e volta
+    (diligência → resposta → nova diligência ou decisão), então múltiplos
+    registros por projeto são esperados, não um erro. Decisão é
+    `PAPEIS_EDITAL_GESTAO` (autoridade diferente de quem gere o
+    projeto), mesmo raciocínio do `decidir_recurso` de RF-027.
+    **Bug pego e corrigido antes do deploy, não durante**: as rotas
+    `GET /editais-fomento` e `GET /editais-fomento/{id}` foram
+    registradas originalmente *depois* de `GET /{projeto_id}` no
+    roteador da API — como o FastAPI/Starlette casa rotas na ordem de
+    registro, `GET /api/projetos/editais-fomento` caía primeiro em
+    `GET /{projeto_id}`, tentando interpretar `"editais-fomento"` como
+    UUID e devolvendo 422. Pego no teste via curl (não no Playwright,
+    que só testa fluxos via UI/web, onde esse path específico não é
+    usado do mesmo jeito) — corrigido movendo o bloco inteiro de rotas
+    de edital de fomento pra antes da seção "Projetos / portfólio" no
+    arquivo. **Lição nova pra registrar**: sempre que um sub-recurso
+    global (sem prefixo de path variável antes dele, tipo
+    `/editais-fomento` vs. `/{projeto_id}/algo`) for adicionado a um
+    router que já tem uma rota `GET /{id}` genérica, ele **precisa** ser
+    registrado antes dessa rota genérica — testar com curl direto na
+    API (não só via UI) pra pegar esse tipo de colisão de rota, porque a
+    UI web nunca bate nesse endpoint específico do jeito que expõe o bug.
+    Migração `c0bdeb29e88f`, com o gotcha de enum reaproveitado de
+    sempre (`statusrecurso`) — pego antes de aplicar, virou hábito.
+    Testado via curl (criar edital, submeter projeto, criar
+    recurso/contrarrazão/diligência, decidir, tudo via web e API JSON) e
+    via Playwright (`projeto_rf029_030_shot.js`), sem erros de console
+    nem 500 reais no log.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -959,6 +1029,25 @@ só porque é um módulo novo).
     30/07 — não é a causa deste incidente (já estava assim há dias,
     contido em seu próprio container/rede), mas consome recursos à toa;
     não mexi nele sem confirmação do usuário, é outro projeto.
+13. **FastAPI/Starlette casam rotas na ordem em que são registradas — um
+    sub-recurso "global" (path fixo, sem `{param}` antes dele) definido
+    DEPOIS de uma rota `GET /{id}` genérica no mesmo router nunca é
+    alcançado.** Ao adicionar `GET /api/projetos/editais-fomento` (RF-029,
+    item 25) depois de `GET /api/projetos/{projeto_id}` (já existente,
+    RF-032) no mesmo arquivo, toda chamada a `/editais-fomento` caía
+    primeiro em `/{projeto_id}`, que tentava interpretar a string
+    `"editais-fomento"` como UUID e devolvia 422 — sem esse endpoint
+    nunca "quebrar" de um jeito óbvio (404 seria mais fácil de notar que
+    um 422 de validação). Pego testando via curl direto na API — o
+    Playwright/teste web nunca bateu nesse path específico (a UI usa
+    outras rotas), então **testar só pela UI não seria suficiente pra
+    achar isso**. Corrigido movendo o bloco inteiro das rotas de edital
+    de fomento pra antes da seção que define `GET /{projeto_id}` no
+    arquivo. **Regra pra não repetir**: sempre que adicionar uma rota
+    GET com path fixo (sem parâmetro variável na posição inicial) a um
+    router que já tem uma rota `GET /{algo}` genérica no mesmo nível,
+    registre a rota fixa ANTES da genérica — e teste com curl direto na
+    API (não só a UI web) pra pegar colisões desse tipo cedo.
 
 ## O que falta (priorizado)
 
@@ -985,15 +1074,16 @@ ordem recomendada para o que vem depois:
    `app/services/geracao_documentos.py` já procurava desde antes, então
    nenhum código mudou.
 5. ~~Iniciar módulo de Projetos~~ — **fundação + plano de trabalho +
-   RF-034 completo + RF-035 (fundação) feitos** (itens 20 a 24 da seção
-   "Ordem em que este projeto foi construído"): `DemandaProjeto`
-   (RF-031), `Projeto`/portfólio (RF-032), plano de trabalho completo —
-   informações básicas, impactos socioambientais, continuidade e
-   escalabilidade (RF-033/034/035), RF-034 completo (`EtapaProjeto`,
-   `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`) e RF-035 fundação
-   (`EquipeProjeto`, `OrigemRecursoProjeto`), em `/painel/projetos`.
-   Segue pendente, sem relação com este trabalho: edital de fomento com
-   cronograma/recursos (RF-029/030), aquisições e cronograma
+   RF-034 completo + RF-035 (fundação) + RF-029/030 feitos** (itens 20 a
+   25 da seção "Ordem em que este projeto foi construído"):
+   `DemandaProjeto` (RF-031), `Projeto`/portfólio (RF-032), plano de
+   trabalho completo — informações básicas, impactos socioambientais,
+   continuidade e escalabilidade (RF-033/034/035), RF-034 completo
+   (`EtapaProjeto`, `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`),
+   RF-035 fundação (`EquipeProjeto`, `OrigemRecursoProjeto`) e RF-029/030
+   completos (`EditalFomento`, submissão de projeto, `RecursoSubmissaoProjeto`
+   com recursos/contrarrazões/diligências), em `/painel/projetos`. Segue
+   pendente, sem relação com este trabalho: aquisições e cronograma
    físico-financeiro (resto do RF-035 — aquisições se sobrepõe ao
    RF-037, cronograma físico-financeiro depende do RF-036 existir),
    orçamento/cotações/desembolsos (RF-036 a RF-038), execução

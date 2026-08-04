@@ -1,0 +1,104 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Edital de fomento — {{ edital.titulo }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/projetos" class="link-secondary text-decoration-none">Projetos</a>
+    <i class="bi bi-chevron-right small mx-1"></i>{{ edital.titulo }}
+{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1">
+        <i class="bi bi-megaphone text-primary me-2"></i>{{ edital.titulo }}
+        {% if not edital.ativo %}<span class="badge text-bg-secondary align-middle fs-6">inativo</span>{% endif %}
+    </h1>
+
+    <div class="card">
+        <div class="card-header bg-transparent fw-semibold">
+            <i class="bi bi-pencil-square me-2"></i>Dados do edital
+        </div>
+        <div class="card-body">
+            {% if e_administrador %}
+                <form method="post" action="/painel/projetos/editais-fomento/{{ edital.id }}">
+                    <div class="mb-3">
+                        <label class="form-label">Título</label>
+                        <input type="text" class="form-control" name="titulo" value="{{ edital.titulo }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descrição</label>
+                        <textarea class="form-control" name="descricao" rows="2">{{ edital.descricao or '' }}</textarea>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label">Abertura</label>
+                            <input type="date" class="form-control" name="data_abertura" value="{{ edital.data_abertura or '' }}">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Encerramento (marco de submissão)</label>
+                            <input type="date" class="form-control" name="data_encerramento" value="{{ edital.data_encerramento or '' }}">
+                        </div>
+                    </div>
+                    <div class="mb-3 mt-2">
+                        <label class="form-label">Requisitos</label>
+                        <textarea class="form-control" name="requisitos" rows="2">{{ edital.requisitos or '' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Documentos exigidos</label>
+                        <textarea class="form-control" name="documentos_exigidos" rows="2">{{ edital.documentos_exigidos or '' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Responsável</label>
+                        <select class="form-select" name="responsavel_id">
+                            <option value="">Não definido</option>
+                            {% for pessoa in pessoas %}
+                                <option value="{{ pessoa.id }}" {% if edital.responsavel_id == pessoa.id %}selected{% endif %}>{{ pessoa.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input type="checkbox" class="form-check-input" name="ativo" id="ativo-check" {% if edital.ativo %}checked{% endif %}>
+                        <label class="form-check-label" for="ativo-check">Ativo (visível pra submissão de novos projetos)</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i>Salvar
+                    </button>
+                </form>
+            {% else %}
+                {% if edital.descricao %}<p>{{ edital.descricao }}</p>{% endif %}
+                <dl class="row mb-0">
+                    <dt class="col-sm-3">Abertura</dt>
+                    <dd class="col-sm-9">{{ edital.data_abertura.strftime('%d/%m/%Y') if edital.data_abertura else "—" }}</dd>
+                    <dt class="col-sm-3">Encerramento</dt>
+                    <dd class="col-sm-9">{{ edital.data_encerramento.strftime('%d/%m/%Y') if edital.data_encerramento else "—" }}</dd>
+                    <dt class="col-sm-3">Requisitos</dt>
+                    <dd class="col-sm-9">{{ edital.requisitos or "—" }}</dd>
+                    <dt class="col-sm-3">Documentos exigidos</dt>
+                    <dd class="col-sm-9">{{ edital.documentos_exigidos or "—" }}</dd>
+                </dl>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="card-header bg-transparent fw-semibold">
+            <i class="bi bi-kanban me-2"></i>Projetos submetidos
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Projeto</th>
+                        <th>Estágio</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for projeto in projetos_submetidos %}
+                        <tr>
+                            <td><a href="/painel/projetos/{{ projeto.id }}">{{ projeto.titulo }}</a></td>
+                            <td class="small">{{ projeto.estagio.value.replace('_', ' ') }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="2" class="text-body-secondary">Nenhum projeto submetido a este edital ainda.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}

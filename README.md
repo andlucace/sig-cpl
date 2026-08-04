@@ -525,18 +525,20 @@ que já está no banco:
   deliberado pra não introduzir um context processor Jinja2 (mecanismo
   não usado em nenhum outro lugar do projeto) só para isso.
 
-O bloco **Projetos** (RF-031 a RF-035) cobre a **fundação** do módulo de
-Projetos e Fomento (demanda/oportunidade → conversão em projeto →
-portfólio → plano de trabalho) **completa**, incluindo o RF-034 inteiro
-(etapas/cronograma, metas, indicadores, riscos, impactos socioambientais)
-e a fundação do RF-035 (continuidade, escalabilidade, equipe, origem dos
-recursos). Edital de fomento (RF-029/030), aquisições e cronograma
-físico-financeiro (resto do RF-035), financeiro (RF-036 a RF-038),
-execução (RF-039/040) e prestação de contas (RF-041) **não** fazem parte
-desta fatia — o módulo completo tem 13 requisitos em 6 sub-áreas (editais,
-demandas/portfólio, plano de trabalho, financeiro, execução, prestação de
-contas), grande demais pra uma entrega só; "sequência natural" escolhida
-sessão a sessão, sempre a camada mais fundamental que ainda falta.
+O bloco **Projetos** (RF-029 a RF-035, exceto o resto do RF-035) cobre a
+**fundação completa** do módulo de Projetos e Fomento: editais de
+fomento com submissão, recursos/contrarrazões/diligências (RF-029/030),
+demanda/oportunidade → conversão em projeto → portfólio → plano de
+trabalho completo, incluindo o RF-034 inteiro (etapas/cronograma, metas,
+indicadores, riscos, impactos socioambientais) e a fundação do RF-035
+(continuidade, escalabilidade, equipe, origem dos recursos). Aquisições e
+cronograma físico-financeiro (resto do RF-035), financeiro (RF-036 a
+RF-038), execução (RF-039/040) e prestação de contas (RF-041) **não**
+fazem parte desta fatia — o módulo completo tem 13 requisitos em 6
+sub-áreas (editais, demandas/portfólio, plano de trabalho, financeiro,
+execução, prestação de contas), grande demais pra uma entrega só;
+"sequência natural" escolhida sessão a sessão, sempre a camada mais
+fundamental que ainda falta.
 - **`DemandaProjeto`** (RF-031) — título, descrição, origem
   (`OrigemDemanda`: empresa/comissão/instituição/edital) com uma
   referência solta pra origem (`origem_id`/`origem_detalhe`, mesmo padrão
@@ -641,17 +643,45 @@ sessão a sessão, sempre a camada mais fundamental que ainda falta.
   - UI: tabela + form de criação (e "encerrar" pra equipe) pra cada
     recurso, mesmo padrão visual das seções anteriores, na mesma tela de
     detalhe do projeto.
-- **Edital de fomento é um conceito diferente do `Edital` de
-  maturidade** — o `Edital` que já existe (`app/models/maturidade.py`)
-  guarda critérios/pesos/notas de corte pra avaliação de maturidade; o
-  "edital" de RF-029 seria um edital de fomento (cronograma de submissão,
-  requisitos, documentos, marcos) ao qual CPLs submetem projetos pra
-  financiamento — são domínios diferentes que só compartilham o nome em
-  português. Essa distinção foi decidida explicitamente com o usuário
-  antes de começar a construir o módulo; RF-029/030 (o edital de fomento
-  em si, com recursos/contrarrazões) ainda não foram construídos, então
-  hoje `DemandaProjeto.origem_tipo == EDITAL` só registra a origem como
-  texto (`origem_detalhe`), sem um modelo de edital de fomento por trás.
+- **Edital de fomento (RF-029/030)** — distinto do `Edital` de
+  maturidade (`app/models/maturidade.py`, que guarda critérios/pesos/
+  notas de corte pra avaliação de maturidade); mesmo nome em português,
+  domínios diferentes, distinção decidida explicitamente com o usuário
+  antes de começar a construir o módulo de Projetos.
+  - **`EditalFomento`** (RF-029) — título, descrição, requisitos e
+    documentos exigidos (texto livre — o documento não define um
+    checklist estruturado, e estruturar exigiria mudar `Documento.cpl_id`,
+    hoje `NOT NULL`, pra aceitar documento sem CPL), datas de
+    abertura/encerramento (o encerramento é o "marco de submissão") e
+    responsável. Global, não escopado a uma CPL — mesmo padrão do
+    `Edital` de maturidade. Gestão restrita a `PAPEIS_EDITAL_GESTAO`
+    (só `ADMINISTRADOR_PLATAFORMA`, mesmo grupo do edital de
+    maturidade); leitura é `PAPEIS_PROJETO_LEITURA`.
+    `POST/GET/PATCH /api/projetos/editais-fomento`, UI em
+    `/painel/projetos` (lista + form) e
+    `/painel/projetos/editais-fomento/{id}` (detalhe/edição).
+  - **Submissão** — `Projeto.edital_fomento_id`, setado só pela ação
+    explícita `POST /api/projetos/{id}/submeter`, que também move
+    `estagio` pra `SUBMETIDO` na mesma transação — não editável pelo
+    PATCH genérico de portfólio, pra manter a submissão como evento
+    deliberado, não efeito colateral de editar outro campo.
+  - **`RecursoSubmissaoProjeto`** (RF-030) — recurso, contrarrazão ou
+    diligência no processo de submissão: `tipo`
+    (`TipoRecursoSubmissao`), protocolo, prazo, descrição e decisão
+    (reaproveita `StatusRecurso` — pendente/deferido/indeferido, mesmo
+    enum de `RecursoAvaliacao`/RF-027). Diferente de `RecursoAvaliacao`
+    (1:1, no máximo um recurso), aqui é uma lista sem limite — o
+    processo real vai e volta (diligência → resposta → nova diligência
+    ou decisão). Decisão é `PAPEIS_EDITAL_GESTAO` (autoridade diferente
+    de quem gere o projeto que solicitou), mesmo raciocínio do RF-027.
+    `POST/GET /api/projetos/{id}/recursos-submissao`,
+    `POST /api/projetos/recursos-submissao/{id}/decidir`.
+  - Hoje `DemandaProjeto.origem_tipo == EDITAL` continua só registrando
+    a origem como texto (`origem_detalhe`) — a referência solta
+    (`origem_id`) poderia apontar pra um `EditalFomento.id` agora que o
+    modelo existe, mas isso é sobre de onde a *demanda* nasceu, um
+    conceito diferente de a que edital o *projeto formal* foi submetido
+    (`Projeto.edital_fomento_id`); não foram unificados propositalmente.
 - UI web em `/painel/projetos` (seleção de CPL) →
   `/painel/projetos/cpls/{id}` (demandas pendentes + portfólio + forms de
   registrar demanda/criar projeto direto) → `/painel/projetos/demandas/{id}`
@@ -1044,14 +1074,15 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    trabalho/financeiro do módulo de Projetos (item 7), ainda não
    construído.
 7. ~~Iniciar módulo de Projetos~~ — **fundação + plano de trabalho +
-   RF-034 completo + RF-035 (fundação) feitos**: `DemandaProjeto`
-   (RF-031), `Projeto`/portfólio (RF-032), plano de trabalho completo
-   (RF-033/034/035), RF-034 completo (`EtapaProjeto`, `MetaProjeto`,
-   `IndicadorProjeto`, `RiscoProjeto`) e RF-035 fundação (`EquipeProjeto`,
-   `OrigemRecursoProjeto`) — ver seção "Projetos" acima. Falta o resto do
-   módulo (RF-029/030 e resto do RF-035 a RF-041): edital de fomento com
-   cronograma/recursos, aquisições e cronograma físico-financeiro (resto
-   do RF-035), orçamento e cotações, desembolsos/conciliação, execução
+   RF-034 completo + RF-035 (fundação) + RF-029/030 feitos**:
+   `DemandaProjeto` (RF-031), `Projeto`/portfólio (RF-032), plano de
+   trabalho completo (RF-033/034/035), RF-034 completo (`EtapaProjeto`,
+   `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`), RF-035 fundação
+   (`EquipeProjeto`, `OrigemRecursoProjeto`) e RF-029/030 completos
+   (`EditalFomento`, submissão, `RecursoSubmissaoProjeto`) — ver seção
+   "Projetos" acima. Falta o resto do módulo (resto do RF-035 a
+   RF-041): aquisições e cronograma físico-financeiro (resto do
+   RF-035), orçamento e cotações, desembolsos/conciliação, execução
    física/financeira (RF-039/040 — deve reaproveitar
    `RiscoProjeto`/`StatusRisco`, não duplicar) e prestação de contas.
    "Simular cenários" (RF-026) e "habilitação jurídica" (RF-027) também

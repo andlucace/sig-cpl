@@ -7,7 +7,13 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user_optional
-from app.core.rbac import PAPEIS_PROJETO_GESTAO, PAPEIS_PROJETO_LEITURA, cpl_ids_visiveis, verificar_papel
+from app.core.rbac import (
+    PAPEIS_EDITAL_GESTAO,
+    PAPEIS_PROJETO_GESTAO,
+    PAPEIS_PROJETO_LEITURA,
+    cpl_ids_visiveis,
+    verificar_papel,
+)
 from app.db.session import get_db
 from app.models.cpl import CPL
 from app.models.enums import (
@@ -17,20 +23,24 @@ from app.models.enums import (
     PrioridadeProjeto,
     ProbabilidadeRisco,
     StatusDemanda,
+    StatusRecurso,
     StatusRisco,
     StatusTarefa,
     TipoMeta,
+    TipoRecursoSubmissao,
 )
 from app.models.pessoa import Pessoa
 from app.models.planejamento import ObjetivoEstrategico, PlanejamentoEstrategico
 from app.models.projeto import (
     DemandaProjeto,
+    EditalFomento,
     EquipeProjeto,
     EtapaProjeto,
     IndicadorProjeto,
     MetaProjeto,
     OrigemRecursoProjeto,
     Projeto,
+    RecursoSubmissaoProjeto,
     RiscoProjeto,
 )
 from app.models.usuario import Usuario
@@ -47,6 +57,10 @@ def _exigir_login(usuario: Usuario | None) -> RedirectResponse | None:
 
 def _opt_uuid(valor: str | None) -> uuid.UUID | None:
     return uuid.UUID(valor) if valor else None
+
+
+def _e_administrador(db: Session, usuario: Usuario) -> bool:
+    return cpl_ids_visiveis(db, usuario) is None
 
 
 def _pessoas_e_objetivos(db: Session, cpl_id: uuid.UUID) -> tuple[list[Pessoa], list[ObjetivoEstrategico]]:
@@ -74,9 +88,118 @@ def selecionar_cpl(
         cpls = db.query(CPL).filter(CPL.id.in_(ids)).order_by(CPL.nome).all()
     else:
         cpls = []
-    return templates.TemplateResponse(
-        request, "restrito/projetos/cpls.html", {"cpls": cpls, "usuario": usuario, "pagina_ativa": "projetos"}
+    editais_fomento = (
+        db.query(EditalFomento).order_by(EditalFomento.data_abertura.desc().nullslast()).all()
     )
+    return templates.TemplateResponse(
+        request,
+        "restrito/projetos/cpls.html",
+        {
+            "cpls": cpls,
+            "editais_fomento": editais_fomento,
+            "e_administrador": _e_administrador(db, usuario),
+            "usuario": usuario,
+            "pagina_ativa": "projetos",
+        },
+    )
+
+
+@router.post("/editais-fomento")
+def criar_edital_fomento(
+    titulo: str = Form(...),
+    descricao: str | None = Form(None),
+    requisitos: str | None = Form(None),
+    documentos_exigidos: str | None = Form(None),
+    data_abertura: str | None = Form(None),
+    data_encerramento: str | None = Form(None),
+    responsavel_id: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-029: edital de fomento — global, não escopado a uma CPL."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    verificar_papel(db, usuario, PAPEIS_EDITAL_GESTAO, cpl_id=None)
+    edital = EditalFomento(
+        titulo=titulo,
+        descricao=descricao or None,
+        requisitos=requisitos or None,
+        documentos_exigidos=documentos_exigidos or None,
+        data_abertura=date.fromisoformat(data_abertura) if data_abertura else None,
+        data_encerramento=date.fromisoformat(data_encerramento) if data_encerramento else None,
+        responsavel_id=_opt_uuid(responsavel_id),
+    )
+    db.add(edital)
+    db.commit()
+    db.refresh(edital)
+    return RedirectResponse(f"/painel/projetos/editais-fomento/{edital.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/editais-fomento/{edital_id}")
+def detalhe_edital_fomento(
+    request: Request,
+    edital_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    edital = db.get(EditalFomento, edital_id)
+    if edital is None:
+        return RedirectResponse("/painel/projetos", status_code=status.HTTP_303_SEE_OTHER)
+    verificar_papel(db, usuario, PAPEIS_PROJETO_LEITURA, cpl_id=None)
+    pessoas = db.query(Pessoa).order_by(Pessoa.nome).all()
+    projetos_submetidos = (
+        db.query(Projeto)
+        .filter(Projeto.edital_fomento_id == edital_id)
+        .order_by(Projeto.created_at.desc())
+        .all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "restrito/projetos/edital_fomento_detail.html",
+        {
+            "edital": edital,
+            "pessoas": pessoas,
+            "projetos_submetidos": projetos_submetidos,
+            "e_administrador": _e_administrador(db, usuario),
+            "usuario": usuario,
+            "pagina_ativa": "projetos",
+        },
+    )
+
+
+@router.post("/editais-fomento/{edital_id}")
+def atualizar_edital_fomento(
+    edital_id: uuid.UUID,
+    titulo: str = Form(...),
+    descricao: str | None = Form(None),
+    requisitos: str | None = Form(None),
+    documentos_exigidos: str | None = Form(None),
+    data_abertura: str | None = Form(None),
+    data_encerramento: str | None = Form(None),
+    responsavel_id: str | None = Form(None),
+    ativo: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    edital = db.get(EditalFomento, edital_id)
+    if edital is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Edital de fomento não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_EDITAL_GESTAO, cpl_id=None)
+    edital.titulo = titulo
+    edital.descricao = descricao or None
+    edital.requisitos = requisitos or None
+    edital.documentos_exigidos = documentos_exigidos or None
+    edital.data_abertura = date.fromisoformat(data_abertura) if data_abertura else None
+    edital.data_encerramento = date.fromisoformat(data_encerramento) if data_encerramento else None
+    edital.responsavel_id = _opt_uuid(responsavel_id)
+    edital.ativo = ativo == "on"
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/editais-fomento/{edital_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/cpls/{cpl_id}")
@@ -298,6 +421,15 @@ def detalhe_projeto(
         .order_by(OrigemRecursoProjeto.created_at)
         .all()
     )
+    editais_fomento_abertos = (
+        db.query(EditalFomento).filter(EditalFomento.ativo.is_(True)).order_by(EditalFomento.titulo).all()
+    )
+    recursos_submissao = (
+        db.query(RecursoSubmissaoProjeto)
+        .filter(RecursoSubmissaoProjeto.projeto_id == projeto_id)
+        .order_by(RecursoSubmissaoProjeto.created_at)
+        .all()
+    )
     return templates.TemplateResponse(
         request,
         "restrito/projetos/projeto_detail.html",
@@ -319,6 +451,11 @@ def detalhe_projeto(
             "status_risco_opcoes": list(StatusRisco),
             "equipe": equipe,
             "origens_recurso": origens_recurso,
+            "editais_fomento_abertos": editais_fomento_abertos,
+            "recursos_submissao": recursos_submissao,
+            "tipos_recurso_submissao": list(TipoRecursoSubmissao),
+            "status_recurso_opcoes": list(StatusRecurso),
+            "e_administrador": _e_administrador(db, usuario),
             "usuario": usuario,
             "pagina_ativa": "projetos",
         },
@@ -672,3 +809,85 @@ def criar_origem_recurso(
     db.add(origem)
     db.commit()
     return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{projeto_id}/submeter")
+def submeter_projeto(
+    projeto_id: uuid.UUID,
+    edital_fomento_id: str = Form(...),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-029/030: submete o projeto a um edital de fomento — vincula o
+    edital e move o estágio para SUBMETIDO na mesma ação."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    projeto = db.get(Projeto, projeto_id)
+    if projeto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    edital = db.get(EditalFomento, uuid.UUID(edital_fomento_id))
+    if edital is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Edital de fomento não encontrado.")
+    projeto.edital_fomento_id = edital.id
+    projeto.estagio = EstagioProjeto.SUBMETIDO
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{projeto_id}/recursos-submissao")
+def criar_recurso_submissao(
+    projeto_id: uuid.UUID,
+    tipo: TipoRecursoSubmissao = Form(...),
+    protocolo: str | None = Form(None),
+    prazo: str | None = Form(None),
+    descricao: str = Form(...),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-030: recurso, contrarrazão ou diligência no processo de
+    submissão do projeto a um edital de fomento."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    projeto = db.get(Projeto, projeto_id)
+    if projeto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    recurso = RecursoSubmissaoProjeto(
+        projeto_id=projeto_id,
+        tipo=tipo,
+        protocolo=protocolo or None,
+        prazo=date.fromisoformat(prazo) if prazo else None,
+        descricao=descricao,
+        solicitado_por_id=usuario.id,
+    )
+    db.add(recurso)
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/recursos-submissao/{recurso_id}/decidir")
+def decidir_recurso_submissao(
+    recurso_id: uuid.UUID,
+    status_recurso: StatusRecurso = Form(..., alias="status"),
+    parecer_decisao: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """Decisão é de quem administra o edital de fomento — autoridade
+    diferente de quem gere o projeto que solicitou."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    recurso = db.get(RecursoSubmissaoProjeto, recurso_id)
+    if recurso is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Recurso de submissão não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_EDITAL_GESTAO, cpl_id=None)
+    recurso.status = status_recurso
+    recurso.parecer_decisao = parecer_decisao or None
+    recurso.decidido_por_id = usuario.id
+    recurso.data_decisao = date.today()
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{recurso.projeto_id}", status_code=status.HTTP_303_SEE_OTHER)

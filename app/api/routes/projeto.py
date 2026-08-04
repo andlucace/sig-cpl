@@ -1,27 +1,33 @@
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
-from app.core.rbac import PAPEIS_PROJETO_GESTAO, PAPEIS_PROJETO_LEITURA, verificar_papel
+from app.core.rbac import PAPEIS_EDITAL_GESTAO, PAPEIS_PROJETO_GESTAO, PAPEIS_PROJETO_LEITURA, verificar_papel
 from app.db.session import get_db
 from app.models.cpl import CPL
-from app.models.enums import StatusDemanda
+from app.models.enums import EstagioProjeto, StatusDemanda
 from app.models.projeto import (
     DemandaProjeto,
+    EditalFomento,
     EquipeProjeto,
     EtapaProjeto,
     IndicadorProjeto,
     MetaProjeto,
     OrigemRecursoProjeto,
     Projeto,
+    RecursoSubmissaoProjeto,
     RiscoProjeto,
 )
 from app.models.usuario import Usuario
 from app.schemas.projeto import (
     DemandaProjetoCreate,
     DemandaProjetoRead,
+    EditalFomentoCreate,
+    EditalFomentoRead,
+    EditalFomentoUpdate,
     EquipeProjetoCreate,
     EquipeProjetoRead,
     EquipeProjetoUpdate,
@@ -40,9 +46,13 @@ from app.schemas.projeto import (
     ProjetoCreate,
     ProjetoRead,
     ProjetoUpdate,
+    RecursoSubmissaoProjetoCreate,
+    RecursoSubmissaoProjetoDecisao,
+    RecursoSubmissaoProjetoRead,
     RiscoProjetoCreate,
     RiscoProjetoRead,
     RiscoProjetoUpdate,
+    SubmissaoProjetoCreate,
 )
 
 router = APIRouter(prefix="/projetos", tags=["Projetos"])
@@ -109,6 +119,20 @@ def _get_origem_recurso_or_404(db: Session, origem_id: uuid.UUID) -> OrigemRecur
     if origem is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Origem de recurso do projeto não encontrada.")
     return origem
+
+
+def _get_edital_fomento_or_404(db: Session, edital_id: uuid.UUID) -> EditalFomento:
+    edital = db.get(EditalFomento, edital_id)
+    if edital is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Edital de fomento não encontrado.")
+    return edital
+
+
+def _get_recurso_submissao_or_404(db: Session, recurso_id: uuid.UUID) -> RecursoSubmissaoProjeto:
+    recurso = db.get(RecursoSubmissaoProjeto, recurso_id)
+    if recurso is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Recurso de submissão não encontrado.")
+    return recurso
 
 
 # --- Demandas (RF-031) -------------------------------------------------------
@@ -190,6 +214,66 @@ def converter_demanda_em_projeto(
     db.commit()
     db.refresh(projeto)
     return projeto
+
+
+# --- Editais de fomento (RF-029) ---------------------------------------------
+# Registrado antes de "Projetos / portfólio" propositalmente: as rotas GET
+# aqui (`/editais-fomento`, `/editais-fomento/{edital_id}`) precisam vir
+# antes de `GET /{projeto_id}` na tabela de rotas, senão o FastAPI casa
+# "editais-fomento" com o path param `projeto_id` primeiro (erro 422 de
+# UUID inválido) — rotas são casadas na ordem em que são registradas.
+
+
+@router.post("/editais-fomento", response_model=EditalFomentoRead, status_code=status.HTTP_201_CREATED)
+def criar_edital_fomento(
+    dados: EditalFomentoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> EditalFomento:
+    """RF-029: edital de fomento — global, não escopado a uma CPL, mesmo
+    padrão de `Edital` de maturidade."""
+
+    verificar_papel(db, usuario_atual, PAPEIS_EDITAL_GESTAO, cpl_id=None)
+    edital = EditalFomento(**dados.model_dump())
+    db.add(edital)
+    db.commit()
+    db.refresh(edital)
+    return edital
+
+
+@router.get("/editais-fomento", response_model=list[EditalFomentoRead])
+def listar_editais_fomento(
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[EditalFomento]:
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_LEITURA, cpl_id=None)
+    return db.query(EditalFomento).order_by(EditalFomento.data_abertura.desc().nullslast()).all()
+
+
+@router.get("/editais-fomento/{edital_id}", response_model=EditalFomentoRead)
+def obter_edital_fomento(
+    edital_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> EditalFomento:
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_LEITURA, cpl_id=None)
+    return _get_edital_fomento_or_404(db, edital_id)
+
+
+@router.patch("/editais-fomento/{edital_id}", response_model=EditalFomentoRead)
+def atualizar_edital_fomento(
+    edital_id: uuid.UUID,
+    dados: EditalFomentoUpdate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> EditalFomento:
+    verificar_papel(db, usuario_atual, PAPEIS_EDITAL_GESTAO, cpl_id=None)
+    edital = _get_edital_fomento_or_404(db, edital_id)
+    for campo, valor in dados.model_dump(exclude_unset=True).items():
+        setattr(edital, campo, valor)
+    db.commit()
+    db.refresh(edital)
+    return edital
 
 
 # --- Projetos / portfólio (RF-032) ------------------------------------------
@@ -590,3 +674,90 @@ def atualizar_origem_recurso(
     db.commit()
     db.refresh(origem)
     return origem
+
+
+# --- Submissão a edital de fomento e recursos (RF-030) ----------------------
+
+
+@router.post("/{projeto_id}/submeter", response_model=ProjetoRead)
+def submeter_projeto(
+    projeto_id: uuid.UUID,
+    dados: SubmissaoProjetoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Projeto:
+    """RF-029/030: submete o projeto a um edital de fomento — vincula
+    `edital_fomento_id` e move `estagio` para `SUBMETIDO` na mesma ação,
+    já que submeter é o evento que causa essa transição de estágio."""
+
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    _get_edital_fomento_or_404(db, dados.edital_fomento_id)
+    projeto.edital_fomento_id = dados.edital_fomento_id
+    projeto.estagio = EstagioProjeto.SUBMETIDO
+    db.commit()
+    db.refresh(projeto)
+    return projeto
+
+
+@router.post(
+    "/{projeto_id}/recursos-submissao",
+    response_model=RecursoSubmissaoProjetoRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def criar_recurso_submissao(
+    projeto_id: uuid.UUID,
+    dados: RecursoSubmissaoProjetoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> RecursoSubmissaoProjeto:
+    """RF-030: recurso, contrarrazão ou diligência no processo de
+    submissão do projeto a um edital de fomento."""
+
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    recurso = RecursoSubmissaoProjeto(
+        projeto_id=projeto_id, solicitado_por_id=usuario_atual.id, **dados.model_dump()
+    )
+    db.add(recurso)
+    db.commit()
+    db.refresh(recurso)
+    return recurso
+
+
+@router.get("/{projeto_id}/recursos-submissao", response_model=list[RecursoSubmissaoProjetoRead])
+def listar_recursos_submissao(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[RecursoSubmissaoProjeto]:
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_LEITURA, cpl_id=projeto.cpl_id)
+    return (
+        db.query(RecursoSubmissaoProjeto)
+        .filter(RecursoSubmissaoProjeto.projeto_id == projeto_id)
+        .order_by(RecursoSubmissaoProjeto.created_at)
+        .all()
+    )
+
+
+@router.post("/recursos-submissao/{recurso_id}/decidir", response_model=RecursoSubmissaoProjetoRead)
+def decidir_recurso_submissao(
+    recurso_id: uuid.UUID,
+    dados: RecursoSubmissaoProjetoDecisao,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> RecursoSubmissaoProjeto:
+    """Decisão é de quem administra o edital de fomento — autoridade
+    diferente de quem gere o projeto que solicitou, mesmo raciocínio do
+    RF-027 (`RecursoAvaliacao`)."""
+
+    recurso = _get_recurso_submissao_or_404(db, recurso_id)
+    verificar_papel(db, usuario_atual, PAPEIS_EDITAL_GESTAO, cpl_id=None)
+    recurso.status = dados.status
+    recurso.parecer_decisao = dados.parecer_decisao
+    recurso.decidido_por_id = usuario_atual.id
+    recurso.data_decisao = date.today()
+    db.commit()
+    db.refresh(recurso)
+    return recurso

@@ -40,12 +40,14 @@ from app.models.planejamento import (
 )
 from app.models.projeto import (
     DemandaProjeto,
+    EditalFomento,
     EquipeProjeto,
     EtapaProjeto,
     IndicadorProjeto,
     MetaProjeto,
     OrigemRecursoProjeto,
     Projeto,
+    RecursoSubmissaoProjeto,
     RiscoProjeto,
 )
 from app.models.usuario import Usuario, UsuarioPapel
@@ -96,4 +98,6 @@ __all__ = [
     "RiscoProjeto",
     "EquipeProjeto",
     "OrigemRecursoProjeto",
+    "EditalFomento",
+    "RecursoSubmissaoProjeto",
 ]

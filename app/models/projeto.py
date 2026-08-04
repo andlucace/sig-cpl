@@ -14,9 +14,11 @@ from app.models.enums import (
     PrioridadeProjeto,
     ProbabilidadeRisco,
     StatusDemanda,
+    StatusRecurso,
     StatusRisco,
     StatusTarefa,
     TipoMeta,
+    TipoRecursoSubmissao,
 )
 
 
@@ -75,6 +77,13 @@ class Projeto(TimestampedBase):
     objetivo_estrategico_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("objetivos_estrategicos.id"), nullable=True
     )
+    # RF-029/030: edital de fomento ao qual o projeto foi submetido —
+    # settado via a ação explícita de submissão (que também move
+    # `estagio` para SUBMETIDO), não editável direto pelo PATCH genérico
+    # de portfólio.
+    edital_fomento_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("editais_fomento.id"), nullable=True
+    )
     # RF-033: informações básicas do plano de trabalho.
     introducao: Mapped[str | None] = mapped_column(Text)
     objeto: Mapped[str | None] = mapped_column(Text)
@@ -103,6 +112,8 @@ class Projeto(TimestampedBase):
     riscos: Mapped[list["RiscoProjeto"]] = relationship(back_populates="projeto")
     equipe: Mapped[list["EquipeProjeto"]] = relationship(back_populates="projeto")
     origens_recurso: Mapped[list["OrigemRecursoProjeto"]] = relationship(back_populates="projeto")
+    edital_fomento: Mapped["EditalFomento | None"] = relationship(back_populates="projetos_submetidos")
+    recursos_submissao: Mapped[list["RecursoSubmissaoProjeto"]] = relationship(back_populates="projeto")
 
 
 class EtapaProjeto(TimestampedBase):
@@ -232,3 +243,65 @@ class OrigemRecursoProjeto(TimestampedBase):
     descricao: Mapped[str | None] = mapped_column(Text)
 
     projeto: Mapped["Projeto"] = relationship(back_populates="origens_recurso")
+
+
+class EditalFomento(TimestampedBase):
+    """RF-029: edital de fomento do Programa SP Produz — cronograma,
+    requisitos, documentos exigidos, responsável e marco de submissão.
+    Distinto do `Edital` de maturidade (`app/models/maturidade.py`), que
+    é sobre critérios/notas de avaliação de maturidade, não sobre
+    financiamento de projetos — mesmo nome em português, domínios
+    diferentes (decisão já tomada com o usuário antes deste módulo
+    começar a ser construído, ver `DemandaProjeto`/RF-031). Global, não
+    escopado a uma CPL — um edital de fomento vale para todas as CPLs
+    elegíveis, mesmo padrão do `Edital` de maturidade.
+
+    `requisitos` e `documentos_exigidos` são texto livre — o documento
+    de requisitos não define um checklist estruturado, e criar um agora
+    exigiria mudar `Documento.cpl_id` (hoje `NOT NULL`) pra aceitar
+    documentos não ligados a uma CPL, mudança maior do que esta fatia
+    pede."""
+
+    __tablename__ = "editais_fomento"
+
+    titulo: Mapped[str] = mapped_column(String(255), nullable=False)
+    descricao: Mapped[str | None] = mapped_column(Text)
+    requisitos: Mapped[str | None] = mapped_column(Text)
+    documentos_exigidos: Mapped[str | None] = mapped_column(Text)
+    data_abertura: Mapped[date | None] = mapped_column(Date)
+    data_encerramento: Mapped[date | None] = mapped_column(Date)
+    responsavel_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pessoas.id"), nullable=True
+    )
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    responsavel: Mapped["Pessoa | None"] = relationship()
+    projetos_submetidos: Mapped[list["Projeto"]] = relationship(back_populates="edital_fomento")
+
+
+class RecursoSubmissaoProjeto(TimestampedBase):
+    """RF-030: recurso, contrarrazão ou diligência no processo de
+    submissão de um projeto a um edital de fomento — protocolo e prazo
+    de controle, parecer e decisão. Reaproveita `StatusRecurso` (mesmo
+    enum de `RecursoAvaliacao`, RF-027) pro status da decisão — mesmo
+    conceito de ciclo de vida (pendente/deferido/indeferido). Diferente
+    de `RecursoAvaliacao`, aqui não há limite de "um por submissão" — o
+    processo real vai e volta (diligência → resposta → nova diligência
+    ou decisão), então é uma lista, não uma relação 1:1."""
+
+    __tablename__ = "recursos_submissao_projeto"
+
+    projeto_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projetos.id"), nullable=False)
+    tipo: Mapped[TipoRecursoSubmissao] = mapped_column(nullable=False)
+    protocolo: Mapped[str | None] = mapped_column(String(100))
+    prazo: Mapped[date | None] = mapped_column(Date)
+    descricao: Mapped[str] = mapped_column(Text, nullable=False)
+    solicitado_por_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("usuarios.id"))
+    status: Mapped[StatusRecurso] = mapped_column(default=StatusRecurso.PENDENTE, nullable=False)
+    parecer_decisao: Mapped[str | None] = mapped_column(Text)
+    decidido_por_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True
+    )
+    data_decisao: Mapped[date | None] = mapped_column(Date)
+
+    projeto: Mapped["Projeto"] = relationship(back_populates="recursos_submissao")

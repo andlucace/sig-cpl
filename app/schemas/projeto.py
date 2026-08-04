@@ -11,9 +11,11 @@ from app.models.enums import (
     PrioridadeProjeto,
     ProbabilidadeRisco,
     StatusDemanda,
+    StatusRecurso,
     StatusRisco,
     StatusTarefa,
     TipoMeta,
+    TipoRecursoSubmissao,
 )
 
 # Demanda de projeto (RF-031)
@@ -101,6 +103,7 @@ class ProjetoRead(BaseModel):
     impactos_socioambientais: str | None
     continuidade: str | None
     escalabilidade: str | None
+    edital_fomento_id: uuid.UUID | None
     created_at: datetime
 
 
@@ -293,4 +296,79 @@ class OrigemRecursoProjetoRead(BaseModel):
     valor: Decimal
     contrapartida: bool
     descricao: str | None
+    created_at: datetime
+
+
+# Edital de fomento (RF-029)
+
+
+class EditalFomentoCreate(BaseModel):
+    titulo: str
+    descricao: str | None = None
+    requisitos: str | None = None
+    documentos_exigidos: str | None = None
+    data_abertura: date | None = None
+    data_encerramento: date | None = None
+    responsavel_id: uuid.UUID | None = None
+
+
+class EditalFomentoUpdate(BaseModel):
+    titulo: str | None = None
+    descricao: str | None = None
+    requisitos: str | None = None
+    documentos_exigidos: str | None = None
+    data_abertura: date | None = None
+    data_encerramento: date | None = None
+    responsavel_id: uuid.UUID | None = None
+    ativo: bool | None = None
+
+
+class EditalFomentoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    titulo: str
+    descricao: str | None
+    requisitos: str | None
+    documentos_exigidos: str | None
+    data_abertura: date | None
+    data_encerramento: date | None
+    responsavel_id: uuid.UUID | None
+    ativo: bool
+    created_at: datetime
+
+
+# Submissão a edital de fomento e recursos (RF-030)
+
+
+class SubmissaoProjetoCreate(BaseModel):
+    edital_fomento_id: uuid.UUID
+
+
+class RecursoSubmissaoProjetoCreate(BaseModel):
+    tipo: TipoRecursoSubmissao
+    protocolo: str | None = None
+    prazo: date | None = None
+    descricao: str
+
+
+class RecursoSubmissaoProjetoDecisao(BaseModel):
+    status: StatusRecurso
+    parecer_decisao: str | None = None
+
+
+class RecursoSubmissaoProjetoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    projeto_id: uuid.UUID
+    tipo: TipoRecursoSubmissao
+    protocolo: str | None
+    prazo: date | None
+    descricao: str
+    solicitado_por_id: uuid.UUID
+    status: StatusRecurso
+    parecer_decisao: str | None
+    decidido_por_id: uuid.UUID | None
+    data_decisao: date | None
     created_at: datetime
