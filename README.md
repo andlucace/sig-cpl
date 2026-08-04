@@ -525,13 +525,16 @@ que já está no banco:
   deliberado pra não introduzir um context processor Jinja2 (mecanismo
   não usado em nenhum outro lugar do projeto) só para isso.
 
-O bloco **Projetos** (RF-031/032) é a **fundação** do módulo de Projetos e
-Fomento — demanda/oportunidade → conversão em projeto → portfólio. Plano de
-trabalho detalhado (RF-033 a RF-035), financeiro (RF-036 a RF-038), execução
-(RF-039/040) e prestação de contas (RF-041) **não** fazem parte desta fatia
-— decisão explícita do usuário diante do tamanho do módulo completo (13
-requisitos em 6 sub-áreas: editais, demandas/portfólio, plano de trabalho,
-financeiro, execução, prestação de contas).
+O bloco **Projetos** (RF-031 a RF-033) é a **fundação** do módulo de
+Projetos e Fomento — demanda/oportunidade → conversão em projeto →
+portfólio → informações básicas do plano de trabalho. Etapas/cronograma/
+metas/indicadores/riscos (RF-034), equipe/aquisições/recursos (RF-035),
+financeiro (RF-036 a RF-038), execução (RF-039/040) e prestação de contas
+(RF-041) **não** fazem parte desta fatia — o módulo completo tem 13
+requisitos em 6 sub-áreas (editais, demandas/portfólio, plano de trabalho,
+financeiro, execução, prestação de contas), grande demais pra uma entrega
+só; "sequência natural" escolhida sessão a sessão, sempre a camada mais
+fundamental que ainda falta.
 - **`DemandaProjeto`** (RF-031) — título, descrição, origem
   (`OrigemDemanda`: empresa/comissão/instituição/edital) com uma
   referência solta pra origem (`origem_id`/`origem_detalhe`, mesmo padrão
@@ -554,6 +557,15 @@ financeiro, execução, prestação de contas).
   projeto) ou criar direto no portfólio (`POST /api/projetos/cpls/{id}/projetos`,
   atalho pra quando já se sabe que é projeto, sem precisar do passo
   intermediário da demanda).
+- **Plano de trabalho — informações básicas** (RF-033) — `introducao`,
+  `objeto`, `objetivos`, `justificativa` e `impactos`, campos direto em
+  `Projeto` (é 1:1, não haveria ganho em separar numa entidade
+  `PlanoDeTrabalho` à parte). Form próprio na tela de detalhe do
+  projeto (`POST /painel/projetos/{id}/plano-de-trabalho`), separado do
+  form de portfólio — edição rápida de estágio/prioridade não devia
+  ficar misturada com o preenchimento mais longo do plano de trabalho.
+  Na API é o mesmo `PATCH /api/projetos/{id}` do portfólio (o schema
+  `ProjetoUpdate` já inclui os campos novos).
 - **Edital de fomento é um conceito diferente do `Edital` de
   maturidade** — o `Edital` que já existe (`app/models/maturidade.py`)
   guarda critérios/pesos/notas de corte pra avaliação de maturidade; o
@@ -577,9 +589,12 @@ financeiro, execução, prestação de contas).
 - Testado de ponta a ponta via Playwright: registrar demanda → ver
   detalhe → converter em projeto → editar estágio no portfólio →
   confirmar que a demanda convertida some da lista de "pendentes" mas o
-  projeto aparece na tabela de portfólio. RBAC testado confirmando que
-  Conselho/Comitê lê mas não escreve (403 ao tentar criar demanda sem o
-  papel `GESTOR_PROJETO`).
+  projeto aparece na tabela de portfólio; depois, preencher o plano de
+  trabalho e confirmar que os campos persistem e recarregam corretos,
+  sem interferir nos campos de portfólio salvos por outro form na mesma
+  página. RBAC testado confirmando que Conselho/Comitê lê mas não
+  escreve (403 ao tentar criar demanda ou editar plano de trabalho sem
+  o papel `GESTOR_PROJETO`).
 
 ## Como rodar localmente
 
@@ -950,15 +965,17 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    falta "de projeto"**, do mesmo RF-048 — precisa do plano de
    trabalho/financeiro do módulo de Projetos (item 7), ainda não
    construído.
-7. ~~Iniciar módulo de Projetos~~ — **fundação feita**: `DemandaProjeto`
-   (RF-031) e `Projeto`/portfólio (RF-032) — ver seção "Projetos" acima.
-   Falta o resto do módulo (13 requisitos em 6 sub-áreas, RF-029/030 e
-   RF-033 a RF-041): edital de fomento com cronograma/recursos, plano de
-   trabalho detalhado (objeto, etapas, cronograma, equipe), orçamento e
-   cotações, desembolsos/conciliação, execução física/financeira,
-   riscos e prestação de contas. "Simular cenários" (RF-026) e
-   "habilitação jurídica" (RF-027) também ficaram de fora do que foi
-   construído em Maturidade (ver seção do módulo acima).
+7. ~~Iniciar módulo de Projetos~~ — **fundação + plano de trabalho
+   básico feitos**: `DemandaProjeto` (RF-031), `Projeto`/portfólio
+   (RF-032) e informações básicas do plano de trabalho (RF-033) — ver
+   seção "Projetos" acima. Falta o resto do módulo (RF-029/030 e RF-034
+   a RF-041): edital de fomento com cronograma/recursos, etapas/
+   cronograma/metas/indicadores/riscos do plano de trabalho (RF-034),
+   equipe/aquisições/origem de recursos (RF-035), orçamento e cotações,
+   desembolsos/conciliação, execução física/financeira e prestação de
+   contas. "Simular cenários" (RF-026) e "habilitação jurídica"
+   (RF-027) também ficaram de fora do que foi construído em Maturidade
+   (ver seção do módulo acima).
 8. ~~Notificações automáticas (RF-049)~~ — **feito**: reunião próxima,
    tarefa/meta com prazo vencendo, documento perdendo validade e
    recadastramento de CPL vencendo — ver seção "Notificações" acima.

@@ -74,4 +74,41 @@
             </form>
         </div>
     </div>
+
+    <div class="card mt-4">
+        <div class="card-header bg-transparent fw-semibold">
+            <i class="bi bi-file-text me-2"></i>Plano de trabalho — informações básicas
+        </div>
+        <div class="card-body">
+            <p class="text-body-secondary small">
+                Etapas, cronograma, metas, indicadores, equipe e orçamento detalhados ainda
+                não fazem parte deste módulo (RF-034/035).
+            </p>
+            <form method="post" action="/painel/projetos/{{ projeto.id }}/plano-de-trabalho">
+                <div class="mb-3">
+                    <label class="form-label">Introdução</label>
+                    <textarea class="form-control" name="introducao" rows="2">{{ projeto.introducao or '' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Objeto</label>
+                    <textarea class="form-control" name="objeto" rows="2">{{ projeto.objeto or '' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Objetivos</label>
+                    <textarea class="form-control" name="objetivos" rows="2">{{ projeto.objetivos or '' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Justificativa</label>
+                    <textarea class="form-control" name="justificativa" rows="2">{{ projeto.justificativa or '' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Impactos esperados</label>
+                    <textarea class="form-control" name="impactos" rows="2">{{ projeto.impactos or '' }}</textarea>
+                </div>
+                <button type="submit" class="btn btn-outline-primary">
+                    <i class="bi bi-check-lg me-1"></i>Salvar plano de trabalho
+                </button>
+            </form>
+        </div>
+    </div>
 {% endblock %}

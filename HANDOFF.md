@@ -51,7 +51,7 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   `http://127.0.0.1:8010`** — confira com `netstat -ano | grep 8010` antes
   de subir outro, e mate o processo antigo antes de reiniciar (o servidor
   não usa `--reload`, então mudanças de código exigem restart manual).
-- **Migrações Alembic aplicadas:** 12 revisões, todas no banco atual:
+- **Migrações Alembic aplicadas:** 13 revisões, todas no banco atual:
   1. `18541dca0a36` — modelos base (CPL, Entidade, Pessoa, Usuário)
   2. `0ba4d1a10f9d` — módulo Governança
   3. `5dd913b79202` — módulo Planejamento Estratégico
@@ -74,6 +74,8 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   12. `5dfb7c6bf49e` — módulo de Projetos: tabelas `demandas_projeto` e
       `projetos` (RF-031/032 — só a fundação, demanda → projeto →
       portfólio)
+  13. `55267d31bbca` — plano de trabalho básico do projeto (RF-033:
+      `introducao`, `objeto`, `objetivos`, `justificativa`, `impactos`)
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos)
 
@@ -605,6 +607,40 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     RF-038), execução física/financeira/riscos (RF-039/040) e
     prestação de contas (RF-041). "Relatório de projeto" (RF-048) segue
     bloqueado até esses existirem.
+21. **Plano de trabalho básico do projeto** (RF-033) — usuário disse
+    "vamos seguir com a sequência natural do projeto". Diferente do
+    item 20 (onde parei pra perguntar antes de começar o módulo
+    inteiro), aqui decidi sozinho e só expliquei depois — mesmo padrão
+    usado pra escolher entre anual/comissão/impacto no RF-048: é uma
+    decisão de sequenciamento *dentro* de um módulo já aprovado, não
+    "qual módulo grande começar", que é o tipo de decisão que
+    realmente exige perguntar antes. Escolhi RF-033 (informações
+    básicas: introdução, objeto, objetivos, justificativa, impactos)
+    como a camada mais fundamental que ainda faltava dentro de "plano
+    de trabalho" — RF-034 (etapas/cronograma/metas/indicadores/riscos)
+    e RF-035 (equipe/aquisições/recursos) naturalmente se apoiam em ter
+    primeiro o texto básico do plano, não o contrário.
+    **Decisão de modelagem**: os 5 campos novos foram pra dentro da
+    própria tabela `projetos`, não uma entidade `PlanoDeTrabalho`
+    separada — é uma relação 1:1 real (todo projeto tem no máximo um
+    plano de trabalho), então uma tabela à parte só adicionaria um
+    join sem nenhum ganho (nenhuma dessas informações é
+    multi-valorada ou tem ciclo de vida próprio, diferente de
+    etapas/atividades do RF-034, que aí sim vão precisar de tabelas
+    próprias quando forem construídas).
+    **UI**: form separado do form de portfólio na mesma página
+    (`/painel/projetos/{id}/plano-de-trabalho`, distinto de
+    `/painel/projetos/{id}`) — evita que salvar uma mudança rápida de
+    estágio dispare validação/re-render de 5 campos de texto longo, e
+    vice-versa; os dois forms na mesma página não interferem um no
+    outro (testado explicitamente: preencher plano de trabalho não
+    reseta os campos de portfólio salvos por outro form, e vice-versa).
+    Na API é o mesmo `PATCH /api/projetos/{id}` de sempre — só o schema
+    `ProjetoUpdate` ganhou os campos novos, sem rota nova.
+    Nenhuma migração de dado exigiu tratamento especial — todos os 5
+    campos são `Text` nullable, sem `server_default` necessário (só
+    populado quando editado, mesmo padrão dos vários outros campos
+    opcionais adicionados a tabelas já existentes nesta sessão).
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -819,15 +855,17 @@ ordem recomendada para o que vem depois:
    `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf` — caminho que
    `app/services/geracao_documentos.py` já procurava desde antes, então
    nenhum código mudou.
-5. ~~Iniciar módulo de Projetos~~ — **fundação feita** (item 20 da seção
-   "Ordem em que este projeto foi construído"): `DemandaProjeto`
-   (RF-031) e `Projeto`/portfólio (RF-032), em `/painel/projetos`.
-   Segue pendente, sem relação com este trabalho: edital de fomento com
-   cronograma/recursos (RF-029/030), plano de trabalho detalhado
-   (RF-033 a RF-035), orçamento/cotações/desembolsos (RF-036 a RF-038),
-   execução física/financeira/riscos (RF-039/040) e prestação de contas
-   (RF-041) — "relatório de projeto" (RF-048) e o restante da Fase 2
-   dependem desses.
+5. ~~Iniciar módulo de Projetos~~ — **fundação + plano de trabalho
+   básico feitos** (itens 20 e 21 da seção "Ordem em que este projeto
+   foi construído"): `DemandaProjeto` (RF-031), `Projeto`/portfólio
+   (RF-032) e informações básicas do plano de trabalho (RF-033), em
+   `/painel/projetos`. Segue pendente, sem relação com este trabalho:
+   edital de fomento com cronograma/recursos (RF-029/030), etapas/
+   cronograma/metas/indicadores/riscos (RF-034), equipe/aquisições/
+   recursos (RF-035), orçamento/cotações/desembolsos (RF-036 a
+   RF-038), execução física/financeira (RF-039/040) e prestação de
+   contas (RF-041) — "relatório de projeto" (RF-048) e o restante da
+   Fase 2 dependem desses.
 6. ~~Deploy na VPS Hostinger~~ — **feito nesta sessão** (numa sessão
    anterior a esta), ver seção "Deploy em produção" abaixo para todos os
    detalhes (como foi feito, segredos, como reimplantar).

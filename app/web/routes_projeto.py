@@ -290,3 +290,33 @@ def atualizar_projeto(
     projeto.objetivo_estrategico_id = _opt_uuid(objetivo_estrategico_id)
     db.commit()
     return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{projeto_id}/plano-de-trabalho")
+def atualizar_plano_de_trabalho(
+    projeto_id: uuid.UUID,
+    introducao: str | None = Form(None),
+    objeto: str | None = Form(None),
+    objetivos: str | None = Form(None),
+    justificativa: str | None = Form(None),
+    impactos: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-033: informações básicas do plano de trabalho — separado do
+    form de portfólio pra não misturar edição rápida de estágio/
+    prioridade com o preenchimento mais longo do plano de trabalho."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    projeto = db.get(Projeto, projeto_id)
+    if projeto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    projeto.introducao = introducao or None
+    projeto.objeto = objeto or None
+    projeto.objetivos = objetivos or None
+    projeto.justificativa = justificativa or None
+    projeto.impactos = impactos or None
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)

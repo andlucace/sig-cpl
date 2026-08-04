@@ -41,6 +41,11 @@ class ProjetoCreate(BaseModel):
     prioridade: PrioridadeProjeto = PrioridadeProjeto.MEDIA
     responsavel_id: uuid.UUID | None = None
     objetivo_estrategico_id: uuid.UUID | None = None
+    introducao: str | None = None
+    objeto: str | None = None
+    objetivos: str | None = None
+    justificativa: str | None = None
+    impactos: str | None = None
 
 
 class ProjetoUpdate(BaseModel):
@@ -51,6 +56,11 @@ class ProjetoUpdate(BaseModel):
     prioridade: PrioridadeProjeto | None = None
     responsavel_id: uuid.UUID | None = None
     objetivo_estrategico_id: uuid.UUID | None = None
+    introducao: str | None = None
+    objeto: str | None = None
+    objetivos: str | None = None
+    justificativa: str | None = None
+    impactos: str | None = None
 
 
 class ProjetoRead(BaseModel):
@@ -66,4 +76,9 @@ class ProjetoRead(BaseModel):
     prioridade: PrioridadeProjeto
     responsavel_id: uuid.UUID | None
     objetivo_estrategico_id: uuid.UUID | None
+    introducao: str | None
+    objeto: str | None
+    objetivos: str | None
+    justificativa: str | None
+    impactos: str | None
     created_at: datetime
