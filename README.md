@@ -525,18 +525,20 @@ que já está no banco:
   deliberado pra não introduzir um context processor Jinja2 (mecanismo
   não usado em nenhum outro lugar do projeto) só para isso.
 
-O bloco **Projetos** (RF-029 a RF-038) cobre o módulo de Projetos e
-Fomento **completo até o RF-038**: editais de fomento com submissão,
+O bloco **Projetos** (RF-029 a RF-040) cobre o módulo de Projetos e
+Fomento **completo até o RF-040**: editais de fomento com submissão,
 recursos/contrarrazões/diligências (RF-029/030), demanda/oportunidade →
 conversão em projeto → portfólio → plano de trabalho completo,
 incluindo o RF-034 inteiro (etapas/cronograma, metas, indicadores,
 riscos, impactos socioambientais), o RF-035 inteiro (continuidade,
 escalabilidade, equipe, origem dos recursos, aquisições e cronograma
-físico-financeiro) e o financeiro completo (RF-036 a RF-038: itens de
+físico-financeiro), o financeiro completo (RF-036 a RF-038: itens de
 despesa, cotações com validação de mínimo de fornecedores, desembolsos
-com saldo calculado e conciliação). Execução (RF-039/040) e prestação
-de contas (RF-041) **não** fazem parte desta fatia — o módulo completo
-tem 13 requisitos em 6 sub-áreas (editais, demandas/portfólio, plano de
+com saldo calculado e conciliação) e a execução completa (RF-039/040:
+marcos, entregas com aprovação, alterações de plano com decisão,
+riscos com evidência de mitigação). Prestação de contas (RF-041)
+**não** faz parte desta fatia — o módulo completo tem 13 requisitos em
+6 sub-áreas (editais, demandas/portfólio, plano de
 trabalho, financeiro, execução, prestação de contas), grande demais pra
 uma entrega só;
 "sequência natural" escolhida sessão a sessão, sempre a camada mais
@@ -695,6 +697,45 @@ fundamental que ainda falta.
     `responsavel_id`/`etapa_id` em outros forms. A API mantém o path
     param (`/aquisicoes/{id}/cotacoes`), que é o design REST correto
     pra um cliente HTTP.
+- **Execução do projeto (RF-039/040)** — "acompanhar execução física e
+  financeira, entregas, marcos, alterações de plano e aprovações"
+  (RF-039) e "gerenciar riscos com probabilidade, impacto, resposta,
+  responsável e evidência de mitigação" (RF-040). A parte física/
+  financeira do RF-039 já estava coberta desde o RF-035/038
+  (`EtapaProjeto` status/valores, `DesembolsoProjeto`); faltavam três
+  conceitos novos.
+  - **RF-040 foi a extensão mais barata do módulo inteiro** — 4 dos 5
+    campos pedidos (probabilidade, impacto, resposta, responsável) já
+    existiam em `RiscoProjeto` desde o RF-034; só faltou
+    `evidencia_documento_id` (Documentos/RF-042), exatamente como a
+    docstring original do modelo já previa.
+  - **Marcos** — não é entidade nova: `marco: Boolean` a mais em
+    `EtapaProjeto`, mesmo padrão de não duplicar já usado pro
+    cronograma físico-financeiro e pra `AquisicaoProjeto` (RF-036).
+  - **Entregas** — `EntregaProjeto`: título, etapa opcional, datas
+    prevista/entrega, documento opcional e aprovação
+    (`aprovado`/`aprovado_por_id`/`data_aprovacao`), mesmo padrão de
+    aprovação que `Documento` já usa (não um workflow genérico à
+    parte). `data_entrega` preenchida ou não já sinaliza se foi
+    entregue; `aprovado` é uma decisão independente sobre o que foi
+    entregue. `POST/GET /api/projetos/{id}/entregas`,
+    `POST /api/projetos/entregas/{id}/aprovar`.
+  - **Alterações de plano** — `AlteracaoPlanoProjeto`: `tipo` (texto
+    livre), descrição/justificativa, solicitação e decisão,
+    reaproveitando `StatusRecurso` e o mesmo formato de campos já
+    usado em `RecursoSubmissaoProjeto` (RF-030). **Autoridade
+    diferente**: decisão é `PAPEIS_GESTAO` (governança interna do
+    projeto — entidade gestora/administrador), não
+    `PAPEIS_EDITAL_GESTAO` como em `RecursoSubmissaoProjeto` (que
+    contesta uma decisão do órgão externo do edital) — aprovação de
+    entrega usa a mesma autoridade (`PAPEIS_GESTAO`) pelo mesmo
+    raciocínio. `POST/GET /api/projetos/{id}/alteracoes-plano`,
+    `POST /api/projetos/alteracoes-plano/{id}/decidir`.
+  - UI: os forms de "decidir alteração" e "aprovar entrega" só
+    aparecem pra quem tem `PAPEIS_GESTAO` de verdade (helper
+    `_pode_gestao`), não pra `e_administrador` — são grupos diferentes
+    (`PAPEIS_GESTAO` inclui entidade gestora, não só administrador da
+    plataforma).
 - **Edital de fomento (RF-029/030)** — distinto do `Edital` de
   maturidade (`app/models/maturidade.py`, que guarda critérios/pesos/
   notas de corte pra avaliação de maturidade); mesmo nome em português,
@@ -1125,18 +1166,19 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    falta "de projeto"**, do mesmo RF-048 — precisa do plano de
    trabalho/financeiro do módulo de Projetos (item 7), ainda não
    construído.
-7. ~~Iniciar módulo de Projetos~~ — **RF-029 a RF-038, todos completos**:
+7. ~~Iniciar módulo de Projetos~~ — **RF-029 a RF-040, todos completos**:
    `DemandaProjeto` (RF-031), `Projeto`/portfólio (RF-032), plano de
    trabalho completo (RF-033/034/035), RF-034 completo (`EtapaProjeto`,
    `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`), RF-035 completo
    (`EquipeProjeto`, `OrigemRecursoProjeto`, `AquisicaoProjeto`,
    cronograma físico-financeiro), RF-029/030 completos
-   (`EditalFomento`, submissão, `RecursoSubmissaoProjeto`) e
+   (`EditalFomento`, submissão, `RecursoSubmissaoProjeto`),
    RF-036/037/038 completos (`AquisicaoProjeto` estendido,
-   `CotacaoAquisicao`, `DesembolsoProjeto`) — ver seção "Projetos"
-   acima. Falta o resto do módulo (RF-039 a RF-041): execução
-   física/financeira (deve reaproveitar `RiscoProjeto`/`StatusRisco`,
-   não duplicar) e prestação de contas.
+   `CotacaoAquisicao`, `DesembolsoProjeto`) e RF-039/040 completos
+   (`marco`, `EntregaProjeto`, `AlteracaoPlanoProjeto`,
+   `evidencia_documento_id` em `RiscoProjeto`) — ver seção "Projetos"
+   acima. Falta só RF-041 (relatório de execução, relatório financeiro
+   e dossiê de evidências) pra fechar o módulo inteiro.
    "Simular cenários" (RF-026) e "habilitação jurídica" (RF-027) também
    ficaram de fora do que foi construído em Maturidade (ver seção do
    módulo acima).

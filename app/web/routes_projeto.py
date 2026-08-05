@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user_optional
 from app.core.rbac import (
     PAPEIS_EDITAL_GESTAO,
+    PAPEIS_GESTAO,
     PAPEIS_PROJETO_GESTAO,
     PAPEIS_PROJETO_LEITURA,
     cpl_ids_visiveis,
+    papeis_do_usuario,
     verificar_papel,
 )
 from app.db.session import get_db
@@ -32,11 +34,13 @@ from app.models.enums import (
 from app.models.pessoa import Pessoa
 from app.models.planejamento import ObjetivoEstrategico, PlanejamentoEstrategico
 from app.models.projeto import (
+    AlteracaoPlanoProjeto,
     AquisicaoProjeto,
     CotacaoAquisicao,
     DemandaProjeto,
     DesembolsoProjeto,
     EditalFomento,
+    EntregaProjeto,
     EquipeProjeto,
     EtapaProjeto,
     IndicadorProjeto,
@@ -71,6 +75,20 @@ def _opt_uuid(valor: str | None) -> uuid.UUID | None:
 
 def _e_administrador(db: Session, usuario: Usuario) -> bool:
     return cpl_ids_visiveis(db, usuario) is None
+
+
+def _pode_gestao(db: Session, usuario: Usuario, cpl_id: uuid.UUID) -> bool:
+    """RF-039: quem pode decidir alteração de plano / aprovar entrega —
+    `PAPEIS_GESTAO` é mais amplo que `_e_administrador` (inclui
+    ENTIDADE_GESTORA/DIRIGENTE_ENTIDADE_GESTORA, não só
+    ADMINISTRADOR_PLATAFORMA), então não dá pra reaproveitar
+    `_e_administrador` aqui sem esconder o form de quem tem permissão
+    de verdade."""
+
+    return any(
+        v.papel in PAPEIS_GESTAO and (v.cpl_id is None or v.cpl_id == cpl_id)
+        for v in papeis_do_usuario(db, usuario)
+    )
 
 
 def _pessoas_e_objetivos(db: Session, cpl_id: uuid.UUID) -> tuple[list[Pessoa], list[ObjetivoEstrategico]]:
@@ -466,6 +484,18 @@ def detalhe_projeto(
         origem.id: origem.valor - sum((d.valor for d in desembolsos if d.origem_recurso_id == origem.id), Decimal("0"))
         for origem in origens_recurso
     }
+    entregas = (
+        db.query(EntregaProjeto)
+        .filter(EntregaProjeto.projeto_id == projeto_id)
+        .order_by(EntregaProjeto.created_at)
+        .all()
+    )
+    alteracoes_plano = (
+        db.query(AlteracaoPlanoProjeto)
+        .filter(AlteracaoPlanoProjeto.projeto_id == projeto_id)
+        .order_by(AlteracaoPlanoProjeto.created_at)
+        .all()
+    )
     return templates.TemplateResponse(
         request,
         "restrito/projetos/projeto_detail.html",
@@ -496,7 +526,10 @@ def detalhe_projeto(
             "cotacoes": cotacoes,
             "desembolsos": desembolsos,
             "saldos_por_origem": saldos_por_origem,
+            "entregas": entregas,
+            "alteracoes_plano": alteracoes_plano,
             "e_administrador": _e_administrador(db, usuario),
+            "pode_gestao": _pode_gestao(db, usuario, projeto.cpl_id),
             "usuario": usuario,
             "pagina_ativa": "projetos",
         },
@@ -578,12 +611,14 @@ def criar_etapa(
     data_inicio: str | None = Form(None),
     data_fim: str | None = Form(None),
     valor_previsto: str | None = Form(None),
+    marco: bool = Form(False),
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user_optional),
 ):
-    """RF-034/035: etapa (ou atividade — mesmo nível) do plano de
-    trabalho, com cronograma previsto e valor orçado (cronograma
-    físico-financeiro). Entra no fim da lista."""
+    """RF-034/035/039: etapa (ou atividade — mesmo nível) do plano de
+    trabalho, com cronograma previsto, valor orçado (cronograma
+    físico-financeiro) e sinalização de marco (ponto de controle
+    relevante). Entra no fim da lista."""
 
     if redir := _exigir_login(usuario):
         return redir
@@ -600,6 +635,7 @@ def criar_etapa(
         data_inicio=date.fromisoformat(data_inicio) if data_inicio else None,
         data_fim=date.fromisoformat(data_fim) if data_fim else None,
         valor_previsto=Decimal(valor_previsto) if valor_previsto else None,
+        marco=marco,
     )
     db.add(etapa)
     db.commit()
@@ -1116,4 +1152,135 @@ def conciliar_desembolso(
     db.commit()
     return RedirectResponse(
         f"/painel/projetos/{desembolso.projeto_id}", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post("/{projeto_id}/entregas")
+def criar_entrega(
+    projeto_id: uuid.UUID,
+    titulo: str = Form(...),
+    descricao: str | None = Form(None),
+    etapa_id: str | None = Form(None),
+    data_prevista: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-039: entrega (produto/resultado tangível) do projeto."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    projeto = db.get(Projeto, projeto_id)
+    if projeto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    entrega = EntregaProjeto(
+        projeto_id=projeto_id,
+        titulo=titulo,
+        descricao=descricao or None,
+        etapa_id=_opt_uuid(etapa_id),
+        data_prevista=date.fromisoformat(data_prevista) if data_prevista else None,
+    )
+    db.add(entrega)
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/entregas/{entrega_id}/entregar")
+def registrar_entrega(
+    entrega_id: uuid.UUID,
+    data_entrega: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    entrega = db.get(EntregaProjeto, entrega_id)
+    if entrega is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entrega de projeto não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=entrega.projeto.cpl_id)
+    entrega.data_entrega = date.fromisoformat(data_entrega) if data_entrega else date.today()
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{entrega.projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/entregas/{entrega_id}/aprovar")
+def aprovar_entrega(
+    entrega_id: uuid.UUID,
+    aprovado_por_id: str = Form(...),
+    aprovado: bool = Form(True),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """Aprovação é `PAPEIS_GESTAO` — mais restrita que quem registra a
+    entrega no dia a dia (`PAPEIS_PROJETO_GESTAO`)."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    entrega = db.get(EntregaProjeto, entrega_id)
+    if entrega is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entrega de projeto não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=entrega.projeto.cpl_id)
+    entrega.aprovado = aprovado
+    entrega.aprovado_por_id = uuid.UUID(aprovado_por_id)
+    entrega.data_aprovacao = date.today()
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{entrega.projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{projeto_id}/alteracoes-plano")
+def criar_alteracao_plano(
+    projeto_id: uuid.UUID,
+    tipo: str = Form(...),
+    descricao: str = Form(...),
+    data_solicitacao: str = Form(...),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-039: solicitação de alteração de plano (prazo, escopo,
+    orçamento etc.) — precisa de aprovação pra valer."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    projeto = db.get(Projeto, projeto_id)
+    if projeto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    alteracao = AlteracaoPlanoProjeto(
+        projeto_id=projeto_id,
+        tipo=tipo,
+        descricao=descricao,
+        data_solicitacao=date.fromisoformat(data_solicitacao),
+        solicitado_por_id=usuario.id,
+    )
+    db.add(alteracao)
+    db.commit()
+    return RedirectResponse(f"/painel/projetos/{projeto_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/alteracoes-plano/{alteracao_id}/decidir")
+def decidir_alteracao_plano(
+    alteracao_id: uuid.UUID,
+    status_alteracao: StatusRecurso = Form(..., alias="status"),
+    parecer_decisao: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """Decisão é `PAPEIS_GESTAO` (autoridade administrativa interna),
+    não `PAPEIS_EDITAL_GESTAO` — alterar o próprio plano é governança
+    interna do projeto, diferente de contestar uma decisão do órgão
+    externo que administra o edital."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    alteracao = db.get(AlteracaoPlanoProjeto, alteracao_id)
+    if alteracao is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Alteração de plano não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=alteracao.projeto.cpl_id)
+    alteracao.status = status_alteracao
+    alteracao.parecer_decisao = parecer_decisao or None
+    alteracao.decidido_por_id = usuario.id
+    alteracao.data_decisao = date.today()
+    db.commit()
+    return RedirectResponse(
+        f"/painel/projetos/{alteracao.projeto_id}", status_code=status.HTTP_303_SEE_OTHER
     )

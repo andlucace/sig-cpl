@@ -5,16 +5,24 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
-from app.core.rbac import PAPEIS_EDITAL_GESTAO, PAPEIS_PROJETO_GESTAO, PAPEIS_PROJETO_LEITURA, verificar_papel
+from app.core.rbac import (
+    PAPEIS_EDITAL_GESTAO,
+    PAPEIS_GESTAO,
+    PAPEIS_PROJETO_GESTAO,
+    PAPEIS_PROJETO_LEITURA,
+    verificar_papel,
+)
 from app.db.session import get_db
 from app.models.cpl import CPL
 from app.models.enums import EstagioProjeto, StatusDemanda
 from app.models.projeto import (
+    AlteracaoPlanoProjeto,
     AquisicaoProjeto,
     CotacaoAquisicao,
     DemandaProjeto,
     DesembolsoProjeto,
     EditalFomento,
+    EntregaProjeto,
     EquipeProjeto,
     EtapaProjeto,
     IndicadorProjeto,
@@ -26,6 +34,9 @@ from app.models.projeto import (
 )
 from app.models.usuario import Usuario
 from app.schemas.projeto import (
+    AlteracaoPlanoProjetoCreate,
+    AlteracaoPlanoProjetoDecisao,
+    AlteracaoPlanoProjetoRead,
     AquisicaoProjetoCreate,
     AquisicaoProjetoRead,
     AquisicaoProjetoUpdate,
@@ -39,6 +50,10 @@ from app.schemas.projeto import (
     EditalFomentoCreate,
     EditalFomentoRead,
     EditalFomentoUpdate,
+    EntregaProjetoAprovacao,
+    EntregaProjetoCreate,
+    EntregaProjetoRead,
+    EntregaProjetoUpdate,
     EquipeProjetoCreate,
     EquipeProjetoRead,
     EquipeProjetoUpdate,
@@ -166,6 +181,20 @@ def _get_desembolso_or_404(db: Session, desembolso_id: uuid.UUID) -> DesembolsoP
     if desembolso is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Desembolso de projeto não encontrado.")
     return desembolso
+
+
+def _get_entrega_or_404(db: Session, entrega_id: uuid.UUID) -> EntregaProjeto:
+    entrega = db.get(EntregaProjeto, entrega_id)
+    if entrega is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entrega de projeto não encontrada.")
+    return entrega
+
+
+def _get_alteracao_plano_or_404(db: Session, alteracao_id: uuid.UUID) -> AlteracaoPlanoProjeto:
+    alteracao = db.get(AlteracaoPlanoProjeto, alteracao_id)
+    if alteracao is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Alteração de plano não encontrada.")
+    return alteracao
 
 
 # RF-037: quantidade mínima de cotações pra dispensar justificativa de
@@ -992,3 +1021,149 @@ def atualizar_desembolso(
     db.commit()
     db.refresh(desembolso)
     return desembolso
+
+
+# --- Entregas do projeto (RF-039) --------------------------------------------
+
+
+@router.post(
+    "/{projeto_id}/entregas", response_model=EntregaProjetoRead, status_code=status.HTTP_201_CREATED
+)
+def criar_entrega(
+    projeto_id: uuid.UUID,
+    dados: EntregaProjetoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> EntregaProjeto:
+    """RF-039: entrega (produto/resultado tangível) do projeto,
+    opcionalmente ligada à etapa que a produziu."""
+
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    entrega = EntregaProjeto(projeto_id=projeto_id, **dados.model_dump())
+    db.add(entrega)
+    db.commit()
+    db.refresh(entrega)
+    return entrega
+
+
+@router.get("/{projeto_id}/entregas", response_model=list[EntregaProjetoRead])
+def listar_entregas(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[EntregaProjeto]:
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_LEITURA, cpl_id=projeto.cpl_id)
+    return (
+        db.query(EntregaProjeto)
+        .filter(EntregaProjeto.projeto_id == projeto_id)
+        .order_by(EntregaProjeto.created_at)
+        .all()
+    )
+
+
+@router.patch("/entregas/{entrega_id}", response_model=EntregaProjetoRead)
+def atualizar_entrega(
+    entrega_id: uuid.UUID,
+    dados: EntregaProjetoUpdate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> EntregaProjeto:
+    entrega = _get_entrega_or_404(db, entrega_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=entrega.projeto.cpl_id)
+    for campo, valor in dados.model_dump(exclude_unset=True).items():
+        setattr(entrega, campo, valor)
+    db.commit()
+    db.refresh(entrega)
+    return entrega
+
+
+@router.post("/entregas/{entrega_id}/aprovar", response_model=EntregaProjetoRead)
+def aprovar_entrega(
+    entrega_id: uuid.UUID,
+    dados: EntregaProjetoAprovacao,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> EntregaProjeto:
+    """Aprovação é `PAPEIS_GESTAO` (autoridade administrativa interna),
+    mesmo padrão de decisão de `AlteracaoPlanoProjeto` — mais restrita
+    que quem registra a entrega no dia a dia (`PAPEIS_PROJETO_GESTAO`)."""
+
+    entrega = _get_entrega_or_404(db, entrega_id)
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=entrega.projeto.cpl_id)
+    entrega.aprovado = dados.aprovado
+    entrega.aprovado_por_id = dados.aprovado_por_id
+    entrega.data_aprovacao = date.today()
+    db.commit()
+    db.refresh(entrega)
+    return entrega
+
+
+# --- Alterações de plano do projeto (RF-039) ---------------------------------
+
+
+@router.post(
+    "/{projeto_id}/alteracoes-plano",
+    response_model=AlteracaoPlanoProjetoRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def criar_alteracao_plano(
+    projeto_id: uuid.UUID,
+    dados: AlteracaoPlanoProjetoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> AlteracaoPlanoProjeto:
+    """RF-039: solicitação de alteração de plano (prazo, escopo,
+    orçamento etc.) — precisa de aprovação (`PAPEIS_GESTAO`) pra valer."""
+
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_GESTAO, cpl_id=projeto.cpl_id)
+    alteracao = AlteracaoPlanoProjeto(
+        projeto_id=projeto_id, solicitado_por_id=usuario_atual.id, **dados.model_dump()
+    )
+    db.add(alteracao)
+    db.commit()
+    db.refresh(alteracao)
+    return alteracao
+
+
+@router.get("/{projeto_id}/alteracoes-plano", response_model=list[AlteracaoPlanoProjetoRead])
+def listar_alteracoes_plano(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[AlteracaoPlanoProjeto]:
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_PROJETO_LEITURA, cpl_id=projeto.cpl_id)
+    return (
+        db.query(AlteracaoPlanoProjeto)
+        .filter(AlteracaoPlanoProjeto.projeto_id == projeto_id)
+        .order_by(AlteracaoPlanoProjeto.created_at)
+        .all()
+    )
+
+
+@router.post("/alteracoes-plano/{alteracao_id}/decidir", response_model=AlteracaoPlanoProjetoRead)
+def decidir_alteracao_plano(
+    alteracao_id: uuid.UUID,
+    dados: AlteracaoPlanoProjetoDecisao,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> AlteracaoPlanoProjeto:
+    """Decisão é `PAPEIS_GESTAO` (autoridade administrativa interna —
+    entidade gestora/administrador), não `PAPEIS_EDITAL_GESTAO`:
+    diferente de um recurso de submissão (que contesta uma decisão do
+    órgão externo que administra o edital), alterar o próprio plano é
+    governança interna do projeto — mesma autoridade que decide nível
+    de maturidade (RN-016)."""
+
+    alteracao = _get_alteracao_plano_or_404(db, alteracao_id)
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=alteracao.projeto.cpl_id)
+    alteracao.status = dados.status
+    alteracao.parecer_decisao = dados.parecer_decisao
+    alteracao.decidido_por_id = usuario_atual.id
+    alteracao.data_decisao = date.today()
+    db.commit()
+    db.refresh(alteracao)
+    return alteracao

@@ -106,6 +106,14 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
       `default=` do Python/ORM) — sem isso o `ALTER TABLE` falharia
       contra as linhas existentes. Corrigido adicionando
       `server_default=sa.text('false')` na coluna
+  20. `69235b36be9e` — tabelas `alteracoes_plano_projeto`,
+      `entregas_projeto` + colunas `etapas_projeto.marco`/
+      `riscos_projeto.evidencia_documento_id` (RF-039/040) — dois
+      ajustes manuais de uma vez: enum reaproveitado
+      (`alteracoes_plano_projeto.status` reaproveita `statusrecurso`) e
+      `Boolean NOT NULL` sem `server_default` de novo
+      (`etapas_projeto.marco`, mesmo gotcha exato da migração
+      `bcae54b40941`) — ambos pegos antes de aplicar
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos)
 
@@ -933,6 +941,70 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     API JSON) e via Playwright (`projeto_rf036_038_shot.js`, incluindo o
     form de cotação sem JS de fato funcionando pelo navegador), sem
     erros de console nem 500 reais no log.
+28. **RF-039/040: execução do projeto** (entregas, marcos, alterações
+    de plano, aprovações; riscos com evidência de mitigação) — usuário
+    disse "prosseguir para as RFs 039/040", os dois nomeados juntos,
+    então construí os dois nesta fatia (mesmo padrão dos itens 25/27).
+    **RF-040 foi a extensão mais barata de toda a sessão**: "gerenciar
+    riscos com probabilidade, impacto, resposta, responsável e
+    evidência de mitigação" já tinha 4 dos 5 campos prontos desde o
+    RF-034 — só faltava `evidencia_documento_id` em `RiscoProjeto`,
+    exatamente como a docstring original do modelo já previa (ligar ao
+    repositório de Documentos, mesmo padrão de
+    `AvaliacaoCriterio.evidencia_documento_id`).
+    **RF-039** ("acompanhar execução física e financeira, entregas,
+    marcos, alterações de plano e aprovações") — a parte física/
+    financeira já estava coberta desde o RF-035/038 (`EtapaProjeto`
+    status/valores, `DesembolsoProjeto`); o que faltava eram três
+    conceitos novos:
+    - **Marcos**: de novo não é entidade nova — `marco: Boolean` a mais
+      em `EtapaProjeto` (mesmo padrão de não duplicar já usado pro
+      cronograma físico-financeiro e pra `AquisicaoProjeto`/RF-036).
+    - **Entregas**: `EntregaProjeto` — título, etapa opcional, datas
+      prevista/entrega, documento opcional e aprovação
+      (`aprovado`/`aprovado_por_id`/`data_aprovacao`), **mesmo padrão
+      de aprovação que `Documento` já usa** (não um workflow de
+      aprovação genérico à parte). `data_entrega` preenchida ou não já
+      sinaliza se foi entregue; `aprovado` é uma decisão independente
+      sobre o que foi entregue.
+    - **Alterações de plano**: `AlteracaoPlanoProjeto` — `tipo` (texto
+      livre), descrição/justificativa, solicitação e decisão,
+      reaproveitando `StatusRecurso` e o mesmo formato de campos
+      (`parecer_decisao`/`decidido_por_id`/`data_decisao`) já usado em
+      `RecursoSubmissaoProjeto` (RF-030). **Diferença de autoridade
+      importante**: decisão aqui é `PAPEIS_GESTAO` (entidade gestora/
+      administrador — governança interna do projeto), não
+      `PAPEIS_EDITAL_GESTAO` como em `RecursoSubmissaoProjeto` (que
+      contesta uma decisão do órgão externo do edital) — são
+      autoridades diferentes por natureza, mesmo os dois reaproveitando
+      `StatusRecurso`. Aprovação de entrega usa a mesma autoridade
+      (`PAPEIS_GESTAO`) pelo mesmo raciocínio.
+    **Bug de UI pego antes de testar**: a primeira versão do form de
+    "decidir alteração" e "aprovar entrega" estava condicionada a
+    `e_administrador` (só `ADMINISTRADOR_PLATAFORMA`), copiado por
+    hábito do padrão de `RecursoSubmissaoProjeto`. Mas a autorização de
+    verdade no backend é `PAPEIS_GESTAO`, que também inclui
+    `ENTIDADE_GESTORA`/`DIRIGENTE_ENTIDADE_GESTORA` — um usuário desses
+    papéis teria permissão real (backend aceitaria) mas nunca veria o
+    form (`e_administrador` é `False` pra eles). Corrigido criando
+    `_pode_gestao(db, usuario, cpl_id)` em `routes_projeto.py` (checa
+    `PAPEIS_GESTAO` de verdade, não só admin) e usando esse flag em vez
+    de `e_administrador` nos dois forms. **Lição**: ao decidir qual
+    flag de contexto usar pra esconder/mostrar um form no template,
+    conferir contra qual grupo de papéis a rota realmente valida no
+    backend — não reaproveitar `e_administrador`/outro flag existente
+    só porque "parece" a mesma coisa.
+    Migração `69235b36be9e`, com os dois gotchas de sempre juntos numa
+    mesma migração pela primeira vez (enum reaproveitado + `Boolean NOT
+    NULL` sem `server_default`) — ambos pegos antes de aplicar.
+    Testado via curl (etapa marco, entrega → registrar → aprovar,
+    alteração de plano → decidir, `evidencia_documento_id` em risco via
+    API — web e API JSON) e via Playwright
+    (`projeto_rf039_040_shot.js`), sem erros de console nem 500 reais
+    no log. Com esta fatia, **RF-029 a RF-040 do módulo de Projetos
+    estão completos** — só falta RF-041 (relatório de
+    execução/financeiro/dossiê de evidências) pra fechar o módulo
+    inteiro.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -1191,6 +1263,28 @@ só porque é um módulo novo).
     de links (`href`) ou de IDs já conhecidos no momento em que a
     página renderiza (ex.: `/etapas/{etapa.id}/status`, onde `etapa.id`
     já existe fixo em cada linha da tabela).
+16. **Flag de contexto que esconde/mostra um form no template precisa
+    corresponder exatamente ao grupo de papéis que o backend valida —
+    não ao flag "parecido" mais próximo já disponível.** Ao construir
+    "decidir alteração de plano" e "aprovar entrega" (RF-039, item 28),
+    copiei por hábito o padrão de `RecursoSubmissaoProjeto`
+    (`e_administrador`, que reflete `PAPEIS_EDITAL_GESTAO` — só
+    `ADMINISTRADOR_PLATAFORMA`). Mas a autorização de verdade dessas
+    duas ações no backend é `PAPEIS_GESTAO`, um grupo mais amplo que
+    também inclui `ENTIDADE_GESTORA`/`DIRIGENTE_ENTIDADE_GESTORA`. Um
+    usuário com um desses papéis teria a ação aceita pelo backend mas
+    **nunca veria o form** (`e_administrador` calcula `False` pra ele) —
+    bug de UI que não aparece em teste de API (só testando como aquele
+    papel específico pela UI). Pego na revisão do template antes de
+    testar, não durante — corrigido criando `_pode_gestao(db, usuario,
+    cpl_id)` em `routes_projeto.py` (checa `PAPEIS_GESTAO` de verdade
+    via `papeis_do_usuario`, não só admin) e usando esse flag nos dois
+    forms em vez de `e_administrador`. **Regra**: antes de reaproveitar
+    um flag de contexto existente (`e_administrador` ou qualquer outro)
+    pra esconder/mostrar um form, conferir contra qual `PAPEIS_*`
+    exatamente a rota de submissão desse form chama `verificar_papel` —
+    se não for o mesmo conjunto, o flag existente vai mentir pra algum
+    papel autorizado.
 
 ## O que falta (priorizado)
 
@@ -1216,8 +1310,8 @@ ordem recomendada para o que vem depois:
    `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf` — caminho que
    `app/services/geracao_documentos.py` já procurava desde antes, então
    nenhum código mudou.
-5. ~~Iniciar módulo de Projetos~~ — **RF-029 a RF-038, todos completos**
-   (itens 20 a 27 da seção "Ordem em que este projeto foi construído"):
+5. ~~Iniciar módulo de Projetos~~ — **RF-029 a RF-040, todos completos**
+   (itens 20 a 28 da seção "Ordem em que este projeto foi construído"):
    `DemandaProjeto` (RF-031), `Projeto`/portfólio (RF-032), plano de
    trabalho completo — informações básicas, impactos socioambientais,
    continuidade e escalabilidade (RF-033/034/035), RF-034 completo
@@ -1225,15 +1319,15 @@ ordem recomendada para o que vem depois:
    RF-035 completo (`EquipeProjeto`, `OrigemRecursoProjeto`,
    `AquisicaoProjeto`, cronograma físico-financeiro em `EtapaProjeto`),
    RF-029/030 completos (`EditalFomento`, submissão de projeto,
-   `RecursoSubmissaoProjeto` com recursos/contrarrazões/diligências) e
-   RF-036/037/038 completos (`AquisicaoProjeto` estendido com
-   etapa/origem/contrapartida, `CotacaoAquisicao` com validação de
-   mínimo de fornecedores, `DesembolsoProjeto` com saldo calculado e
-   conciliação), em `/painel/projetos`. Segue pendente, sem relação com
-   este trabalho: execução física/financeira (RF-039/040 — deve
-   reaproveitar `RiscoProjeto`/`StatusRisco`, não duplicar) e prestação
-   de contas (RF-041) — "relatório de projeto" (RF-048) depende desses
-   dois últimos.
+   `RecursoSubmissaoProjeto`), RF-036/037/038 completos
+   (`AquisicaoProjeto` estendido, `CotacaoAquisicao`, `DesembolsoProjeto`)
+   e RF-039/040 completos (`marco` em `EtapaProjeto`, `EntregaProjeto`
+   com aprovação, `AlteracaoPlanoProjeto` com decisão via
+   `PAPEIS_GESTAO`, `evidencia_documento_id` em `RiscoProjeto`), em
+   `/painel/projetos`. Segue pendente, sem relação com este trabalho:
+   prestação de contas (RF-041 — relatório de execução, relatório
+   financeiro e dossiê de evidências) — "relatório de projeto" (RF-048)
+   depende dele.
 6. ~~Deploy na VPS Hostinger~~ — **feito nesta sessão** (numa sessão
    anterior a esta), ver seção "Deploy em produção" abaixo para todos os
    detalhes (como foi feito, segredos, como reimplantar).

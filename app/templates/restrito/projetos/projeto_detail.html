@@ -143,6 +143,7 @@
                             {% for etapa in etapas %}
                                 <tr>
                                     <td>
+                                        {% if etapa.marco %}<i class="bi bi-flag-fill text-warning me-1" title="Marco"></i>{% endif %}
                                         {{ etapa.titulo }}
                                         {% if etapa.descricao %}<div class="text-body-secondary small">{{ etapa.descricao }}</div>{% endif %}
                                     </td>
@@ -215,6 +216,10 @@
                         <div class="mb-3 mt-2">
                             <label class="form-label">Valor previsto (R$)</label>
                             <input type="number" step="0.01" min="0" class="form-control" name="valor_previsto">
+                        </div>
+                        <div class="form-check mb-3">
+                            <input type="checkbox" class="form-check-input" name="marco" value="true" id="etapa-marco-check">
+                            <label class="form-check-label" for="etapa-marco-check">É um marco</label>
                         </div>
                         <button type="submit" class="btn btn-primary w-100 mt-1">
                             <i class="bi bi-plus-lg me-1"></i>Adicionar etapa
@@ -1140,6 +1145,194 @@
                         </div>
                         <button type="submit" class="btn btn-primary w-100 mt-1">
                             <i class="bi bi-plus-lg me-1"></i>Registrar desembolso
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-box-seam me-2"></i>Entregas
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Entrega</th>
+                                <th>Prevista</th>
+                                <th>Entregue</th>
+                                <th>Aprovação</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for entrega in entregas %}
+                                <tr>
+                                    <td>
+                                        {{ entrega.titulo }}
+                                        {% if entrega.descricao %}<div class="text-body-secondary small">{{ entrega.descricao }}</div>{% endif %}
+                                        {% if entrega.etapa %}<div class="text-body-secondary small">Etapa: {{ entrega.etapa.titulo }}</div>{% endif %}
+                                    </td>
+                                    <td class="small">{{ entrega.data_prevista.strftime('%d/%m/%Y') if entrega.data_prevista else "—" }}</td>
+                                    <td class="small">{{ entrega.data_entrega.strftime('%d/%m/%Y') if entrega.data_entrega else "—" }}</td>
+                                    <td>
+                                        {% if entrega.data_entrega %}
+                                            <span class="badge {% if entrega.aprovado %}text-bg-success{% else %}text-bg-secondary{% endif %}">
+                                                {{ "aprovada" if entrega.aprovado else "pendente" }}
+                                            </span>
+                                        {% else %}
+                                            <span class="text-body-secondary small">não entregue</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if not entrega.data_entrega %}
+                                            <form method="post" action="/painel/projetos/entregas/{{ entrega.id }}/entregar" class="d-flex gap-1">
+                                                <input type="date" class="form-control form-control-sm" name="data_entrega" style="width: auto;">
+                                                <button type="submit" class="btn btn-outline-secondary btn-sm" title="Registrar entrega">
+                                                    <i class="bi bi-check-lg"></i>
+                                                </button>
+                                            </form>
+                                        {% elif not entrega.aprovado and pode_gestao %}
+                                            <form method="post" action="/painel/projetos/entregas/{{ entrega.id }}/aprovar" class="d-flex gap-1">
+                                                <select class="form-select form-select-sm" name="aprovado_por_id" style="width: auto;">
+                                                    {% for pessoa in pessoas %}
+                                                        <option value="{{ pessoa.id }}">{{ pessoa.nome }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                                <button type="submit" class="btn btn-outline-secondary btn-sm" title="Aprovar entrega">
+                                                    <i class="bi bi-check-lg"></i>
+                                                </button>
+                                            </form>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="5" class="text-body-secondary">Nenhuma entrega cadastrada ainda.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Nova entrega
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/painel/projetos/{{ projeto.id }}/entregas">
+                        <div class="mb-3">
+                            <label class="form-label">Título</label>
+                            <input type="text" class="form-control" name="titulo" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="2"></textarea>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label">Etapa</label>
+                                <select class="form-select" name="etapa_id">
+                                    <option value="">Nenhuma</option>
+                                    {% for etapa in etapas %}
+                                        <option value="{{ etapa.id }}">{{ etapa.titulo }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Data prevista</label>
+                                <input type="date" class="form-control" name="data_prevista">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mt-3">
+                            <i class="bi bi-plus-lg me-1"></i>Adicionar entrega
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-arrow-left-right me-2"></i>Alterações de plano
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Tipo</th>
+                                <th>Solicitação</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for alteracao in alteracoes_plano %}
+                                <tr>
+                                    <td class="small">{{ alteracao.tipo }}</td>
+                                    <td>
+                                        {{ alteracao.descricao }}
+                                        <div class="text-body-secondary small">{{ alteracao.data_solicitacao.strftime('%d/%m/%Y') }}</div>
+                                        {% if alteracao.parecer_decisao %}<div class="text-body-secondary small">Parecer: {{ alteracao.parecer_decisao }}</div>{% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if alteracao.status.value == 'deferido' %}text-bg-success{% elif alteracao.status.value == 'indeferido' %}text-bg-danger{% else %}text-bg-warning{% endif %}">
+                                            {{ alteracao.status.value }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if pode_gestao and alteracao.status.value == 'pendente' %}
+                                            <form method="post" action="/painel/projetos/alteracoes-plano/{{ alteracao.id }}/decidir" class="d-flex gap-1">
+                                                <select class="form-select form-select-sm" name="status" style="width: auto;">
+                                                    {% for s in status_recurso_opcoes %}
+                                                        {% if s.value != 'pendente' %}
+                                                            <option value="{{ s.value }}">{{ s.value }}</option>
+                                                        {% endif %}
+                                                    {% endfor %}
+                                                </select>
+                                                <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                    <i class="bi bi-check-lg"></i>
+                                                </button>
+                                            </form>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="4" class="text-body-secondary">Nenhuma alteração de plano solicitada ainda.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Nova alteração de plano
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/painel/projetos/{{ projeto.id }}/alteracoes-plano">
+                        <div class="mb-3">
+                            <label class="form-label">Tipo</label>
+                            <input type="text" class="form-control" name="tipo" placeholder="Prazo, escopo, orçamento..." required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Descrição / justificativa</label>
+                            <textarea class="form-control" name="descricao" rows="2" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Data da solicitação</label>
+                            <input type="date" class="form-control" name="data_solicitacao" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mt-1">
+                            <i class="bi bi-plus-lg me-1"></i>Solicitar alteração
                         </button>
                     </form>
                 </div>

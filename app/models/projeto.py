@@ -53,8 +53,8 @@ class Projeto(TimestampedBase):
     socioambientais do RF-034 e continuidade/escalabilidade do RF-035
     moram nos mesmos campos da tabela, sem uma entidade
     `PlanoDeTrabalho` separada — é 1:1 com o projeto, não haveria ganho
-    em separar. Execução física/financeira (RF-039/040) fica para a
-    próxima fatia deste módulo.
+    em separar. Prestação de contas (RF-041) fica para a próxima fatia
+    deste módulo.
 
     `eixo_sp_produz` é texto livre, não um enum fechado — o documento de
     requisitos não define a lista de eixos do programa."""
@@ -115,10 +115,12 @@ class Projeto(TimestampedBase):
     recursos_submissao: Mapped[list["RecursoSubmissaoProjeto"]] = relationship(back_populates="projeto")
     aquisicoes: Mapped[list["AquisicaoProjeto"]] = relationship(back_populates="projeto")
     desembolsos: Mapped[list["DesembolsoProjeto"]] = relationship(back_populates="projeto")
+    entregas: Mapped[list["EntregaProjeto"]] = relationship(back_populates="projeto")
+    alteracoes_plano: Mapped[list["AlteracaoPlanoProjeto"]] = relationship(back_populates="projeto")
 
 
 class EtapaProjeto(TimestampedBase):
-    """RF-034/035: etapa (com atividades) do plano de trabalho —
+    """RF-034/035/039: etapa (com atividades) do plano de trabalho —
     cronograma previsto (`data_inicio`/`data_fim`) e status de execução
     formam o lado "físico" do cronograma físico-financeiro do RF-035;
     `valor_previsto`/`valor_executado` completam o lado "financeiro" na
@@ -127,7 +129,11 @@ class EtapaProjeto(TimestampedBase):
     não um conceito à parte. "Etapas" e "atividades" do requisito são
     tratadas como o mesmo nível — uma linha por etapa/atividade, sem
     hierarquia de dois níveis — mesma simplificação já usada em
-    `TarefaGovernanca` (sem sub-tarefas)."""
+    `TarefaGovernanca` (sem sub-tarefas).
+
+    `marco` (RF-039, "marcos") também não é entidade nova — um marco é
+    só uma etapa sinalizada como ponto de controle relevante, mesma
+    lógica de não duplicar já usada pro cronograma físico-financeiro."""
 
     __tablename__ = "etapas_projeto"
 
@@ -142,6 +148,8 @@ class EtapaProjeto(TimestampedBase):
     # esta etapa) e executado (efetivamente gasto até agora).
     valor_previsto: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     valor_executado: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    # RF-039: marco — ponto de controle relevante no cronograma.
+    marco: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     projeto: Mapped["Projeto"] = relationship(back_populates="etapas")
 
@@ -191,13 +199,16 @@ class IndicadorProjeto(TimestampedBase):
 
 
 class RiscoProjeto(TimestampedBase):
-    """RF-034/040: risco identificado do projeto — probabilidade, impacto
-    e resposta planejada (mitigação). Campos já cobrem o que o RF-040
-    (Execução, ainda não construído) pede a mais detalhe; quando esse
-    módulo for construído, a extensão natural é reaproveitar este
-    modelo (ex.: ligar evidência de mitigação ao repositório de
-    Documentos, como `AvaliacaoCriterio.evidencia_documento_id` já faz),
-    não duplicar."""
+    """RF-034/040: risco identificado do projeto — probabilidade, impacto,
+    resposta planejada (mitigação), responsável e evidência de
+    mitigação. RF-040 ("gerenciar riscos com probabilidade, impacto,
+    resposta, responsável e evidência de mitigação") não trouxe nenhum
+    conceito novo além de `evidencia_documento_id` — os outros quatro
+    campos já existiam desde o RF-034, exatamente como planejado na
+    docstring original deste modelo. `evidencia_documento_id` reaproveita
+    o repositório de Documentos (RF-042), mesmo padrão de
+    `AvaliacaoCriterio.evidencia_documento_id` e
+    `CotacaoAquisicao.documento_id`."""
 
     __tablename__ = "riscos_projeto"
 
@@ -210,9 +221,13 @@ class RiscoProjeto(TimestampedBase):
         UUID(as_uuid=True), ForeignKey("pessoas.id"), nullable=True
     )
     status: Mapped[StatusRisco] = mapped_column(default=StatusRisco.ATIVO, nullable=False)
+    evidencia_documento_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documentos.id"), nullable=True
+    )
 
     projeto: Mapped["Projeto"] = relationship(back_populates="riscos")
     responsavel: Mapped["Pessoa | None"] = relationship()
+    evidencia_documento: Mapped["Documento | None"] = relationship()
 
 
 class EquipeProjeto(TimestampedBase):
@@ -429,3 +444,72 @@ class DesembolsoProjeto(TimestampedBase):
     aquisicao: Mapped["AquisicaoProjeto | None"] = relationship()
     origem_recurso: Mapped["OrigemRecursoProjeto | None"] = relationship()
     documento_comprovante: Mapped["Documento | None"] = relationship()
+
+
+class EntregaProjeto(TimestampedBase):
+    """RF-039: entrega (produto/resultado tangível) do projeto —
+    opcionalmente ligada à etapa que a produziu, com data prevista/real
+    e aprovação. Mesmo padrão de aprovação já usado em `Documento`
+    (`aprovado`/`aprovado_por_id`/`data_aprovacao`), não um workflow de
+    aprovação genérico à parte — `data_entrega` (preenchida ou não) já
+    sinaliza se foi entregue; `aprovado` é a decisão sobre o que foi
+    entregue, independente disso."""
+
+    __tablename__ = "entregas_projeto"
+
+    projeto_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projetos.id"), nullable=False)
+    etapa_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("etapas_projeto.id"), nullable=True
+    )
+    titulo: Mapped[str] = mapped_column(String(255), nullable=False)
+    descricao: Mapped[str | None] = mapped_column(Text)
+    data_prevista: Mapped[date | None] = mapped_column(Date)
+    data_entrega: Mapped[date | None] = mapped_column(Date)
+    documento_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documentos.id"), nullable=True
+    )
+    aprovado: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    aprovado_por_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pessoas.id"), nullable=True
+    )
+    data_aprovacao: Mapped[date | None] = mapped_column(Date)
+
+    projeto: Mapped["Projeto"] = relationship(back_populates="entregas")
+    etapa: Mapped["EtapaProjeto | None"] = relationship()
+    documento: Mapped["Documento | None"] = relationship()
+    aprovado_por: Mapped["Pessoa | None"] = relationship()
+
+
+class AlteracaoPlanoProjeto(TimestampedBase):
+    """RF-039: alteração de plano do projeto (mudança de prazo, escopo,
+    orçamento etc.) com fluxo de aprovação — reaproveita `StatusRecurso`
+    (pendente/deferido/indeferido) e o mesmo formato de decisão
+    (`parecer_decisao`/`decidido_por_id`/`data_decisao`) já usado em
+    `RecursoSubmissaoProjeto` (RF-030) e `RecursoAvaliacao` (RF-027),
+    mesmo conceito de "pedido → decisão". Decisão aqui é
+    `PAPEIS_GESTAO` (autoridade administrativa interna — entidade
+    gestora/administrador), não `PAPEIS_EDITAL_GESTAO`: diferente do
+    recurso de submissão (que contesta uma decisão do órgão externo que
+    administra o edital), alterar o próprio plano é uma decisão de
+    governança interna do projeto, mesma autoridade que decide nível de
+    maturidade (RN-016) ou aprova órgãos/CPL.
+
+    `tipo` é texto livre (prazo, escopo, orçamento, equipe etc.) — o
+    documento de requisitos não define uma lista fechada de tipos de
+    alteração, mesmo raciocínio de `eixo_sp_produz`."""
+
+    __tablename__ = "alteracoes_plano_projeto"
+
+    projeto_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projetos.id"), nullable=False)
+    tipo: Mapped[str] = mapped_column(String(150), nullable=False)
+    descricao: Mapped[str] = mapped_column(Text, nullable=False)
+    data_solicitacao: Mapped[date] = mapped_column(Date, nullable=False)
+    solicitado_por_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("usuarios.id"))
+    status: Mapped[StatusRecurso] = mapped_column(default=StatusRecurso.PENDENTE, nullable=False)
+    parecer_decisao: Mapped[str | None] = mapped_column(Text)
+    decidido_por_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True
+    )
+    data_decisao: Mapped[date | None] = mapped_column(Date)
+
+    projeto: Mapped["Projeto"] = relationship(back_populates="alteracoes_plano")

@@ -39,11 +39,13 @@ from app.models.planejamento import (
     PlanejamentoEstrategico,
 )
 from app.models.projeto import (
+    AlteracaoPlanoProjeto,
     AquisicaoProjeto,
     CotacaoAquisicao,
     DemandaProjeto,
     DesembolsoProjeto,
     EditalFomento,
+    EntregaProjeto,
     EquipeProjeto,
     EtapaProjeto,
     IndicadorProjeto,
@@ -106,4 +108,6 @@ __all__ = [
     "AquisicaoProjeto",
     "CotacaoAquisicao",
     "DesembolsoProjeto",
+    "EntregaProjeto",
+    "AlteracaoPlanoProjeto",
 ]

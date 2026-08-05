@@ -116,6 +116,7 @@ class EtapaProjetoCreate(BaseModel):
     data_inicio: date | None = None
     data_fim: date | None = None
     valor_previsto: Decimal | None = None
+    marco: bool = False
 
 
 class EtapaProjetoUpdate(BaseModel):
@@ -127,6 +128,7 @@ class EtapaProjetoUpdate(BaseModel):
     status: StatusTarefa | None = None
     valor_previsto: Decimal | None = None
     valor_executado: Decimal | None = None
+    marco: bool | None = None
 
 
 class EtapaProjetoRead(BaseModel):
@@ -142,6 +144,7 @@ class EtapaProjetoRead(BaseModel):
     status: StatusTarefa
     valor_previsto: Decimal | None
     valor_executado: Decimal | None
+    marco: bool
     created_at: datetime
 
 
@@ -221,6 +224,7 @@ class RiscoProjetoCreate(BaseModel):
     impacto: ImpactoRisco
     resposta: str | None = None
     responsavel_id: uuid.UUID | None = None
+    evidencia_documento_id: uuid.UUID | None = None
 
 
 class RiscoProjetoUpdate(BaseModel):
@@ -230,6 +234,7 @@ class RiscoProjetoUpdate(BaseModel):
     resposta: str | None = None
     responsavel_id: uuid.UUID | None = None
     status: StatusRisco | None = None
+    evidencia_documento_id: uuid.UUID | None = None
 
 
 class RiscoProjetoRead(BaseModel):
@@ -243,6 +248,7 @@ class RiscoProjetoRead(BaseModel):
     resposta: str | None
     responsavel_id: uuid.UUID | None
     status: StatusRisco
+    evidencia_documento_id: uuid.UUID | None
     created_at: datetime
 
 
@@ -490,4 +496,76 @@ class DesembolsoProjetoRead(BaseModel):
     bem_adquirido: str | None
     documento_comprovante_id: uuid.UUID | None
     conciliado: bool
+    created_at: datetime
+
+
+# Entregas do projeto (RF-039)
+
+
+class EntregaProjetoCreate(BaseModel):
+    titulo: str
+    descricao: str | None = None
+    etapa_id: uuid.UUID | None = None
+    data_prevista: date | None = None
+    documento_id: uuid.UUID | None = None
+
+
+class EntregaProjetoUpdate(BaseModel):
+    titulo: str | None = None
+    descricao: str | None = None
+    etapa_id: uuid.UUID | None = None
+    data_prevista: date | None = None
+    data_entrega: date | None = None
+    documento_id: uuid.UUID | None = None
+
+
+class EntregaProjetoAprovacao(BaseModel):
+    aprovado: bool
+    aprovado_por_id: uuid.UUID
+
+
+class EntregaProjetoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    projeto_id: uuid.UUID
+    etapa_id: uuid.UUID | None
+    titulo: str
+    descricao: str | None
+    data_prevista: date | None
+    data_entrega: date | None
+    documento_id: uuid.UUID | None
+    aprovado: bool
+    aprovado_por_id: uuid.UUID | None
+    data_aprovacao: date | None
+    created_at: datetime
+
+
+# Alterações de plano do projeto (RF-039)
+
+
+class AlteracaoPlanoProjetoCreate(BaseModel):
+    tipo: str
+    descricao: str
+    data_solicitacao: date
+
+
+class AlteracaoPlanoProjetoDecisao(BaseModel):
+    status: StatusRecurso
+    parecer_decisao: str | None = None
+
+
+class AlteracaoPlanoProjetoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    projeto_id: uuid.UUID
+    tipo: str
+    descricao: str
+    data_solicitacao: date
+    solicitado_por_id: uuid.UUID
+    status: StatusRecurso
+    parecer_decisao: str | None
+    decidido_por_id: uuid.UUID | None
+    data_decisao: date | None
     created_at: datetime
