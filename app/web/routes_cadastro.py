@@ -3,7 +3,7 @@ import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user_optional
@@ -18,11 +18,19 @@ from app.services.armazenamento import caminho_absoluto
 from app.services.importacao_entidades import (
     CAMPOS_CONHECIDOS,
     confirmar_importacao,
+    exportar_entidades,
+    gerar_csv_entidades,
+    gerar_xlsx_entidades,
     ler_planilha,
     mapear_colunas,
     preparar_importacao,
 )
 from app.web.templates import templates
+
+_MEDIA_TYPES_EXPORTACAO = {
+    "csv": "text/csv",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
 
 router = APIRouter(prefix="/painel/cadastro", tags=["Área restrita — Cadastro"])
 
@@ -310,4 +318,32 @@ def convidar_entidade(
     db.refresh(convite)
     return templates.TemplateResponse(
         request, "restrito/cadastro/fragments/convite_item.html", {"convite": convite}
+    )
+
+
+@router.get("/cpls/{cpl_id}/exportar-entidades")
+def exportar_entidades_cpl(
+    cpl_id: uuid.UUID,
+    formato: str = "xlsx",
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-053: exportação de entidades + diagnóstico cadastral em XLSX/CSV
+    — simétrica à importação, mesmo cabeçalho de `CAMPOS_CONHECIDOS`."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    cpl = db.get(CPL, cpl_id)
+    if cpl is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_GOVERNANCA_LEITURA, cpl_id=cpl_id)
+    if formato not in _MEDIA_TYPES_EXPORTACAO:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Formato precisa ser 'xlsx' ou 'csv'.")
+
+    linhas = exportar_entidades(db, cpl_id)
+    conteudo = gerar_xlsx_entidades(linhas) if formato == "xlsx" else gerar_csv_entidades(linhas)
+    return Response(
+        content=conteudo,
+        media_type=_MEDIA_TYPES_EXPORTACAO[formato],
+        headers={"Content-Disposition": f'attachment; filename="entidades.{formato}"'},
     )

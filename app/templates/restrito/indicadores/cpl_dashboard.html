@@ -27,7 +27,7 @@
         </div>
     </div>
 
-    <div class="row row-cols-2 row-cols-md-4 g-3 mb-4">
+    <div class="row row-cols-2 row-cols-md-5 g-3 mb-4">
         <div class="col">
             <div class="card kpi-card h-100">
                 <div class="card-body d-flex align-items-center gap-3">
@@ -68,6 +68,17 @@
                     <div>
                         <div class="kpi-valor">{{ cadastral.soma_empregos_diretos }}</div>
                         <div class="text-body-secondary small">Empregos diretos</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card kpi-card h-100">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <div class="kpi-icon bg-secondary-subtle text-secondary"><i class="bi bi-kanban-fill"></i></div>
+                    <div>
+                        <div class="kpi-valor">{{ projetos_resumo.total_projetos }}</div>
+                        <div class="text-body-secondary small">Projetos no portfólio</div>
                     </div>
                 </div>
             </div>
@@ -207,7 +218,7 @@
                 </div>
             </div>
 
-            <div class="card">
+            <div class="card mb-4">
                 <div class="card-header bg-transparent fw-semibold">
                     <i class="bi bi-people-fill text-primary me-2"></i>Governança
                 </div>
@@ -215,6 +226,40 @@
                     <p class="mb-1">Reuniões realizadas: <strong>{{ governanca.reunioes_realizadas }}</strong></p>
                     <p class="mb-1">Deliberações aprovadas: <strong>{{ governanca.deliberacoes_aprovadas }}</strong></p>
                     <p class="mb-0">Tarefas: <strong>{{ governanca.tarefas_concluidas }}</strong> concluídas, <strong>{{ governanca.tarefas_pendentes }}</strong> pendentes</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-kanban-fill text-primary me-2"></i>Projetos (RF-045)</span>
+                    <a href="/painel/projetos/cpls/{{ cpl.id }}" class="small text-decoration-none">Ver portfólio &rarr;</a>
+                </div>
+                <div class="card-body small">
+                    {% if projetos_resumo.total_projetos %}
+                        <p class="mb-1">Portfólio: <strong>{{ projetos_resumo.total_projetos }}</strong> projeto(s)</p>
+                        <ul class="mb-2 ps-3">
+                            {% for estagio, quantidade in projetos_resumo.por_estagio.items() %}
+                                <li>{{ estagio.value.replace('_', ' ') }}: {{ quantidade }}</li>
+                            {% endfor %}
+                        </ul>
+                        <p class="mb-1 small text-body-secondary">
+                            Prioridade:
+                            {% for prioridade, quantidade in projetos_resumo.por_prioridade.items() %}
+                                {{ prioridade.value }} ({{ quantidade }}){{ ", " if not loop.last }}
+                            {% endfor %}
+                        </p>
+                        <p class="mb-1 mt-3 fw-semibold">Financeiro agregado</p>
+                        <p class="mb-1">Previsto: <strong>R$ {{ projetos_resumo.total_previsto }}</strong></p>
+                        <p class="mb-1">Desembolsado: <strong>R$ {{ projetos_resumo.total_desembolsado }}</strong></p>
+                        <p class="mb-1">Saldo: <strong>R$ {{ projetos_resumo.saldo_total }}</strong></p>
+                        <p class="mb-1 mt-3 fw-semibold">Execução agregada</p>
+                        <p class="mb-1">Etapas: <strong>{{ projetos_resumo.etapas_concluidas }}</strong> concluídas de <strong>{{ projetos_resumo.total_etapas }}</strong> ({{ projetos_resumo.total_marcos }} marcos)</p>
+                        <p class="mb-1">Entregas: <strong>{{ projetos_resumo.entregas_aprovadas }}</strong> aprovadas de <strong>{{ projetos_resumo.total_entregas }}</strong></p>
+                        <p class="mb-1">Metas: <strong>{{ projetos_resumo.metas_concluidas }}</strong> concluídas de <strong>{{ projetos_resumo.total_metas }}</strong></p>
+                        <p class="mb-0">Riscos ativos: <strong>{{ projetos_resumo.riscos_ativos }}</strong></p>
+                    {% else %}
+                        <p class="mb-0 text-body-secondary">Nenhum projeto cadastrado ainda (Projetos &rarr; nova demanda).</p>
+                    {% endif %}
                 </div>
             </div>
         </div>

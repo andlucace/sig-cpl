@@ -189,6 +189,21 @@ virou um **fluxo em dois passos**:
 `processar_planilha()` (1 passo, só mapeamento automático) continua
 existindo no serviço para quem prefere pular a conferência manual.
 
+**Exportação de entidades** (RF-053) — simétrica à importação acima: mesmo
+cabeçalho (`CAMPOS_CONHECIDOS`, o nome canônico de cada campo, que
+`mapear_colunas` já reconhece como alias de si mesmo), então um arquivo
+exportado por aqui pode ser reimportado sem remapeamento manual — testado
+ponta a ponta (exportar → reimportar → conferir que as 35 colunas mapeiam
+sozinhas). `exportar_entidades()` + `gerar_csv_entidades()`/
+`gerar_xlsx_entidades()` em `app/services/importacao_entidades.py`;
+`GET /api/cadastro/cpls/{cpl_id}/exportar-entidades?formato=xlsx|csv` (e
+botões em `/painel/cadastro/cpls/{cpl_id}`), RBAC `PAPEIS_GOVERNANCA_LEITURA`
+(mesma exigência de qualquer leitura do módulo). CSV sai com BOM
+(`utf-8-sig`) — sem isso o Excel abre acentuação corrompida em duplo-clique
+direto no arquivo. Escopo desta fatia é só entidades/diagnóstico — outras
+listagens do sistema (projetos, documentos, auditoria) não ganharam
+exportação própria.
+
 UI web: `/painel/cadastro` (seleciona CPL) → `/painel/cadastro/cpls/{id}`
 (entidades vinculadas + campanhas + importações) →
 `/painel/cadastro/importacoes/{id}/mapear` (conferir/ajustar mapeamento,
@@ -343,9 +358,14 @@ os outros módulos já coletam:
   eram preenchidos por uma entidade respondendo à campanha.
 - **Painéis** (RF-045): `resumo_governanca` e `resumo_planejamento`
   complementam o resumo cadastral acima, formando o dashboard de
-  `/painel/indicadores/cpls/{cpl_id}`. Só cobre governança/planejamento/
-  cadastro — maturidade, projetos, finanças e impacto territorial não têm
-  painel porque esses módulos ainda não existem (Fase 2/3).
+  `/painel/indicadores/cpls/{cpl_id}`. Ganhou depois um card de
+  **projetos e finanças** — `resumo_projetos_cpl()` em
+  `app/services/projeto.py`, agregando todo o portfólio da CPL (não um
+  projeto só, que já é coberto pelos relatórios do RF-041): contagem por
+  estágio/prioridade, financeiro (previsto/desembolsado/saldo somados de
+  todas as origens de recurso e desembolsos dos projetos da CPL) e
+  execução (etapas/marcos/entregas/metas/riscos agregados). Só
+  **maturidade** ainda não tem painel próprio — não foi priorizado ainda.
 - **Relatório executivo em PDF** (RF-048) — dos seis tipos de relatório
   citados no requisito (executivo, anual, recadastramento, comissão,
   projeto, impacto), dois foram construídos até agora (ver item seguinte
@@ -1200,12 +1220,12 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    novos empregos (variação no tempo, via `DiagnosticoCadastralHistorico`),
    sustentabilidade, certificações e digitalização ganharam campo e
    entraram no resumo/painel/relatório executivo — ver seção "Indicadores
-   e relatórios" acima. Painel de projetos (parte do RF-045) segue
-   pendente — o módulo de Projetos está completo (item 7, RF-029 a
-   RF-041), inclusive plano de trabalho/financeiro, mas ainda só como
-   tela de portfólio e relatórios por projeto, não um painel agregado
-   (todos os projetos de uma CPL) de indicadores/finanças/impacto
-   territorial.
+   e relatórios" acima. ~~Painel de projetos (parte do RF-045)~~ —
+   **feito**: card "Projetos" no mesmo dashboard, agregando todo o
+   portfólio da CPL (contagem por estágio/prioridade, financeiro e
+   execução somados de todos os projetos), complementando os relatórios
+   por projeto do RF-041 — ver seção "Painéis" acima. Só falta
+   **maturidade** no RF-045 (não priorizado ainda).
 6. ~~RF-048: recadastramento, anual, comissão, impacto e de projeto~~ —
    **feito, todos os seis tipos**: recadastramento (dossiê de
    maturidade), anual (mesma base do executivo recortada a um
@@ -1235,3 +1255,14 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    recadastramento de CPL vencendo — ver seção "Notificações" acima.
    "Enviar" é só dentro do sistema (`/painel/notificacoes`), sem
    e-mail/push; sem agendador — a varredura roda sob demanda.
+9. ~~RF-053 (exportação XLSX/CSV) e RF-045 (painel agregado de
+   projetos)~~ — **feito**: exportação de entidades + diagnóstico
+   cadastral de uma CPL em XLSX/CSV, simétrica à importação do RF-013
+   (mesmo cabeçalho de `CAMPOS_CONHECIDOS`, testado ponta a ponta —
+   arquivo exportado se reimporta sem remapeamento manual); card
+   "Projetos" novo no dashboard de indicadores, agregando portfólio,
+   financeiro e execução de todos os projetos de uma CPL — ver seções
+   "Cadastro dinâmico" e "Painéis" acima. Exportação fica restrita a
+   entidades — outras listagens (projetos, documentos, auditoria) não
+   ganharam exportação própria; painel de maturidade (resto do RF-045)
+   segue sem priorização.

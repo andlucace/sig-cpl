@@ -346,3 +346,71 @@ def confirmar_importacao(
     db.commit()
     db.refresh(lote)
     return lote
+
+
+# --- Exportação (RF-053) -----------------------------------------------------
+#
+# Simétrica à importação acima: mesmo cabeçalho (`CAMPOS_CONHECIDOS`, o nome
+# canônico de cada campo) que `mapear_colunas` já reconhece como alias de si
+# mesmo — então um arquivo exportado daqui pode ser reimportado sem
+# remapeamento manual, sem precisar de nenhum código novo dos dois lados.
+
+
+def _valor_campo_exportacao(
+    campo: str, entidade: Entidade, diagnostico: DiagnosticoCadastral | None
+) -> str:
+    if campo in _CAMPOS_DIAGNOSTICO:
+        valor = getattr(diagnostico, campo, None) if diagnostico is not None else None
+    else:
+        valor = getattr(entidade, campo, None)
+    if valor is None:
+        return ""
+    if campo in _CAMPOS_BOOLEANOS:
+        return "Sim" if valor else "Não"
+    if campo == "tipo":
+        return valor.value
+    return str(valor)
+
+
+def exportar_entidades(db: Session, cpl_id: uuid.UUID) -> list[list[str]]:
+    """Uma linha por `Entidade` vinculada à CPL (cadastro + diagnóstico),
+    nas mesmas colunas que a importação reconhece."""
+
+    registros = (
+        db.query(Entidade, DiagnosticoCadastral)
+        .join(EntidadeCPL, EntidadeCPL.entidade_id == Entidade.id)
+        .outerjoin(DiagnosticoCadastral, DiagnosticoCadastral.entidade_id == Entidade.id)
+        .filter(EntidadeCPL.cpl_id == cpl_id, EntidadeCPL.ativo.is_(True))
+        .order_by(Entidade.razao_social)
+        .all()
+    )
+    return [
+        [_valor_campo_exportacao(campo, entidade, diagnostico) for campo in CAMPOS_CONHECIDOS]
+        for entidade, diagnostico in registros
+    ]
+
+
+def gerar_csv_entidades(linhas: list[list[str]]) -> bytes:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(CAMPOS_CONHECIDOS)
+    writer.writerows(linhas)
+    # BOM (utf-8-sig): sem isso o Excel abre acentuação corrompida ao dar
+    # duplo-clique direto no CSV (mesma armadilha de acentuação já vista
+    # no relatório executivo em PDF, mas do lado do consumidor agora).
+    return buffer.getvalue().encode("utf-8-sig")
+
+
+def gerar_xlsx_entidades(linhas: list[list[str]]) -> bytes:
+    import openpyxl
+
+    pasta = openpyxl.Workbook()
+    planilha = pasta.active
+    planilha.title = "Entidades"
+    planilha.append(CAMPOS_CONHECIDOS)
+    for linha in linhas:
+        planilha.append(linha)
+
+    buffer = io.BytesIO()
+    pasta.save(buffer)
+    return buffer.getvalue()

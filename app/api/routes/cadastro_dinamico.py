@@ -2,6 +2,7 @@ import secrets
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
@@ -29,9 +30,21 @@ from app.schemas.cadastro_dinamico import (
     ImportacaoLoteRead,
     PrepararImportacaoRead,
 )
-from app.services.importacao_entidades import CAMPOS_CONHECIDOS, confirmar_importacao, preparar_importacao
+from app.services.importacao_entidades import (
+    CAMPOS_CONHECIDOS,
+    confirmar_importacao,
+    exportar_entidades,
+    gerar_csv_entidades,
+    gerar_xlsx_entidades,
+    preparar_importacao,
+)
 
 router = APIRouter(prefix="/cadastro", tags=["Formulários e dados"])
+
+_MEDIA_TYPES_EXPORTACAO = {
+    "csv": "text/csv",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
 
 
 def _get_cpl_or_404(db: Session, cpl_id: uuid.UUID) -> CPL:
@@ -246,3 +259,32 @@ def obter_importacao(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Lote de importação não encontrado.")
     verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_LEITURA, cpl_id=lote.cpl_id)
     return lote
+
+
+# --- Exportação de entidades (RF-053) ----------------------------------------
+
+
+@router.get("/cpls/{cpl_id}/exportar-entidades")
+def exportar_entidades_cpl(
+    cpl_id: uuid.UUID,
+    formato: str = "xlsx",
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Response:
+    """RF-053: exportação de entidades + diagnóstico cadastral de uma CPL em
+    XLSX ou CSV — simétrica à importação (RF-013/014): mesmo cabeçalho de
+    `CAMPOS_CONHECIDOS`, então o arquivo devolvido aqui pode ser reimportado
+    sem remapeamento manual."""
+
+    _get_cpl_or_404(db, cpl_id)
+    verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_LEITURA, cpl_id=cpl_id)
+    if formato not in _MEDIA_TYPES_EXPORTACAO:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Formato precisa ser 'xlsx' ou 'csv'.")
+
+    linhas = exportar_entidades(db, cpl_id)
+    conteudo = gerar_xlsx_entidades(linhas) if formato == "xlsx" else gerar_csv_entidades(linhas)
+    return Response(
+        content=conteudo,
+        media_type=_MEDIA_TYPES_EXPORTACAO[formato],
+        headers={"Content-Disposition": f'attachment; filename="entidades.{formato}"'},
+    )

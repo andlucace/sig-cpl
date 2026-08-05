@@ -1058,6 +1058,56 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     era o único dos 6 tipos que faltava, e o requisito não descreve um
     formato próprio pra ele além do que RF-041 já pede, então não há
     um 7º tipo a construir.
+30. **RF-053 (exportação XLSX/CSV) e RF-045 (painel agregado de
+    projetos)** — usuário pediu pra "implementar a RF-053 e RF-045",
+    depois de eu ter respondido, numa pergunta anterior sobre o que
+    ainda falta em todas as fases, que esses dois eram os candidatos
+    mais baratos/de maior valor pra fazer em seguida.
+    - **RF-053**: a API REST/JSON já era completa e a importação (RF-013)
+      já existia; faltava só a **exportação** XLSX/CSV. Escopo escolhido:
+      entidades + diagnóstico cadastral de uma CPL — o dado mais "de
+      planilha" do sistema, e o par natural da importação. Desenhado pra
+      ser **simétrico à importação**: `exportar_entidades()` em
+      `app/services/importacao_entidades.py` usa `CAMPOS_CONHECIDOS` (a
+      mesma lista de nomes canônicos de campo que a importação já
+      reconhece) como cabeçalho — como `mapear_colunas()` já inclui o
+      nome canônico de cada campo no próprio conjunto de aliases (`{campo}
+      | aliases_norm`), um arquivo exportado por aqui é reconhecido
+      100% automaticamente se reimportado, sem precisar de nenhum
+      código novo dos dois lados. Testado de propósito: exportei,
+      reimportei via `POST /api/cadastro/cpls/{id}/importacoes` e
+      conferi que as 35 colunas mapeavam sozinhas (`mapeamento_sugerido`
+      cobria os 35 cabeçalhos, nenhum "não mapeado"). CSV sai com BOM
+      (`utf-8-sig`) — sem isso o Excel abre acentuação corrompida em
+      duplo-clique direto no arquivo; `ler_planilha()` já tentava
+      `utf-8-sig` primeiro do lado da *leitura* por causa exatamente
+      disso, então a escrita seguiu o mesmo padrão. `GET /api/cadastro/cpls/
+      {id}/exportar-entidades?formato=xlsx|csv`, RBAC
+      `PAPEIS_GOVERNANCA_LEITURA` (mesma exigência de qualquer leitura
+      do módulo), botões em `/painel/cadastro/cpls/{id}`. Escopo
+      deliberadamente restrito a entidades — outras listagens (projetos,
+      documentos, auditoria) não ganharam exportação nesta fatia.
+    - **RF-045**: só faltava "painel de projetos" (o resto do RF-045 já
+      existia). Nova função `resumo_projetos_cpl()` em
+      `app/services/projeto.py`, mesmo padrão de `resumo_governanca`/
+      `resumo_planejamento` (dict pronto pro template, sem
+      `response_model` de API próprio — não há requisito pedindo essa
+      agregação via API, só o painel). **Distinção importante**: isso
+      não duplica os relatórios do RF-041 — aqueles são por um projeto
+      só; este agrega **todos os projetos de uma CPL** (contagem por
+      estágio/prioridade via `Counter`, financeiro somado de todas as
+      origens de recurso/desembolsos, execução agregada de etapas/
+      marcos/entregas/metas/riscos). Sem entidade nova, sem migração —
+      só leitura agregada do que já existe. Virou um 5º card no topo do
+      dashboard (`row-cols-md-5`, era `-4`) e um novo card "Projetos
+      (RF-045)" na coluna direita de `/painel/indicadores/cpls/{id}`,
+      com link pra `/painel/projetos/cpls/{id}` (portfólio individual).
+      **Só maturidade segue sem painel** no RF-045 — não priorizado.
+    Nenhuma migração em nenhum dos dois. Testado via curl (export
+    xlsx/csv + round-trip de reimportação, RBAC 400/401 do endpoint de
+    exportação) e Playwright (`rf045_053_shot.js`, mais rerun de
+    `projeto_rf041_shot.js`/`documentos_shot.js`/`indicadores_shot.js`/
+    `cadastro.js`), sem erros de console nem 500 reais no log.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -1424,6 +1474,14 @@ ordem recomendada para o que vem depois:
     este projeto foi construído". Sem canal de e-mail/push (só dentro do
     sistema) e sem agendador (varredura sob demanda) — ambos recortes de
     escopo deliberados, não pendências.
+11. ~~RF-053 (exportação XLSX/CSV) e RF-045 (painel agregado de
+    projetos)~~ — **feito**: ver item 30 da seção "Ordem em que este
+    projeto foi construído". Exportação de entidades+diagnóstico
+    simétrica à importação (RF-013), testada com round-trip real; card
+    de portfólio/financeiro/execução agregados de todos os projetos de
+    uma CPL no dashboard de indicadores. Segue pendente, sem relação com
+    este trabalho: exportação de outras listagens (projetos, documentos,
+    auditoria) e painel de maturidade (resto do RF-045).
 
 ## Deploy em produção
 
