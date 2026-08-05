@@ -18,7 +18,10 @@ from app.core.rbac import (
 )
 from app.db.session import get_db
 from app.models.cpl import CPL
+from app.models.documento import Documento
 from app.models.enums import (
+    CategoriaDocumento,
+    ConfidencialidadeDocumento,
     EstagioProjeto,
     ImpactoRisco,
     OrigemDemanda,
@@ -51,6 +54,17 @@ from app.models.projeto import (
     RiscoProjeto,
 )
 from app.models.usuario import Usuario
+from app.services.armazenamento import salvar_arquivo
+from app.services.geracao_documentos import (
+    gerar_pdf_dossie_evidencias_projeto,
+    gerar_pdf_relatorio_execucao_projeto,
+    gerar_pdf_relatorio_financeiro_projeto,
+)
+from app.services.projeto import (
+    dossie_evidencias_projeto,
+    resumo_execucao_projeto,
+    resumo_financeiro_projeto,
+)
 from app.web.templates import templates
 
 router = APIRouter(prefix="/painel/projetos", tags=["Área restrita — Projetos"])
@@ -1284,3 +1298,95 @@ def decidir_alteracao_plano(
     return RedirectResponse(
         f"/painel/projetos/{alteracao.projeto_id}", status_code=status.HTTP_303_SEE_OTHER
     )
+
+
+def _registrar_relatorio_projeto(
+    db: Session, projeto: Projeto, usuario: Usuario, titulo: str, nome_arquivo: str, pdf_bytes: bytes
+) -> None:
+    caminho = salvar_arquivo(projeto.cpl_id, nome_arquivo, pdf_bytes)
+    documento = Documento(
+        cpl_id=projeto.cpl_id,
+        titulo=titulo,
+        categoria=CategoriaDocumento.RELATORIO,
+        confidencialidade=ConfidencialidadeDocumento.INTERNO,
+        arquivo_path=caminho,
+        nome_arquivo_original=nome_arquivo,
+        tipo_mime="application/pdf",
+        tamanho_bytes=len(pdf_bytes),
+        criado_por_id=usuario.id,
+    )
+    db.add(documento)
+    db.commit()
+
+
+@router.post("/{projeto_id}/relatorio-execucao")
+def gerar_relatorio_execucao(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-041: relatório de execução do objeto — cronograma, metas,
+    indicadores, entregas e riscos."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    projeto = db.get(Projeto, projeto_id)
+    if projeto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=projeto.cpl_id)
+
+    pdf_bytes = gerar_pdf_relatorio_execucao_projeto(projeto, resumo_execucao_projeto(db, projeto_id))
+    nome_arquivo = f"Relatorio de Execucao - {projeto.titulo}.pdf"
+    _registrar_relatorio_projeto(
+        db, projeto, usuario, f"Relatório de Execução — {projeto.titulo}", nome_arquivo, pdf_bytes
+    )
+    return RedirectResponse(f"/painel/documentos/cpls/{projeto.cpl_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{projeto_id}/relatorio-financeiro")
+def gerar_relatorio_financeiro(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-041: relatório financeiro — origens de recursos e saldos,
+    aquisições e desembolsos/conciliação."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    projeto = db.get(Projeto, projeto_id)
+    if projeto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=projeto.cpl_id)
+
+    pdf_bytes = gerar_pdf_relatorio_financeiro_projeto(projeto, resumo_financeiro_projeto(db, projeto_id))
+    nome_arquivo = f"Relatorio Financeiro - {projeto.titulo}.pdf"
+    _registrar_relatorio_projeto(
+        db, projeto, usuario, f"Relatório Financeiro — {projeto.titulo}", nome_arquivo, pdf_bytes
+    )
+    return RedirectResponse(f"/painel/documentos/cpls/{projeto.cpl_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{projeto_id}/relatorio-dossie-evidencias")
+def gerar_dossie_evidencias(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-041: dossiê de evidências — reúne tudo que já foi anexado como
+    comprovação (cotações, comprovantes de desembolso, evidência de
+    mitigação de risco, documento de entrega)."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    projeto = db.get(Projeto, projeto_id)
+    if projeto is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Projeto não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=projeto.cpl_id)
+
+    pdf_bytes = gerar_pdf_dossie_evidencias_projeto(projeto, dossie_evidencias_projeto(db, projeto_id))
+    nome_arquivo = f"Dossie de Evidencias - {projeto.titulo}.pdf"
+    _registrar_relatorio_projeto(
+        db, projeto, usuario, f"Dossiê de Evidências — {projeto.titulo}", nome_arquivo, pdf_bytes
+    )
+    return RedirectResponse(f"/painel/documentos/cpls/{projeto.cpl_id}", status_code=status.HTTP_303_SEE_OTHER)

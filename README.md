@@ -420,8 +420,26 @@ os outros módulos já coletam:
   Gerado via `POST /api/indicadores/cpls/{cpl_id}/relatorio-impacto`
   (e botão em `/painel/indicadores/cpls/{cpl_id}`), RBAC
   `PAPEIS_GESTAO`.
-- **RF-048 fica só faltando "de projeto"** — depende do módulo de
-  Projetos, que ainda não existe (Fase 2/3).
+- **Relatório de execução, relatório financeiro e dossiê de evidências
+  de projeto em PDF** (RF-041/RF-048) — os três tipos de relatório do
+  RF-041, escopados a um único `Projeto` em vez de uma CPL inteira
+  (mesmo raciocínio de `resumo_orgao`/relatório de comissão). Fecham
+  também o tipo "de projeto" que RF-048 tinha deixado em aberto — o
+  requisito não descreve um formato próprio pra "relatório de projeto"
+  além do que RF-041 já pede, então não há um sétimo tipo separado a
+  construir. Dados vêm de três funções novas em `app/services/projeto.py`
+  (`resumo_execucao_projeto`, `resumo_financeiro_projeto`,
+  `dossie_evidencias_projeto`); o dossiê de evidências agrega, sem criar
+  nenhum vínculo novo, os quatro pontos onde o módulo já linka
+  documentos (cotação, comprovante de desembolso, evidência de
+  mitigação de risco, documento de entrega). Gerados via
+  `POST /api/projetos/{projeto_id}/relatorio-execucao`,
+  `/relatorio-financeiro` e `/relatorio-dossie-evidencias` (e botões em
+  `/painel/projetos/{projeto_id}`), RBAC `PAPEIS_GESTAO` — mesma
+  convenção de todo relatório gerado no sistema, não `PAPEIS_PROJETO_GESTAO`.
+- **RF-048 está completo** — os seis tipos de relatório citados no
+  requisito (executivo, recadastramento, anual, comissão, impacto, de
+  projeto) existem.
 - RBAC: leitura (catálogo, resumo, painel) usa `PAPEIS_GOVERNANCA_LEITURA`;
   gerar relatório executivo usa `PAPEIS_GESTAO` (mesma exigência da ata);
   registrar novo valor de indicador usa `PAPEIS_TAREFA_EXECUCAO` **ou** o
@@ -525,8 +543,8 @@ que já está no banco:
   deliberado pra não introduzir um context processor Jinja2 (mecanismo
   não usado em nenhum outro lugar do projeto) só para isso.
 
-O bloco **Projetos** (RF-029 a RF-040) cobre o módulo de Projetos e
-Fomento **completo até o RF-040**: editais de fomento com submissão,
+O bloco **Projetos** (RF-029 a RF-041) cobre o módulo de Projetos e
+Fomento **completo**: editais de fomento com submissão,
 recursos/contrarrazões/diligências (RF-029/030), demanda/oportunidade →
 conversão em projeto → portfólio → plano de trabalho completo,
 incluindo o RF-034 inteiro (etapas/cronograma, metas, indicadores,
@@ -534,15 +552,15 @@ riscos, impactos socioambientais), o RF-035 inteiro (continuidade,
 escalabilidade, equipe, origem dos recursos, aquisições e cronograma
 físico-financeiro), o financeiro completo (RF-036 a RF-038: itens de
 despesa, cotações com validação de mínimo de fornecedores, desembolsos
-com saldo calculado e conciliação) e a execução completa (RF-039/040:
+com saldo calculado e conciliação), a execução completa (RF-039/040:
 marcos, entregas com aprovação, alterações de plano com decisão,
-riscos com evidência de mitigação). Prestação de contas (RF-041)
-**não** faz parte desta fatia — o módulo completo tem 13 requisitos em
-6 sub-áreas (editais, demandas/portfólio, plano de
-trabalho, financeiro, execução, prestação de contas), grande demais pra
-uma entrega só;
+riscos com evidência de mitigação) e a prestação de contas (RF-041:
+relatório de execução, relatório financeiro e dossiê de evidências em
+PDF, ver seção de Indicadores e relatórios acima) — os 13 requisitos
+em 6 sub-áreas (editais, demandas/portfólio, plano de trabalho,
+financeiro, execução, prestação de contas) do módulo estão completos;
 "sequência natural" escolhida sessão a sessão, sempre a camada mais
-fundamental que ainda falta.
+fundamental que ainda faltava.
 - **`DemandaProjeto`** (RF-031) — título, descrição, origem
   (`OrigemDemanda`: empresa/comissão/instituição/edital) com uma
   referência solta pra origem (`origem_id`/`origem_detalhe`, mesmo padrão
@@ -736,6 +754,36 @@ fundamental que ainda falta.
     `_pode_gestao`), não pra `e_administrador` — são grupos diferentes
     (`PAPEIS_GESTAO` inclui entidade gestora, não só administrador da
     plataforma).
+- **Prestação de contas do projeto (RF-041)** — "gerar relatório de
+  execução do objeto, relatório financeiro e dossiê de evidências",
+  fecha o módulo de Projetos. Mesmo padrão de resumo-agregado-pronto-
+  pra-formatação do RF-048 (ver seção de Indicadores e relatórios),
+  mas sem entidade nova nenhuma — as três funções novas em
+  `app/services/projeto.py` só leem o que já existe:
+  - **Relatório de execução** — cronograma (etapas concluídas/marcos),
+    metas, indicadores, entregas (realizadas/aprovadas), riscos (por
+    status) e alterações de plano pendentes.
+  - **Relatório financeiro** — origens de recursos com saldo calculado
+    (mesmo cálculo da tela de detalhe, não armazenado), aquisições com
+    valor estimado total e desembolsos com total/conciliados.
+  - **Dossiê de evidências** — agrega, sem criar nenhum vínculo novo,
+    os quatro pontos onde o módulo já linka documentos: cotação
+    (`CotacaoAquisicao.documento_id`), comprovante de desembolso
+    (`DesembolsoProjeto.documento_comprovante_id`), evidência de
+    mitigação de risco (`RiscoProjeto.evidencia_documento_id`) e
+    documento de entrega (`EntregaProjeto.documento_id`).
+  - Gerados via `POST /api/projetos/{projeto_id}/relatorio-execucao`,
+    `/relatorio-financeiro` e `/relatorio-dossie-evidencias` (e botões
+    em `/painel/projetos/{projeto_id}`), RBAC `PAPEIS_GESTAO` — mesma
+    convenção de todo relatório gerado no sistema (não
+    `PAPEIS_PROJETO_GESTAO`, que é a autoridade do dia a dia do
+    projeto, não a de emitir prestação de contas). Redirecionam pro
+    repositório de documentos da CPL (`/painel/documentos/cpls/{id}`),
+    mesmo padrão dos relatórios do RF-048.
+  - **Fecha também o "de projeto" do RF-048** — o requisito não
+    descreve um formato próprio pra esse tipo além do que RF-041 já
+    pede, então não há um sétimo tipo de relatório a construir; os
+    seis tipos citados no RF-048 estão completos.
 - **Edital de fomento (RF-029/030)** — distinto do `Edital` de
   maturidade (`app/models/maturidade.py`, que guarda critérios/pesos/
   notas de corte pra avaliação de maturidade); mesmo nome em português,
@@ -1153,32 +1201,32 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    sustentabilidade, certificações e digitalização ganharam campo e
    entraram no resumo/painel/relatório executivo — ver seção "Indicadores
    e relatórios" acima. Painel de projetos (parte do RF-045) segue
-   pendente — o módulo de Projetos agora existe (item 7), mas só como
-   tela de portfólio, não um painel de indicadores agregados; finanças e
-   impacto territorial dependem do plano de trabalho/financeiro
-   (RF-033 a RF-038), ainda não construídos.
-6. ~~RF-048: recadastramento, anual, comissão e impacto~~ — **feito**:
-   recadastramento (dossiê de maturidade), anual (mesma base do
-   executivo recortada a um ano-calendário), comissão (escopado a um
-   único órgão de governança, não toda a CPL) e impacto (recorte do
-   resumo cadastral focado em sustentabilidade/ODS/inovação, sem
-   agregação nova) — ver seção "Indicadores e relatórios" acima. **Só
-   falta "de projeto"**, do mesmo RF-048 — precisa do plano de
-   trabalho/financeiro do módulo de Projetos (item 7), ainda não
-   construído.
-7. ~~Iniciar módulo de Projetos~~ — **RF-029 a RF-040, todos completos**:
-   `DemandaProjeto` (RF-031), `Projeto`/portfólio (RF-032), plano de
-   trabalho completo (RF-033/034/035), RF-034 completo (`EtapaProjeto`,
-   `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`), RF-035 completo
-   (`EquipeProjeto`, `OrigemRecursoProjeto`, `AquisicaoProjeto`,
-   cronograma físico-financeiro), RF-029/030 completos
-   (`EditalFomento`, submissão, `RecursoSubmissaoProjeto`),
+   pendente — o módulo de Projetos está completo (item 7, RF-029 a
+   RF-041), inclusive plano de trabalho/financeiro, mas ainda só como
+   tela de portfólio e relatórios por projeto, não um painel agregado
+   (todos os projetos de uma CPL) de indicadores/finanças/impacto
+   territorial.
+6. ~~RF-048: recadastramento, anual, comissão, impacto e de projeto~~ —
+   **feito, todos os seis tipos**: recadastramento (dossiê de
+   maturidade), anual (mesma base do executivo recortada a um
+   ano-calendário), comissão (escopado a um único órgão de governança,
+   não toda a CPL), impacto (recorte do resumo cadastral focado em
+   sustentabilidade/ODS/inovação, sem agregação nova) e de projeto
+   (execução/financeiro/dossiê de evidências, RF-041, escopado a um
+   único `Projeto`) — ver seção "Indicadores e relatórios" acima.
+7. ~~Iniciar módulo de Projetos~~ — **RF-029 a RF-041, módulo inteiro
+   completo**: `DemandaProjeto` (RF-031), `Projeto`/portfólio (RF-032),
+   plano de trabalho completo (RF-033/034/035), RF-034 completo
+   (`EtapaProjeto`, `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`),
+   RF-035 completo (`EquipeProjeto`, `OrigemRecursoProjeto`,
+   `AquisicaoProjeto`, cronograma físico-financeiro), RF-029/030
+   completos (`EditalFomento`, submissão, `RecursoSubmissaoProjeto`),
    RF-036/037/038 completos (`AquisicaoProjeto` estendido,
-   `CotacaoAquisicao`, `DesembolsoProjeto`) e RF-039/040 completos
+   `CotacaoAquisicao`, `DesembolsoProjeto`), RF-039/040 completos
    (`marco`, `EntregaProjeto`, `AlteracaoPlanoProjeto`,
-   `evidencia_documento_id` em `RiscoProjeto`) — ver seção "Projetos"
-   acima. Falta só RF-041 (relatório de execução, relatório financeiro
-   e dossiê de evidências) pra fechar o módulo inteiro.
+   `evidencia_documento_id` em `RiscoProjeto`) e RF-041 completo
+   (relatório de execução, relatório financeiro e dossiê de evidências
+   em PDF, sem entidade nova) — ver seção "Projetos" acima.
    "Simular cenários" (RF-026) e "habilitação jurídica" (RF-027) também
    ficaram de fora do que foi construído em Maturidade (ver seção do
    módulo acima).

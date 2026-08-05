@@ -14,7 +14,8 @@ from app.core.rbac import (
 )
 from app.db.session import get_db
 from app.models.cpl import CPL
-from app.models.enums import EstagioProjeto, StatusDemanda
+from app.models.documento import Documento
+from app.models.enums import CategoriaDocumento, ConfidencialidadeDocumento, EstagioProjeto, StatusDemanda
 from app.models.projeto import (
     AlteracaoPlanoProjeto,
     AquisicaoProjeto,
@@ -33,6 +34,7 @@ from app.models.projeto import (
     RiscoProjeto,
 )
 from app.models.usuario import Usuario
+from app.schemas.documento import DocumentoRead
 from app.schemas.projeto import (
     AlteracaoPlanoProjetoCreate,
     AlteracaoPlanoProjetoDecisao,
@@ -80,6 +82,17 @@ from app.schemas.projeto import (
     RiscoProjetoUpdate,
     SelecaoCotacaoCreate,
     SubmissaoProjetoCreate,
+)
+from app.services.armazenamento import salvar_arquivo
+from app.services.geracao_documentos import (
+    gerar_pdf_dossie_evidencias_projeto,
+    gerar_pdf_relatorio_execucao_projeto,
+    gerar_pdf_relatorio_financeiro_projeto,
+)
+from app.services.projeto import (
+    dossie_evidencias_projeto,
+    resumo_execucao_projeto,
+    resumo_financeiro_projeto,
 )
 
 router = APIRouter(prefix="/projetos", tags=["Projetos"])
@@ -1167,3 +1180,93 @@ def decidir_alteracao_plano(
     db.commit()
     db.refresh(alteracao)
     return alteracao
+
+
+def _registrar_relatorio_projeto(
+    db: Session, projeto: Projeto, usuario_atual: Usuario, titulo: str, nome_arquivo: str, pdf_bytes: bytes
+) -> Documento:
+    caminho = salvar_arquivo(projeto.cpl_id, nome_arquivo, pdf_bytes)
+    documento = Documento(
+        cpl_id=projeto.cpl_id,
+        titulo=titulo,
+        categoria=CategoriaDocumento.RELATORIO,
+        confidencialidade=ConfidencialidadeDocumento.INTERNO,
+        arquivo_path=caminho,
+        nome_arquivo_original=nome_arquivo,
+        tipo_mime="application/pdf",
+        tamanho_bytes=len(pdf_bytes),
+        criado_por_id=usuario_atual.id,
+    )
+    db.add(documento)
+    db.commit()
+    db.refresh(documento)
+    return documento
+
+
+@router.post(
+    "/{projeto_id}/relatorio-execucao", response_model=DocumentoRead, status_code=status.HTTP_201_CREATED
+)
+def gerar_relatorio_execucao(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Documento:
+    """RF-041: relatório de execução do objeto — cronograma, metas,
+    indicadores, entregas e riscos, em PDF, já cadastrado no repositório
+    de documentos (RF-042)."""
+
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=projeto.cpl_id)
+
+    pdf_bytes = gerar_pdf_relatorio_execucao_projeto(projeto, resumo_execucao_projeto(db, projeto_id))
+    nome_arquivo = f"Relatorio de Execucao - {projeto.titulo}.pdf"
+    return _registrar_relatorio_projeto(
+        db, projeto, usuario_atual, f"Relatório de Execução — {projeto.titulo}", nome_arquivo, pdf_bytes
+    )
+
+
+@router.post(
+    "/{projeto_id}/relatorio-financeiro", response_model=DocumentoRead, status_code=status.HTTP_201_CREATED
+)
+def gerar_relatorio_financeiro(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Documento:
+    """RF-041: relatório financeiro — origens de recursos e saldos,
+    aquisições e desembolsos/conciliação, em PDF, já cadastrado no
+    repositório de documentos (RF-042)."""
+
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=projeto.cpl_id)
+
+    pdf_bytes = gerar_pdf_relatorio_financeiro_projeto(projeto, resumo_financeiro_projeto(db, projeto_id))
+    nome_arquivo = f"Relatorio Financeiro - {projeto.titulo}.pdf"
+    return _registrar_relatorio_projeto(
+        db, projeto, usuario_atual, f"Relatório Financeiro — {projeto.titulo}", nome_arquivo, pdf_bytes
+    )
+
+
+@router.post(
+    "/{projeto_id}/relatorio-dossie-evidencias",
+    response_model=DocumentoRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def gerar_dossie_evidencias(
+    projeto_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Documento:
+    """RF-041: dossiê de evidências — reúne, em PDF, tudo que já foi
+    anexado como comprovação (cotações, comprovantes de desembolso,
+    evidência de mitigação de risco, documento de entrega), já cadastrado
+    no repositório de documentos (RF-042)."""
+
+    projeto = _get_projeto_or_404(db, projeto_id)
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=projeto.cpl_id)
+
+    pdf_bytes = gerar_pdf_dossie_evidencias_projeto(projeto, dossie_evidencias_projeto(db, projeto_id))
+    nome_arquivo = f"Dossie de Evidencias - {projeto.titulo}.pdf"
+    return _registrar_relatorio_projeto(
+        db, projeto, usuario_atual, f"Dossiê de Evidências — {projeto.titulo}", nome_arquivo, pdf_bytes
+    )

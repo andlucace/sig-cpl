@@ -1,13 +1,15 @@
-"""RF-043/RF-048: geração de documentos padronizados em PDF. Seis peças:
+"""RF-043/RF-048: geração de documentos padronizados em PDF. Nove peças:
 exportar a ata de uma reunião de governança (usa o campo `Reuniao.ata`
 que já existe), o relatório executivo consolidado (acumulado desde
 sempre), o relatório de recadastramento, o relatório anual (recortado a
 um ano-calendário), o relatório de comissão (escopado a um único órgão
 de governança) e o relatório de impacto (reaproveita o resumo cadastral
-do RF-046/047, sem consolidar governança/planejamento) de uma CPL
-(RF-048 — dos seis tipos de relatório citados no requisito, só "de
-projeto" ainda não existe, porque depende do módulo de Projetos, ver
-README).
+do RF-046/047, sem consolidar governança/planejamento) de uma CPL, mais
+os três relatórios "de projeto" do RF-041 (execução, financeiro e
+dossiê de evidências) — escopados a um único `Projeto`, não a uma CPL
+inteira. Com estes três, os seis tipos de relatório citados no RF-048
+estão completos (o tipo "de projeto" dependia do módulo de Projetos
+existir, ver README/HANDOFF).
 """
 
 from pathlib import Path
@@ -17,6 +19,7 @@ from fpdf import FPDF
 from app.models.cpl import CPL
 from app.models.governanca import OrgaoGovernanca, Reuniao
 from app.models.planejamento import IndicadorEstrategico
+from app.models.projeto import Projeto
 
 # A fonte core "Helvetica" do fpdf2 só cobre latin-1 e não tem travessão
 # (—), então acentuação e travessão saem trocados por "?" se usada direto.
@@ -397,5 +400,168 @@ def gerar_pdf_relatorio_impacto(cpl: CPL, resumo_cadastral: dict) -> bytes:
         doc.linha("Nível de digitalização:")
         for nivel, quantidade in resumo_cadastral["distribuicao_digitalizacao"].items():
             doc.linha(f"- {nivel}: {quantidade}")
+
+    return doc.bytes()
+
+
+def gerar_pdf_relatorio_execucao_projeto(projeto: Projeto, resumo: dict) -> bytes:
+    """RF-041: relatório de execução do objeto — cronograma (etapas e
+    marcos), metas, indicadores, entregas e riscos. Dados vêm prontos de
+    `app/services/projeto.py::resumo_execucao_projeto`; esta função só
+    formata."""
+
+    doc = _GeradorPDF()
+
+    doc.linha(f"Relatório de Execução — {projeto.titulo}", altura=10, negrito=True, tamanho=16)
+    doc.linha(f"Estágio: {projeto.estagio.value.replace('_', ' ')}")
+    doc.espaco(2)
+
+    doc.linha("Cronograma", negrito=True, tamanho=12)
+    doc.linha(f"Etapas: {resumo['etapas_concluidas']} concluídas de {resumo['total_etapas']}")
+    if resumo["marcos"]:
+        doc.linha("Marcos:")
+        for marco in resumo["marcos"]:
+            doc.linha(f"- {marco.titulo} ({marco.status.value.replace('_', ' ')})")
+    else:
+        doc.linha("Nenhum marco cadastrado.")
+
+    doc.espaco()
+    doc.linha("Metas e indicadores", negrito=True, tamanho=12)
+    doc.linha(f"Metas: {resumo['metas_concluidas']} concluídas de {resumo['total_metas']}")
+    if resumo["indicadores"]:
+        for indicador in resumo["indicadores"]:
+            valor = indicador.valor_atual or "sem valor registrado"
+            meta = f" (meta: {indicador.meta_valor})" if indicador.meta_valor else ""
+            doc.linha(f"- {indicador.nome}: {valor}{meta}")
+    else:
+        doc.linha("Nenhum indicador cadastrado.")
+
+    doc.espaco()
+    doc.linha("Entregas", negrito=True, tamanho=12)
+    doc.linha(
+        f"Total: {resumo['total_entregas']} — realizadas: {resumo['entregas_realizadas']} — "
+        f"aprovadas: {resumo['entregas_aprovadas']}"
+    )
+    for entrega in resumo["entregas"]:
+        situacao = "aprovada" if entrega.aprovado else ("entregue" if entrega.data_entrega else "pendente")
+        doc.linha(f"- {entrega.titulo} ({situacao})")
+
+    doc.espaco()
+    doc.linha("Riscos", negrito=True, tamanho=12)
+    doc.linha(
+        f"Ativos: {resumo['riscos_ativos']} — mitigados: {resumo['riscos_mitigados']} — "
+        f"materializados: {resumo['riscos_materializados']}"
+    )
+    for risco in resumo["riscos"]:
+        doc.linha(f"- {risco.descricao} ({risco.status.value})")
+
+    if resumo["alteracoes_plano"]:
+        doc.espaco()
+        doc.linha("Alterações de plano", negrito=True, tamanho=12)
+        doc.linha(f"Pendentes de decisão: {resumo['alteracoes_plano_pendentes']}")
+        for alteracao in resumo["alteracoes_plano"]:
+            doc.linha(f"- {alteracao.tipo}: {alteracao.descricao} ({alteracao.status.value})")
+
+    return doc.bytes()
+
+
+def gerar_pdf_relatorio_financeiro_projeto(projeto: Projeto, resumo: dict) -> bytes:
+    """RF-041: relatório financeiro do projeto — origens de recursos e
+    saldos, aquisições e desembolsos/conciliação. Dados vêm prontos de
+    `app/services/projeto.py::resumo_financeiro_projeto`; esta função só
+    formata."""
+
+    doc = _GeradorPDF()
+
+    doc.linha(f"Relatório Financeiro — {projeto.titulo}", altura=10, negrito=True, tamanho=16)
+    doc.espaco(2)
+
+    doc.linha("Origens de recursos", negrito=True, tamanho=12)
+    doc.linha(f"Total previsto: R$ {resumo['total_previsto']}")
+    doc.linha(f"Total desembolsado: R$ {resumo['total_desembolsado']}")
+    doc.linha(f"Saldo total: R$ {resumo['saldo_total']}")
+    for origem in resumo["origens"]:
+        contrapartida = " (contrapartida)" if origem.contrapartida else ""
+        saldo = resumo["saldos_por_origem"][origem.id]
+        doc.linha(f"- {origem.fonte}{contrapartida}: previsto R$ {origem.valor}, saldo R$ {saldo}")
+
+    doc.espaco()
+    doc.linha("Aquisições", negrito=True, tamanho=12)
+    doc.linha(
+        f"Total: {resumo['total_aquisicoes']} — valor estimado: R$ {resumo['total_estimado_aquisicoes']}"
+    )
+    for aquisicao in resumo["aquisicoes"]:
+        etapa = f" — etapa: {aquisicao.etapa.titulo}" if aquisicao.etapa else ""
+        valor = f"R$ {aquisicao.valor_estimado}" if aquisicao.valor_estimado is not None else "sem valor"
+        doc.linha(f"- {aquisicao.item}: {valor} ({aquisicao.status.value}){etapa}")
+        if aquisicao.justificativa_excecao:
+            doc.linha(f"  Justificativa (exceção de cotações): {aquisicao.justificativa_excecao}")
+
+    doc.espaco()
+    doc.linha("Desembolsos e conciliação", negrito=True, tamanho=12)
+    doc.linha(
+        f"Conciliados: {resumo['desembolsos_conciliados']} — "
+        f"pendentes: {resumo['desembolsos_pendentes_conciliacao']}"
+    )
+    for desembolso in resumo["desembolsos"]:
+        conciliado = "conciliado" if desembolso.conciliado else "não conciliado"
+        bem = f" — bem adquirido: {desembolso.bem_adquirido}" if desembolso.bem_adquirido else ""
+        doc.linha(
+            f"- {desembolso.data.strftime('%d/%m/%Y')}: R$ {desembolso.valor} ({conciliado}){bem}"
+        )
+
+    return doc.bytes()
+
+
+def gerar_pdf_dossie_evidencias_projeto(projeto: Projeto, resumo: dict) -> bytes:
+    """RF-041: dossiê de evidências — lista, com referência ao documento
+    do repositório (RF-042), tudo que já foi anexado como comprovação em
+    fatias anteriores do módulo (cotações, comprovantes de desembolso,
+    evidência de mitigação de risco, documento de entrega). Dados vêm
+    prontos de `app/services/projeto.py::dossie_evidencias_projeto`; esta
+    função só formata."""
+
+    doc = _GeradorPDF()
+
+    doc.linha(f"Dossiê de Evidências — {projeto.titulo}", altura=10, negrito=True, tamanho=16)
+    doc.linha(f"Total de evidências: {resumo['total_evidencias']}")
+    doc.espaco(2)
+
+    doc.linha("Cotações de aquisição", negrito=True, tamanho=12)
+    if resumo["cotacoes"]:
+        for cotacao in resumo["cotacoes"]:
+            doc.linha(
+                f"- {cotacao.aquisicao.item}: cotação de {cotacao.fornecedor} — "
+                f"{cotacao.documento.titulo}"
+            )
+    else:
+        doc.linha("Nenhuma cotação com documento anexado.")
+
+    doc.espaco()
+    doc.linha("Comprovantes de desembolso", negrito=True, tamanho=12)
+    if resumo["desembolsos"]:
+        for desembolso in resumo["desembolsos"]:
+            doc.linha(
+                f"- {desembolso.data.strftime('%d/%m/%Y')} (R$ {desembolso.valor}): "
+                f"{desembolso.documento_comprovante.titulo}"
+            )
+    else:
+        doc.linha("Nenhum desembolso com comprovante anexado.")
+
+    doc.espaco()
+    doc.linha("Evidências de mitigação de risco", negrito=True, tamanho=12)
+    if resumo["riscos"]:
+        for risco in resumo["riscos"]:
+            doc.linha(f"- {risco.descricao}: {risco.evidencia_documento.titulo}")
+    else:
+        doc.linha("Nenhum risco com evidência anexada.")
+
+    doc.espaco()
+    doc.linha("Documentos de entrega", negrito=True, tamanho=12)
+    if resumo["entregas"]:
+        for entrega in resumo["entregas"]:
+            doc.linha(f"- {entrega.titulo}: {entrega.documento.titulo}")
+    else:
+        doc.linha("Nenhuma entrega com documento anexado.")
 
     return doc.bytes()

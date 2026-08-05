@@ -1339,4 +1339,36 @@
             </div>
         </div>
     </div>
+
+    {% if pode_gestao %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-file-earmark-pdf me-2"></i>Relatórios (RF-041)
+                </div>
+                <div class="card-body d-flex flex-wrap gap-2">
+                    <form method="post" action="/painel/projetos/{{ projeto.id }}/relatorio-execucao">
+                        <button type="submit" class="btn btn-outline-primary">
+                            <i class="bi bi-graph-up me-1"></i>Gerar relatório de execução
+                        </button>
+                    </form>
+                    <form method="post" action="/painel/projetos/{{ projeto.id }}/relatorio-financeiro">
+                        <button type="submit" class="btn btn-outline-primary">
+                            <i class="bi bi-cash-coin me-1"></i>Gerar relatório financeiro
+                        </button>
+                    </form>
+                    <form method="post" action="/painel/projetos/{{ projeto.id }}/relatorio-dossie-evidencias">
+                        <button type="submit" class="btn btn-outline-primary">
+                            <i class="bi bi-archive me-1"></i>Gerar dossiê de evidências
+                        </button>
+                    </form>
+                    <a href="/painel/documentos/cpls/{{ projeto.cpl_id }}" class="btn btn-link">
+                        Ver documentos gerados <i class="bi bi-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 {% endblock %}

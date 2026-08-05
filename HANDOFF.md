@@ -1005,6 +1005,59 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     estão completos** — só falta RF-041 (relatório de
     execução/financeiro/dossiê de evidências) pra fechar o módulo
     inteiro.
+29. **RF-041: relatório de execução, relatório financeiro e dossiê de
+    evidências do projeto** — usuário disse "seguir para implementação
+    da RF-041". Repeti o padrão de geração de relatório já usado 5
+    vezes no RF-048 (resumo agregado em `app/services/*.py` → função
+    de formatação em `app/services/geracao_documentos.py` → rota que
+    busca a entidade, chama `verificar_papel`, gera o PDF, salva via
+    `salvar_arquivo` e cria um `Documento`), mas escopado a um único
+    `Projeto` em vez de uma CPL inteira — mesmo raciocínio de
+    `resumo_orgao`/relatório de comissão (RF-048), que já tinha
+    resolvido "escopar a uma sub-entidade" antes. **Nenhuma migração
+    nesta fatia** — as três funções novas (`resumo_execucao_projeto`,
+    `resumo_financeiro_projeto`, `dossie_evidencias_projeto`, em
+    `app/services/projeto.py`, arquivo novo — o módulo de Projetos
+    nunca tinha tido lógica fora das rotas até agora) só leem entidades
+    que já existem, sem criar nenhuma tabela/coluna:
+    - **Relatório de execução**: cronograma (etapas concluídas/marcos),
+      metas, indicadores, entregas, riscos (por `StatusRisco`) e
+      alterações de plano pendentes.
+    - **Relatório financeiro**: origens de recursos com saldo
+      calculado (mesmo cálculo — nunca armazenado — já usado na tela
+      de detalhe), aquisições e desembolsos/conciliação.
+    - **Dossiê de evidências**: agrega os quatro pontos onde o módulo
+      já linka Documentos (`CotacaoAquisicao.documento_id`,
+      `DesembolsoProjeto.documento_comprovante_id`,
+      `RiscoProjeto.evidencia_documento_id`,
+      `EntregaProjeto.documento_id`), filtrando cada um por FK não-nula
+      — não introduz nenhum vínculo novo, só lê o que as fatias
+      RF-036/037/038/040/039 já ligaram.
+    Rotas `POST /api/projetos/{id}/relatorio-execucao`,
+    `/relatorio-financeiro`, `/relatorio-dossie-evidencias` (API e
+    web, ambas com `PAPEIS_GESTAO` — mesma convenção de **todo**
+    relatório do sistema, não `PAPEIS_PROJETO_GESTAO`, que é a
+    autoridade do dia a dia do projeto, não a de emitir prestação de
+    contas), botões em `/painel/projetos/{id}` dentro de um novo card
+    "Relatórios (RF-041)", visível só a quem `_pode_gestao` (mesmo
+    helper do item 28). Web routes redirecionam pro repositório de
+    documentos da CPL (`/painel/documentos/cpls/{id}`), mesmo padrão
+    dos outros 5 relatórios — não pra tela do projeto, pra manter
+    "todo relatório gerado aparece no mesmo lugar" como convenção única.
+    Testado via curl (gerar os 3, conferir que aparecem no repositório
+    de documentos), rasterização com PyMuPDF pra validar o conteúdo
+    visualmente (inclusive o caminho "com evidência" do dossiê, testado
+    de propósito — subi um documento via API e linkei a um desembolso
+    via PATCH antes de regerar, pra não validar só o caminho vazio) e
+    Playwright (`projeto_rf041_shot.js`, mais um rerun de
+    `projeto_rf036_038_shot.js`/`projeto_rf039_040_shot.js`/
+    `documentos_shot.js`/`projetos_shot.js`/`rbac_403_shot.js`), sem
+    erros de console nem 500 reais no log (só o 403 esperado do teste
+    de RBAC). **Com esta fatia, o módulo de Projetos inteiro (RF-029 a
+    RF-041) está completo**, e RF-048 também — "relatório de projeto"
+    era o único dos 6 tipos que faltava, e o requisito não descreve um
+    formato próprio pra ele além do que RF-041 já pede, então não há
+    um 7º tipo a construir.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -1310,24 +1363,24 @@ ordem recomendada para o que vem depois:
    `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf` — caminho que
    `app/services/geracao_documentos.py` já procurava desde antes, então
    nenhum código mudou.
-5. ~~Iniciar módulo de Projetos~~ — **RF-029 a RF-040, todos completos**
-   (itens 20 a 28 da seção "Ordem em que este projeto foi construído"):
-   `DemandaProjeto` (RF-031), `Projeto`/portfólio (RF-032), plano de
-   trabalho completo — informações básicas, impactos socioambientais,
-   continuidade e escalabilidade (RF-033/034/035), RF-034 completo
-   (`EtapaProjeto`, `MetaProjeto`, `IndicadorProjeto`, `RiscoProjeto`),
-   RF-035 completo (`EquipeProjeto`, `OrigemRecursoProjeto`,
-   `AquisicaoProjeto`, cronograma físico-financeiro em `EtapaProjeto`),
-   RF-029/030 completos (`EditalFomento`, submissão de projeto,
+5. ~~Iniciar módulo de Projetos~~ — **RF-029 a RF-041, módulo inteiro
+   completo** (itens 20 a 29 da seção "Ordem em que este projeto foi
+   construído"): `DemandaProjeto` (RF-031), `Projeto`/portfólio
+   (RF-032), plano de trabalho completo — informações básicas,
+   impactos socioambientais, continuidade e escalabilidade
+   (RF-033/034/035), RF-034 completo (`EtapaProjeto`, `MetaProjeto`,
+   `IndicadorProjeto`, `RiscoProjeto`), RF-035 completo
+   (`EquipeProjeto`, `OrigemRecursoProjeto`, `AquisicaoProjeto`,
+   cronograma físico-financeiro em `EtapaProjeto`), RF-029/030
+   completos (`EditalFomento`, submissão de projeto,
    `RecursoSubmissaoProjeto`), RF-036/037/038 completos
-   (`AquisicaoProjeto` estendido, `CotacaoAquisicao`, `DesembolsoProjeto`)
-   e RF-039/040 completos (`marco` em `EtapaProjeto`, `EntregaProjeto`
+   (`AquisicaoProjeto` estendido, `CotacaoAquisicao`, `DesembolsoProjeto`),
+   RF-039/040 completos (`marco` em `EtapaProjeto`, `EntregaProjeto`
    com aprovação, `AlteracaoPlanoProjeto` com decisão via
-   `PAPEIS_GESTAO`, `evidencia_documento_id` em `RiscoProjeto`), em
-   `/painel/projetos`. Segue pendente, sem relação com este trabalho:
-   prestação de contas (RF-041 — relatório de execução, relatório
-   financeiro e dossiê de evidências) — "relatório de projeto" (RF-048)
-   depende dele.
+   `PAPEIS_GESTAO`, `evidencia_documento_id` em `RiscoProjeto`) e
+   RF-041 completo (relatório de execução, relatório financeiro e
+   dossiê de evidências em PDF, `app/services/projeto.py`, sem
+   entidade nova), em `/painel/projetos`.
 6. ~~Deploy na VPS Hostinger~~ — **feito nesta sessão** (numa sessão
    anterior a esta), ver seção "Deploy em produção" abaixo para todos os
    detalhes (como foi feito, segredos, como reimplantar).
@@ -1348,15 +1401,16 @@ ordem recomendada para o que vem depois:
    `DiagnosticoCadastral`, `DiagnosticoCadastralHistorico` para "novos
    empregos", os 3 pontos de escrita atualizados). RF-048 ganhou também
    **relatório de recadastramento** (item 16), **relatório anual**
-   (item 18) e **relatório de comissão + relatório de impacto**
-   (item 19) — RF-048 está completo exceto "de projeto", que segue
-   pendente (agora o módulo de Projetos existe — item 20 — mas só a
-   fundação; falta o plano de trabalho/financeiro que um relatório de
-   projeto precisaria consolidar). RF-045 só cobre
-   governança/planejamento/cadastro — maturidade/projetos/finanças/
-   impacto territorial ficam pra quando esses módulos tiverem painel
-   próprio (maturidade e projetos já existem como módulos, mas sem um
-   "painel" resumo dedicado — só as próprias telas de avaliação/
+   (item 18), **relatório de comissão + relatório de impacto** (item
+   19) e **relatório de execução/financeiro/dossiê de evidências de
+   projeto** (item 29, RF-041) — **RF-048 está completo, todos os 6
+   tipos**; o requisito não descreve um formato próprio pra "de
+   projeto" além do que RF-041 já pede, então não houve um 7º tipo a
+   construir. RF-045 só cobre governança/planejamento/cadastro —
+   maturidade/projetos/finanças/impacto territorial ficam pra quando
+   esses módulos tiverem painel próprio (maturidade e projetos já
+   existem como módulos, mas sem um "painel" resumo dedicado — só as
+   próprias telas de avaliação/
    portfólio, ver item 9).
 9. **Maturidade e reconhecimento: limitações conhecidas** — "habilitação
    jurídica" (RF-027) não tem modelo/etapa própria; "simular cenários"
