@@ -1,0 +1,112 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Meu perfil{% endblock %}
+{% block subtitulo %}Meu perfil{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-3">Meu perfil</h1>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-person-circle me-2"></i>Conta
+                </div>
+                <div class="card-body small">
+                    <p class="mb-0">E-mail: <strong>{{ usuario.email }}</strong></p>
+                </div>
+            </div>
+
+            {% if codigos_backup %}
+                <div class="card border-warning">
+                    <div class="card-header bg-transparent fw-semibold text-warning-emphasis">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>Guarde seus códigos de backup
+                    </div>
+                    <div class="card-body">
+                        <p class="small text-body-secondary">
+                            MFA ativado com sucesso. Cada código abaixo funciona <strong>uma única vez</strong>
+                            e serve para entrar caso você perca acesso ao seu aplicativo autenticador.
+                            Esta é a <strong>única vez</strong> que eles são exibidos — anote-os num lugar seguro.
+                        </p>
+                        <ul class="list-group list-group-flush font-monospace">
+                            {% for codigo in codigos_backup %}
+                                <li class="list-group-item">{{ codigo }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            {% elif mfa_setup %}
+                <div class="card">
+                    <div class="card-header bg-transparent fw-semibold">
+                        <i class="bi bi-shield-lock-fill me-2"></i>Configurar MFA
+                    </div>
+                    <div class="card-body">
+                        {% if mfa_setup.erro %}
+                            <div class="alert alert-danger py-2 small" role="alert">{{ mfa_setup.erro }}</div>
+                        {% endif %}
+                        {% if mfa_setup.qr_code_base64 %}
+                            <p class="small text-body-secondary">
+                                Escaneie o QR code com um aplicativo autenticador (Google Authenticator,
+                                Authy, etc.) — ou digite o segredo manualmente.
+                            </p>
+                            <div class="text-center mb-3">
+                                <img src="data:image/png;base64,{{ mfa_setup.qr_code_base64 }}" alt="QR code MFA" style="max-width: 200px;">
+                            </div>
+                        {% endif %}
+                        <p class="small">
+                            Segredo manual: <code>{{ mfa_setup.segredo }}</code>
+                        </p>
+                        <form method="post" action="/painel/perfil/mfa/confirmar">
+                            <div class="mb-3">
+                                <label class="form-label">Código do autenticador</label>
+                                <input type="text" class="form-control" name="codigo" inputmode="numeric" required autofocus>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-check-lg me-1"></i>Confirmar e ativar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            {% elif usuario.mfa_enabled %}
+                <div class="card">
+                    <div class="card-header bg-transparent fw-semibold">
+                        <i class="bi bi-shield-check text-success me-2"></i>Autenticação em duas etapas
+                    </div>
+                    <div class="card-body">
+                        <p class="small text-body-secondary mb-3">
+                            <span class="badge text-bg-success">Ativado</span>
+                            Um código do seu aplicativo autenticador é exigido a cada login.
+                        </p>
+                        {% if erro_desativar %}
+                            <div class="alert alert-danger py-2 small" role="alert">{{ erro_desativar }}</div>
+                        {% endif %}
+                        <form method="post" action="/painel/perfil/mfa/desativar">
+                            <div class="mb-3">
+                                <label class="form-label">Confirme sua senha para desativar</label>
+                                <input type="password" class="form-control" name="password" required>
+                            </div>
+                            <button type="submit" class="btn btn-outline-danger w-100">
+                                <i class="bi bi-shield-slash me-1"></i>Desativar MFA
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            {% else %}
+                <div class="card">
+                    <div class="card-header bg-transparent fw-semibold">
+                        <i class="bi bi-shield-lock me-2"></i>Autenticação em duas etapas
+                    </div>
+                    <div class="card-body">
+                        <p class="small text-body-secondary">
+                            <span class="badge text-bg-secondary">Desativado</span>
+                            Recomendado especialmente para administrador da plataforma, entidade
+                            gestora e dirigentes — adiciona um segundo fator (código de um
+                            aplicativo autenticador) além da senha.
+                        </p>
+                        <a href="/painel/perfil/mfa/configurar" class="btn btn-primary w-100">
+                            <i class="bi bi-shield-plus me-1"></i>Configurar MFA
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

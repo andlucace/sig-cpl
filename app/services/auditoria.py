@@ -11,7 +11,12 @@ from app.models.auditoria import RegistroAuditoria
 from app.models.enums import AcaoAuditoria
 
 # RN-014/RNF-002: nunca gravar segredos na trilha, mesmo que o modelo mude.
-_CAMPOS_REDIGIDOS = {"hashed_password"}
+# "token" cobre qualquer credencial de uso único guardada em texto puro
+# num campo com esse nome (ex.: `TokenRecuperacaoSenha.token`,
+# `CampanhaConvite.token`) — redigido pelo nome do campo, não por modelo,
+# então vale pra qualquer um novo que apareça sem precisar lembrar de
+# atualizar esta lista.
+_CAMPOS_REDIGIDOS = {"hashed_password", "mfa_secret", "mfa_backup_codes", "token"}
 
 # Cadeias de navegação usadas para descobrir a CPL de um registro que não
 # guarda cpl_id diretamente (ex.: um voto só chega à CPL via

@@ -55,7 +55,7 @@ from app.models.projeto import (
     RecursoSubmissaoProjeto,
     RiscoProjeto,
 )
-from app.models.usuario import Usuario, UsuarioPapel
+from app.models.usuario import TokenRecuperacaoSenha, Usuario, UsuarioPapel
 
 __all__ = [
     "CPL",
@@ -64,6 +64,7 @@ __all__ = [
     "EntidadeElo",
     "Pessoa",
     "PessoaVinculo",
+    "TokenRecuperacaoSenha",
     "Usuario",
     "UsuarioPapel",
     "OrgaoGovernanca",

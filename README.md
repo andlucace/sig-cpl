@@ -946,9 +946,10 @@ Para criar o primeiro usuário administrativo:
   ativos), calculados em `_kpis_dashboard()` em `routes_restrito.py`,
   respeitando o mesmo escopo de RBAC (`cpl_ids_visiveis`) usado no resto do
   sistema — cada usuário só vê números das CPLs que pode enxergar.
-- Autenticação por **e-mail/senha com hash bcrypt** e token **JWT**; MFA
-  (RF-004) ainda não implementado — RBAC por papel/CPL (RF-005) está
-  implementado, ver seção própria abaixo.
+- Autenticação por **e-mail/senha com hash bcrypt** e token **JWT**;
+  recuperação de senha e MFA (RF-004, completo) — ver seção própria
+  abaixo; RBAC por papel/CPL (RF-005) está implementado, ver seção
+  própria abaixo.
 - Governança tem UI própria em `/painel/governanca` (HTMX): as rotas web
   (`app/web/routes_governanca.py`) consultam o banco diretamente via
   SQLAlchemy — não reaproveitam os endpoints de `/api/governanca/...` — para
@@ -956,6 +957,82 @@ Para criar o primeiro usuário administrativo:
   usado em `routes_restrito.py`. Isso duplica a checagem de RBAC entre API e
   web (implementada duas vezes com a mesma função `verificar_papel`, mas em
   dois lugares) — funciona, mas é candidato a unificação futura.
+
+## Autenticação: recuperação de senha e MFA (RF-004)
+
+Login por e-mail/senha (bcrypt+JWT) já existia; esta fatia fechou as duas
+peças que faltavam — decisão de escopo tomada com o usuário via
+`AskUserQuestion` antes de implementar (canal de recuperação: e-mail
+transacional de verdade via SMTP genérico, não reset assistido por
+administrador; provedor: SMTP genérico configurável, não uma API
+específica tipo Resend).
+
+- **Recuperação de senha** — `TokenRecuperacaoSenha` (`app/models/usuario.py`):
+  token de uso único (`secrets.token_urlsafe(32)`), validade curta
+  (`password_reset_token_expire_minutes`, padrão 60 min), `usado_em`
+  marca consumo (nunca reutilizável mesmo dentro da janela).
+  `POST /api/auth/esqueci-senha` **sempre responde a mesma mensagem
+  genérica**, exista o e-mail ou não — proteção padrão contra
+  enumeração de contas (`solicitar_recuperacao_senha` em
+  `app/services/recuperacao_senha.py` é silenciosa se o usuário não
+  existir). `POST /api/auth/redefinir-senha` consome o token. UI web em
+  `/esqueci-senha` e `/redefinir-senha/{token}`.
+  - **E-mail via SMTP genérico** (`app/services/email.py`) — nenhum
+    provedor específico embutido no código; configuração inteira via
+    `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD`/`SMTP_FROM`/
+    `SMTP_USE_TLS` (`app/core/config.py`). `SMTP_HOST` ausente faz
+    `enviar_email` levantar `RuntimeError` (500 na rota) em vez de
+    falhar silenciosamente — sinal claro de "e-mail não configurado
+    ainda" em vez de fingir que enviou. **Pendência de deploy**: as
+    variáveis `SMTP_*` precisam ser preenchidas em produção
+    (`.env.prod`) com credenciais reais antes desta funcionalidade
+    funcionar de verdade lá — ver "Deploy em produção" abaixo.
+  - `app_base_url` (`app/core/config.py`) monta o link absoluto do
+    e-mail (`{app_base_url}/redefinir-senha/{token}`) — diferente do
+    resto do app, que só usa caminhos relativos (suficiente dentro do
+    navegador, mas um e-mail não tem "app" pra resolver um link
+    relativo). `https://sigcpl.dedev.cloud` em produção.
+- **MFA (TOTP, RFC 6238)** — `pyotp` + `qrcode` (novas dependências).
+  "Opção de MFA para perfis críticos" implementado como recurso que
+  **qualquer usuário pode ativar** (não uma obrigação amarrada a um
+  papel específico — o requisito não define uma lista fechada de
+  "perfis críticos" nem pede bloqueio de quem não ativa), com a UI de
+  configuração (`/painel/perfil`) recomendando explicitamente a
+  ativação para administrador da plataforma/entidade gestora/dirigentes.
+  - Ativação em dois passos (`app/services/mfa.py`), mesmo raciocínio do
+    remapeamento de importação (RF-013) — nunca ativar direto:
+    `iniciar_ativacao_mfa` gera e já salva o segredo
+    (`Usuario.mfa_secret`), mas só `confirmar_ativacao_mfa` (com um
+    código válido gerado a partir dele) liga `mfa_enabled`. Sem essa
+    etapa, um segredo mal escaneado no autenticador trancaria o próprio
+    usuário pra fora da conta.
+  - Confirmação gera **8 códigos de backup** de uso único
+    (`Usuario.mfa_backup_codes`, hash bcrypt — nunca texto puro, mesmo
+    padrão de `hashed_password`), mostrados **uma única vez** na tela.
+  - **Login web em duas etapas** quando `mfa_enabled`: senha correta
+    emite um cookie `sigcpl_mfa_pending` separado (JWT, 5 min, claim
+    `mfa_pending: true`) e redireciona pra `/login/mfa`; só o código
+    (TOTP ou backup) emite o cookie de sessão real. **Nunca aceito como
+    sessão** — `get_current_user` rejeita explicitamente qualquer token
+    com a claim `mfa_pending`, então mesmo que esse cookie vazasse (ex.:
+    reenviado manualmente como Bearer), ele não bypassa o segundo
+    fator.
+  - **Login por API é um passo só** — `POST /api/auth/login` aceita
+    `mfa_code` opcional no mesmo request (campo `Form` a mais ao lado
+    do `OAuth2PasswordRequestForm`), porque um cliente de API já é
+    capaz de gerar o código na hora, sem precisar de tela intermediária.
+  - `POST /api/auth/mfa/{iniciar-ativacao,confirmar-ativacao,desativar}`
+    (API) e `/painel/perfil` + `/painel/perfil/mfa/{configurar,confirmar,desativar}`
+    (web, com QR code renderizado como `<img>` base64 inline, sem
+    salvar arquivo).
+  - `mfa_secret`, `mfa_backup_codes` (e, por extensão, qualquer campo
+    chamado `token` em qualquer modelo — cobre também
+    `TokenRecuperacaoSenha.token` e retroativamente
+    `CampanhaConvite.token`, que nunca tinha sido redigido) foram
+    adicionados a `_CAMPOS_REDIGIDOS` em `app/services/auditoria.py` —
+    nunca aparecem em texto reconhecível na trilha de auditoria, mesmo
+    a captura automática de `ATUALIZACAO` que registra todo `UPDATE` de
+    qualquer modelo.
 
 ## Controle de acesso (RBAC)
 
@@ -1132,6 +1209,15 @@ VPS Hostinger:
   `SESSION_COOKIE_SECURE=true` e `ENVIRONMENT=production` (diferente do
   `.env` de dev). Vivem só em `/opt/sigcpl/.env.prod` na VPS — não estão
   neste repositório nem em nenhum arquivo local.
+- **`SMTP_*` (RF-004, recuperação de senha)**: `SMTP_HOST`/`SMTP_PORT`/
+  `SMTP_USER`/`SMTP_PASSWORD`/`SMTP_FROM`/`SMTP_USE_TLS` — ausentes em
+  `.env.prod` até alguém preencher credenciais de um provedor SMTP real;
+  até lá, `/esqueci-senha` responde 500 em produção (`enviar_email`
+  levanta `RuntimeError` de propósito em vez de fingir que enviou).
+  `APP_BASE_URL=https://sigcpl.dedev.cloud` também precisa estar
+  definido (usado para montar o link absoluto do e-mail) — sem ele, o
+  padrão de dev (`http://127.0.0.1:8000`) vazaria pro e-mail em
+  produção.
 
 ### Como reimplantar depois de mudar código
 
@@ -1297,3 +1383,11 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
     (RF-042) já tinha `reuniao_id` desde a ata em PDF (RF-043); ver seção
     "Governança" acima para os detalhes de rota. Com isso, RF-015 a
     RF-020 (Governança) estão completos.
+12. ~~RF-004: recuperação de senha e MFA~~ — **feito**: ver seção
+    "Autenticação: recuperação de senha e MFA" acima. Recuperação por
+    e-mail via SMTP genérico (`TokenRecuperacaoSenha`, token de uso
+    único) e MFA por TOTP (`pyotp`/`qrcode`, ativação em 2 passos, 8
+    códigos de backup, login web em 2 etapas). **Pendência de deploy**:
+    variáveis `SMTP_*` ainda precisam de credenciais reais em produção
+    para o envio de e-mail funcionar de fato lá (a funcionalidade em si
+    está completa e testada localmente contra um SMTP de teste).

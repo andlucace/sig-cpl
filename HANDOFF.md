@@ -51,7 +51,7 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   `http://127.0.0.1:8010`** — confira com `netstat -ano | grep 8010` antes
   de subir outro, e mate o processo antigo antes de reiniciar (o servidor
   não usa `--reload`, então mudanças de código exigem restart manual).
-- **Migrações Alembic aplicadas:** 14 revisões, todas no banco atual:
+- **Migrações Alembic aplicadas:** 21 revisões, todas no banco atual:
   1. `18541dca0a36` — modelos base (CPL, Entidade, Pessoa, Usuário)
   2. `0ba4d1a10f9d` — módulo Governança
   3. `5dd913b79202` — módulo Planejamento Estratégico
@@ -114,8 +114,12 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
       `Boolean NOT NULL` sem `server_default` de novo
       (`etapas_projeto.marco`, mesmo gotcha exato da migração
       `bcae54b40941`) — ambos pegos antes de aplicar
+  21. `48be8b55a24d` — tabela `tokens_recuperacao_senha` + colunas
+      `usuarios.mfa_secret`/`usuarios.mfa_backup_codes` (RF-004) — sem
+      gotcha nenhum dos dois de sempre (colunas novas todas nullable)
   - (a visão global + paginação da auditoria, feita antes da nº 10,
-    **não** precisou de migração — é só query/rota/template novos)
+    **não** precisou de migração — é só query/rota/template novos;
+    mesma coisa para RF-041/045/053/017, feitas depois da nº 20)
 
 ### Usuários de teste já existentes no banco
 
@@ -1181,6 +1185,110 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     `reuniao_ata_shot.js`/`documentos_shot.js`), sem erros de console
     nem 500 reais no log. **Com isso, RF-015 a RF-020 (Governança) estão
     completos.**
+33. **RF-004: recuperação de senha e MFA** — usuário pediu "implementar
+    a RF-004". **Única fatia desta sessão com decisão de escopo real
+    tomada via `AskUserQuestion` antes de codar** (as outras foram
+    "óbvias" o suficiente pra decidir sozinho): (a) canal de recuperação
+    de senha — e-mail transacional de verdade vs. reset assistido por
+    administrador vs. só MFA por enquanto — usuário escolheu e-mail de
+    verdade; (b) provedor — SMTP genérico vs. API de provedor específico
+    (Resend) vs. decidir depois — usuário escolheu SMTP genérico. Isso
+    importa porque o sistema **nunca teve nenhum canal de e-mail** antes
+    desta fatia (todas as notificações do RF-049 são só dentro do
+    sistema) — não dava pra simplesmente inferir a resposta certa, e as
+    duas perguntas tinham consequência real (infra nova, segredos novos
+    em produção).
+    - **Modelo**: `TokenRecuperacaoSenha` (`app/models/usuario.py`) —
+      token de uso único (`secrets.token_urlsafe(32)`), `expira_em`,
+      `usado_em`. `Usuario` ganhou `mfa_secret` (TOTP em base32) e
+      `mfa_backup_codes` (JSONB, lista de hashes bcrypt — nunca texto
+      puro). Migração `48be8b55a24d`, sem gotcha nenhum dos dois de
+      sempre — colunas novas todas nullable (sem `server_default`
+      necessário), sem enum nenhum envolvido.
+    - **Dependências novas**: `pyotp` (TOTP) e `qrcode[pil]` (QR code —
+      Pillow já vinha transitivamente de `fpdf2`, mas declarei explícito
+      mesmo assim, pra não depender de uma transitiva).
+    - **`app/services/email.py`**: SMTP genérico via `smtplib` puro —
+      nenhum provedor específico embutido, tudo via `SMTP_*` em
+      `app/core/config.py`. `SMTP_HOST` ausente levanta `RuntimeError`
+      (vira 500 na rota) em vez de fingir que enviou — sinal de
+      configuração faltando, não um bug.
+    - **`app/services/recuperacao_senha.py`**: `solicitar_recuperacao_senha`
+      é **silenciosa** se o e-mail não existir (nunca revela) — a rota
+      sempre devolve a mesma mensagem genérica, exista a conta ou não
+      (proteção padrão contra enumeração). `redefinir_senha` idem: não
+      diferencia "token não existe" de "expirado" de "já usado" na
+      resposta — só `False`.
+    - **`app/services/mfa.py`**: ativação em **dois passos**, mesmo
+      raciocínio do remapeamento de importação (RF-013) — nunca ativar
+      direto. `iniciar_ativacao_mfa` já salva o segredo em
+      `usuario.mfa_secret`, mas só `confirmar_ativacao_mfa` (código
+      válido gerado a partir dele) liga `mfa_enabled`. Sem essa etapa,
+      um segredo mal escaneado no autenticador trancaria o próprio
+      usuário pra fora — a mesma cautela de "nunca aplicar de primeira
+      sem confirmação humana" que já apareceu em RN-016 (decisão de
+      nível de maturidade) e no remapeamento de planilha.
+    - **Bug de segurança pego antes de testar, não depois**: o token do
+      passo intermediário do login com MFA (senha ok, código ainda não
+      verificado) é um JWT válido com `sub` = id do usuário — se
+      `get_current_user` só checasse `sub`, esse token *pendente*
+      seria aceito como sessão completa, **anulando o MFA inteiro** (um
+      atacante que interceptasse só esse cookie já teria acesso total,
+      sem nunca precisar do segundo fator). Corrigido de duas formas
+      redundantes: (1) cookie **separado** (`sigcpl_mfa_pending`, nunca
+      `sigcpl_access_token`) — `get_current_user` só lê o cookie de
+      sessão de verdade; (2) `get_current_user` também rejeita
+      explicitamente qualquer token com a claim `mfa_pending: true`,
+      mesmo que reenviado manualmente como Bearer. Duas camadas porque
+      a primeira sozinha dependeria de nenhuma rota nunca ler o cookie
+      errado por engano — a segunda torna isso estruturalmente
+      impossível independente de onde o token apareça.
+    - **Login em duas velocidades**: web é 2 passos (POST /login com
+      senha → cookie pendente de 5 min → GET/POST /login/mfa com o
+      código → cookie de sessão real), porque um humano precisa de uma
+      tela pra digitar o código depois de ver que a senha bateu. API é
+      **1 passo só** (`mfa_code` opcional no mesmo `POST /api/auth/login`,
+      ao lado do `OAuth2PasswordRequestForm`) porque um cliente de API
+      já sabe gerar o código na hora — não faz sentido forçar uma
+      segunda chamada só por uniformidade com o fluxo web.
+    - **Redação de auditoria**: `mfa_secret`, `mfa_backup_codes` e —
+      mais importante — **qualquer campo chamado `token`** (não só
+      `TokenRecuperacaoSenha.token`) entraram em `_CAMPOS_REDIGIDOS`
+      (`app/services/auditoria.py`). Descobri nesse processo que
+      `CampanhaConvite.token` (RF-012, sessão bem anterior) **nunca
+      tinha sido redigido** — o listener automático de auditoria
+      (`before_flush`) captura qualquer modelo com `id`, então esse
+      token de autopreenchimento público vinha sendo gravado em texto
+      puro na trilha desde que o módulo de Cadastro dinâmico existe.
+      Corrigido de graça (redigir por nome de campo, não por modelo,
+      resolve os dois de uma vez) — não fui atrás de expurgar o
+      histórico já gravado no banco, só parei de gravar novo.
+    - **Testado sem depender de um provedor de e-mail real**: subi um
+      servidor SMTP de debug local (`aiosmtpd`, instalado só na venv de
+      dev — não é dependência do projeto) que só imprime o e-mail
+      recebido, apontei `SMTP_HOST=127.0.0.1`/`SMTP_PORT=1025` pro app
+      local, e validei o fluxo inteiro ponta a ponta: pedir recuperação
+      → capturar o link real do "e-mail" → abrir a página → redefinir →
+      confirmar que a senha antiga para de funcionar e a nova funciona
+      → confirmar que reusar o mesmo token falha. MFA testado gerando
+      códigos TOTP de verdade via `pyotp.TOTP(segredo).now()` num
+      script auxiliar (mesmo segredo que o backend gerou), cobrindo
+      login sem código (falha), com código TOTP certo (passa), com
+      código de backup (passa e consome — reuso falha depois),
+      cookie pendente sozinho não abre `/painel` (redireciona pro
+      login), e o card de auditoria confirmando a redação. Playwright
+      (`rf004_shot.js`) cobriu a UI: `/esqueci-senha`, `/painel/perfil`
+      sem MFA, tela de QR code, confirmação, tela de códigos de backup
+      (uma vez só), e desativação — sem erros de console. Regressão:
+      `login_and_shot.js`/`documentos_shot.js`/`projeto_rf041_shot.js`/
+      `rbac_403_shot.js` sem 500 reais no log.
+    **Pendência real de deploy** (não de código): as variáveis `SMTP_*`
+    em produção (`.env.prod`) ainda estão vazias — a rota
+    `/esqueci-senha` vai 500 em produção até alguém preencher
+    credenciais de um provedor SMTP de verdade lá. Documentado também no
+    README e não escondido — é uma decisão consciente de "a
+    funcionalidade está pronta e testada, falta só a chave de
+    produção", não um bug.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -1569,6 +1677,19 @@ ordem recomendada para o que vem depois:
     a marcação desatualizada do RF-019 (alertas automáticos de tarefa já
     existiam via RF-049, só a documentação estava desatualizada).
     **Com isso, RF-015 a RF-020 (módulo de Governança) estão completos.**
+14. ~~RF-004: recuperação de senha e MFA~~ — **feito**: ver item 33 da
+    seção "Ordem em que este projeto foi construído". Duas decisões de
+    escopo tomadas com o usuário antes de codar (canal de recuperação =
+    e-mail de verdade; provedor = SMTP genérico). Token de uso único +
+    SMTP genérico (`app/services/email.py`, sem provedor embutido) pra
+    recuperação; TOTP com ativação em 2 passos + 8 códigos de backup pra
+    MFA; login web em 2 etapas (cookie pendente que `get_current_user`
+    rejeita explicitamente, nunca aceito como sessão — bug de segurança
+    pego antes de testar, ver item 33). De brinde: `CampanhaConvite.token`
+    (RF-012), que nunca tinha sido redigido na auditoria, passou a ser.
+    **Pendência real, não de código**: variáveis `SMTP_*` em produção
+    (`.env.prod`) ainda vazias — `/esqueci-senha` vai 500 em produção
+    até serem preenchidas com credenciais reais.
 
 ## Deploy em produção
 

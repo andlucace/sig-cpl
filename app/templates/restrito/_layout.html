@@ -48,9 +48,9 @@
             </a>
         </nav>
         <div class="mt-auto pt-3 border-top border-secondary-subtle">
-            <div class="small text-white-50 mb-2 text-truncate">
+            <a class="small text-white-50 mb-2 text-truncate d-block text-decoration-none {% if pagina_ativa == 'perfil' %}text-white{% endif %}" href="/painel/perfil">
                 <i class="bi bi-person-circle me-1"></i>{{ usuario.email if usuario else "" }}
-            </div>
+            </a>
             <a class="nav-link text-white-50 d-flex align-items-center gap-2 p-0" href="/logout">
                 <i class="bi bi-box-arrow-right"></i> Sair
             </a>
