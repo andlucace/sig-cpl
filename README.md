@@ -56,7 +56,8 @@ O bloco **Governança** do modelo conceitual também foi implementado
 - `OrgaoGovernanca` — conselho, câmara, comissão temática ou grupo de
   trabalho, com competências, quórum mínimo e periodicidade parametrizáveis.
 - `MembroOrgao` — composição/mandato (pessoa, função, vigência).
-- `Reuniao` — convocação, pauta, status e ata.
+- `Reuniao` — convocação, pauta, status, ata e anexos de arquivo (RF-017,
+  ver abaixo).
 - `Presenca` — presença de cada membro na reunião.
 - `Deliberacao` — decisão tomada, quórum necessário, responsável, prazo e
   evidência de execução.
@@ -89,6 +90,19 @@ As adições (membro, reunião, presença, deliberação, voto, tarefa) usam
 sem recarregar a página; forms cujo valor é sempre único por página (ata da
 reunião, resultado da deliberação) substituem o card inteiro via
 `hx-swap="outerHTML"`.
+
+**Anexos de reunião** (RF-017) — última peça que faltava no módulo,
+implementada sem entidade nova: `Documento` (RF-042) já tinha uma
+`reuniao_id` opcional desde a geração de ata em PDF (RF-043); só faltava
+deixar o usuário anexar um arquivo qualquer (não só a ata gerada
+automaticamente) a uma reunião. `POST /api/documentos/cpls/{cpl_id}`
+passou a aceitar `reuniao_id` como campo opcional (valida que a reunião
+pertence à mesma CPL do upload), e `GET /api/documentos/reunioes/{id}`
+lista os anexos de uma reunião. Upload é um formulário plano de arquivo
+(sem JS), com uma rota web própria
+(`POST /painel/documentos/reunioes/{id}/anexos`, não a genérica
+`/painel/documentos/cpls/{cpl_id}`) porque precisa redirecionar de volta
+pra tela da reunião, não pra lista geral de documentos da CPL.
 
 O bloco **Planejamento** do modelo conceitual também foi implementado
 (RF-021 a RF-023):
@@ -1278,3 +1292,8 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
     painéis do requisito** (governança, planejamento/cadastro, projetos,
     finanças, maturidade) existem no mesmo dashboard consolidado por
     CPL.
+11. ~~RF-017: anexos de arquivo em reuniões~~ — **feito**: única peça que
+    faltava no módulo de Governança. Sem entidade nova — `Documento`
+    (RF-042) já tinha `reuniao_id` desde a ata em PDF (RF-043); ver seção
+    "Governança" acima para os detalhes de rota. Com isso, RF-015 a
+    RF-020 (Governança) estão completos.

@@ -1135,6 +1135,52 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     finanças, maturidade) existem no mesmo dashboard consolidado por
     CPL — nenhuma migração, testado via curl + Playwright, sem 500
     reais no log.
+32. **RF-017: anexos de arquivo em reuniões** — usuário pediu "vamos
+    implementar a RF-017", a única peça que faltava no módulo de
+    Governança (a lista era a resposta da minha sugestão anterior de
+    backlog). **Zero entidade nova, zero migração** — `Documento.reuniao_id`
+    (`app/models/documento.py`) já existia desde sempre, usado só pela
+    geração automática de ata em PDF (`gerar_ata_pdf`, RF-043); só
+    faltava deixar o usuário anexar um arquivo *qualquer* (não só a ata
+    gerada) a uma reunião. Mudanças:
+    - `POST /api/documentos/cpls/{cpl_id}` (`enviar_documento`, já
+      existia) ganhou um campo `reuniao_id: uuid.UUID | None = Form(None)`
+      opcional — se vier preenchido, valida que `reuniao.orgao.cpl_id ==
+      cpl_id` (400 se não bater, 404 se a reunião não existir).
+    - `GET /api/documentos/reunioes/{reuniao_id}` (rota nova) — lista os
+      anexos de uma reunião, mesmo filtro de confidencialidade
+      (`PAPEIS_IMPEDIMENTO_LEITURA` pra ver documento confidencial) já
+      usado em `listar_documentos` (por CPL). **Cuidado de ordenação de
+      rota**: registrada antes de `GET /{documento_id}` no arquivo — não
+      que colidisse (contagem de segmentos de path diferente, `/reunioes/
+      {id}` tem 2 segmentos vs. `/{documento_id}` tem 1, então Starlette
+      nunca teria confundido as duas), mas segui o hábito de sempre
+      checar isso explicitamente depois da lição do item 13 de
+      "Armadilhas já resolvidas".
+    - Web: rota nova `POST /painel/documentos/reunioes/{id}/anexos` (não
+      reaproveitei a genérica `POST /painel/documentos/cpls/{cpl_id}`)
+      porque essa redireciona pra lista geral de documentos da CPL, e eu
+      queria voltar pro detalhe da reunião — mesmo raciocínio já usado
+      pra `ata-pdf` no mesmo arquivo (que também tem sua própria rota
+      `/reunioes/{id}/ata-pdf` em vez da genérica).
+    - Template `reuniao_detail.html`: card "Anexos" (lista com badge de
+      categoria/confidencialidade + botão baixar, mesmo estilo de
+      `cpl_documentos.html`) e card "Novo anexo" (form plano de upload,
+      sem JS, mesmo padrão de `cpl_documentos.html`).
+    **Achado no meio do trabalho, não relacionado ao RF-017**: RF-019
+    ("alertas automáticos" de tarefa) estava marcado `⚠️ Parcial` em
+    `docs/requisitos_macros.md` desde antes, mas isso já tinha sido
+    coberto pelo motor de notificações do RF-049
+    (`_gerar_tarefas_com_prazo()` em `app/services/notificacoes.py`) —
+    documentação desatualizada, não uma lacuna real. Corrigido pra
+    `✅ Implementado` na mesma sessão, já que eu tinha sinalizado isso
+    numa resposta anterior sobre o que restava no backlog.
+    Testado via curl (upload com `reuniao_id` válido, `reuniao_id` de
+    UUID inexistente → 404, listagem por reunião) e Playwright
+    (`rf017_shot.js` — upload real de arquivo via UI, mais rerun de
+    `reuniao_ata_shot.js`/`documentos_shot.js`), sem erros de console
+    nem 500 reais no log. **Com isso, RF-015 a RF-020 (Governança) estão
+    completos.**
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -1516,6 +1562,13 @@ ordem recomendada para o que vem depois:
     módulo de Maturidade em si (item 9 acima — habilitação jurídica,
     simular cenários, validade/versão de evidência) não têm relação com
     o painel e seguem como estavam.
+13. ~~RF-017: anexos de arquivo em reuniões~~ — **feito**: ver item 32
+    da seção "Ordem em que este projeto foi construído". Zero entidade
+    nova, zero migração — reaproveitou `Documento.reuniao_id`, que já
+    existia desde a geração de ata em PDF (RF-043). De brinde, corrigida
+    a marcação desatualizada do RF-019 (alertas automáticos de tarefa já
+    existiam via RF-049, só a documentação estava desatualizada).
+    **Com isso, RF-015 a RF-020 (módulo de Governança) estão completos.**
 
 ## Deploy em produção
 

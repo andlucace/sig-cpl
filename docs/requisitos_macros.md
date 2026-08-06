@@ -170,9 +170,9 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 |---|---|---|---|
 | RF-015 | Cadastrar estrutura de governança, estatuto/regimento, órgãos, mandatos, composição, competências, quórum e periodicidade. | M | ✅ Implementado (`OrgaoGovernanca`) |
 | RF-016 | Criar conselhos, câmaras, grupos e comissões temáticas, com membros, papéis e vigência. | M | ✅ Implementado (`OrgaoGovernanca`, `MembroOrgao`) |
-| RF-017 | Gerenciar agenda, convocação, pauta, presença, anexos, ata e registro de reuniões. | M | ⚠️ Parcial — tudo exceto anexos de arquivo (`Reuniao`, `Presenca`) |
+| RF-017 | Gerenciar agenda, convocação, pauta, presença, anexos, ata e registro de reuniões. | M | ✅ Implementado — `Reuniao`, `Presenca` cobrem agenda/convocação/pauta/presença/ata; **anexos de arquivo** reaproveitam o repositório de Documentos (RF-042, mesma `reuniao_id` já usada pela ata gerada em PDF, RF-043), sem entidade nova. `POST /api/documentos/cpls/{cpl_id}` aceita `reuniao_id` opcional (valida que a reunião pertence à mesma CPL do upload); `GET /api/documentos/reunioes/{reuniao_id}` lista os anexos. UI: card "Anexos" + formulário de upload em `/painel/governanca/reunioes/{id}` (rota web própria, `POST /painel/documentos/reunioes/{id}/anexos`, redireciona de volta pra tela da reunião — não pra lista geral de documentos da CPL) |
 | RF-018 | Registrar deliberações, votações, quórum, impedimentos, responsáveis, prazos e evidências de execução. | M | ✅ Implementado (`Deliberacao`, `VotoRegistro`) |
-| RF-019 | Controlar tarefas e planos de ação decorrentes de decisões, com alertas e status. | M | ⚠️ Parcial — tarefas/status ok (`TarefaGovernanca`); alertas automáticos **não** |
+| RF-019 | Controlar tarefas e planos de ação decorrentes de decisões, com alertas e status. | M | ✅ Implementado — tarefas/status (`TarefaGovernanca`); alertas automáticos de prazo vencendo/vencido cobertos pelo motor de notificações do RF-049 (`_gerar_tarefas_com_prazo()` em `app/services/notificacoes.py`, ao responsável) — não uma tela separada, mesma `Notificacao` usada pelos outros 4 tipos de alerta do sistema |
 | RF-020 | Registrar declaração de conflito de interesses e impedimentos em avaliações ou deliberações. | S | ✅ Implementado (`DeclaracaoImpedimento`) |
 
 ### Estratégia

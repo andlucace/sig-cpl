@@ -127,4 +127,78 @@
             </div>
         </div>
     </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-paperclip me-2"></i>Anexos
+                </div>
+                <div class="list-group list-group-flush">
+                    {% for anexo in anexos %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                <div>
+                                    <i class="bi bi-file-earmark-text text-primary me-1"></i>
+                                    <strong>{{ anexo.titulo }}</strong>
+                                    <span class="badge text-bg-secondary">{{ anexo.categoria.value.replace('_', ' ') }}</span>
+                                    <span class="badge
+                                        {% if anexo.confidencialidade.value == 'confidencial' %}text-bg-danger
+                                        {% elif anexo.confidencialidade.value == 'interno' %}text-bg-secondary
+                                        {% else %}text-bg-success{% endif %}">{{ anexo.confidencialidade.value }}</span>
+                                    <small class="text-body-secondary d-block ms-4">
+                                        {{ anexo.nome_arquivo_original }}
+                                        {% if anexo.tamanho_bytes %} — {{ (anexo.tamanho_bytes / 1024) | round(1) }} KB{% endif %}
+                                    </small>
+                                </div>
+                                <a href="/painel/documentos/{{ anexo.id }}/arquivo" class="btn btn-outline-primary btn-sm">
+                                    <i class="bi bi-download"></i> Baixar
+                                </a>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhum anexo enviado ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-paperclip me-2"></i>Novo anexo
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/painel/documentos/reunioes/{{ reuniao.id }}/anexos" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label class="form-label">Título</label>
+                            <input type="text" class="form-control" name="titulo" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Categoria</label>
+                            <select class="form-select" name="categoria" required>
+                                {% for categoria in categorias_documento %}
+                                    <option value="{{ categoria.value }}">{{ categoria.value.replace('_', ' ') }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Confidencialidade</label>
+                            <select class="form-select" name="confidencialidade">
+                                {% for c in confidencialidades_documento %}
+                                    <option value="{{ c.value }}" {% if c.value == 'interno' %}selected{% endif %}>{{ c.value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Arquivo</label>
+                            <input type="file" class="form-control" name="arquivo" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-upload me-1"></i>Enviar
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
 {% endblock %}

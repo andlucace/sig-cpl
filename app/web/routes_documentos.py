@@ -196,6 +196,50 @@ def baixar_documento(
     return FileResponse(caminho, filename=documento.nome_arquivo_original, media_type=documento.tipo_mime)
 
 
+@router.post("/reunioes/{reuniao_id}/anexos")
+async def enviar_anexo_reuniao(
+    reuniao_id: uuid.UUID,
+    arquivo: UploadFile,
+    titulo: str = Form(...),
+    categoria: CategoriaDocumento = Form(...),
+    confidencialidade: ConfidencialidadeDocumento = Form(ConfidencialidadeDocumento.INTERNO),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-017: anexo de arquivo à reunião — mesmo repositório de
+    Documentos (RF-042), ligado via `reuniao_id`. Rota fixa (não
+    `/painel/documentos/cpls/{cpl_id}`) porque redireciona de volta pra
+    tela da reunião, não pra lista geral de documentos da CPL."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    reuniao = db.get(Reuniao, reuniao_id)
+    if reuniao is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Reunião não encontrada.")
+    cpl_id = reuniao.orgao.cpl_id
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=cpl_id)
+
+    conteudo = await arquivo.read()
+    caminho = salvar_arquivo(cpl_id, arquivo.filename or "documento", conteudo)
+    documento = Documento(
+        cpl_id=cpl_id,
+        titulo=titulo,
+        categoria=categoria,
+        confidencialidade=confidencialidade,
+        arquivo_path=caminho,
+        nome_arquivo_original=arquivo.filename or "documento",
+        tipo_mime=arquivo.content_type,
+        tamanho_bytes=len(conteudo),
+        criado_por_id=usuario.id,
+        reuniao_id=reuniao_id,
+    )
+    db.add(documento)
+    db.commit()
+    return RedirectResponse(
+        f"/painel/governanca/reunioes/{reuniao_id}", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
 @router.post("/reunioes/{reuniao_id}/ata-pdf")
 def gerar_ata_pdf(
     reuniao_id: uuid.UUID,

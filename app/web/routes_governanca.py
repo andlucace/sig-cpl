@@ -334,6 +334,12 @@ def detalhe_reuniao(
     )
     presencas = db.query(Presenca).filter(Presenca.reuniao_id == reuniao_id).all()
     deliberacoes = db.query(Deliberacao).filter(Deliberacao.reuniao_id == reuniao_id).all()
+    anexos = (
+        db.query(Documento)
+        .filter(Documento.reuniao_id == reuniao_id)
+        .order_by(Documento.created_at.desc())
+        .all()
+    )
     return templates.TemplateResponse(
         request,
         "restrito/governanca/reuniao_detail.html",
@@ -342,6 +348,9 @@ def detalhe_reuniao(
             "membros": membros,
             "presencas": presencas,
             "deliberacoes": deliberacoes,
+            "anexos": anexos,
+            "categorias_documento": list(CategoriaDocumento),
+            "confidencialidades_documento": list(ConfidencialidadeDocumento),
             "status_opcoes": list(StatusReuniao),
             "usuario": usuario,
             "pagina_ativa": "governanca",
