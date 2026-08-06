@@ -27,6 +27,7 @@ from app.services.indicadores import (
     resumo_governanca,
     resumo_planejamento,
 )
+from app.services.maturidade import resumo_recadastramento
 from app.services.projeto import resumo_projetos_cpl
 from app.web.templates import templates
 
@@ -85,6 +86,7 @@ def dashboard(
             "governanca": resumo_governanca(db, cpl_id),
             "planejamento": resumo_planejamento(db, cpl_id),
             "projetos_resumo": resumo_projetos_cpl(db, cpl_id),
+            "maturidade": resumo_recadastramento(db, cpl_id),
             "ano_atual": date.today().year,
             "usuario": usuario,
             "pagina_ativa": "indicadores",

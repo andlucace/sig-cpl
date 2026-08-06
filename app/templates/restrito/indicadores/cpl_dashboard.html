@@ -27,7 +27,18 @@
         </div>
     </div>
 
-    <div class="row row-cols-2 row-cols-md-5 g-3 mb-4">
+    <div class="row row-cols-2 row-cols-md-6 g-3 mb-4">
+        <div class="col">
+            <div class="card kpi-card h-100">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <div class="kpi-icon bg-dark-subtle text-dark"><i class="bi bi-award-fill"></i></div>
+                    <div>
+                        <div class="kpi-valor small">{{ maturidade.nivel_maturidade_atual.value.replace('_', ' ') if maturidade.nivel_maturidade_atual else "não reconhecida" }}</div>
+                        <div class="text-body-secondary small">Nível de maturidade</div>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div class="col">
             <div class="card kpi-card h-100">
                 <div class="card-body d-flex align-items-center gap-3">
@@ -259,6 +270,47 @@
                         <p class="mb-0">Riscos ativos: <strong>{{ projetos_resumo.riscos_ativos }}</strong></p>
                     {% else %}
                         <p class="mb-0 text-body-secondary">Nenhum projeto cadastrado ainda (Projetos &rarr; nova demanda).</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card mt-4">
+                <div class="card-header bg-transparent fw-semibold d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-award-fill text-primary me-2"></i>Maturidade (RF-045)</span>
+                    <a href="/painel/maturidade/cpls/{{ cpl.id }}" class="small text-decoration-none">Ver avaliações &rarr;</a>
+                </div>
+                <div class="card-body small">
+                    <p class="mb-1">
+                        Nível atual:
+                        <strong>{{ maturidade.nivel_maturidade_atual.value.replace('_', ' ') if maturidade.nivel_maturidade_atual else "não reconhecida ainda" }}</strong>
+                    </p>
+                    {% if maturidade.data_reconhecimento %}
+                        <p class="mb-1">Reconhecido em: <strong>{{ maturidade.data_reconhecimento.strftime('%d/%m/%Y') }}</strong></p>
+                    {% endif %}
+                    {% if maturidade.data_validade_reconhecimento %}
+                        <p class="mb-1">Válido até: <strong>{{ maturidade.data_validade_reconhecimento.strftime('%d/%m/%Y') }}</strong></p>
+                        {% if maturidade.dias_para_vencer is not none %}
+                            {% if maturidade.dias_para_vencer < 0 %}
+                                <div class="alert alert-danger py-1 px-2 mb-1 small" role="alert">
+                                    Reconhecimento vencido há {{ -maturidade.dias_para_vencer }} dia(s) — recadastramento necessário.
+                                </div>
+                            {% elif maturidade.vencimento_proximo_ou_vencido %}
+                                <div class="alert alert-warning py-1 px-2 mb-1 small" role="alert">
+                                    Vence em {{ maturidade.dias_para_vencer }} dia(s) — recadastramento recomendado.
+                                </div>
+                            {% endif %}
+                        {% endif %}
+                    {% else %}
+                        <p class="mb-1 text-body-secondary">Sem reconhecimento formal registrado ainda.</p>
+                    {% endif %}
+                    <p class="mb-1">Avaliações registradas: <strong>{{ maturidade.avaliacoes|length }}</strong></p>
+                    {% if maturidade.lacunas_avaliacao_vigente %}
+                        <p class="mb-1 mt-3 fw-semibold">Lacunas na avaliação vigente</p>
+                        <ul class="mb-0 ps-3">
+                            {% for nota in maturidade.lacunas_avaliacao_vigente %}
+                                <li>{{ nota.criterio.nome }}: nota {{ nota.nota }} (corte: {{ nota.criterio.nota_corte }})</li>
+                            {% endfor %}
+                        </ul>
                     {% endif %}
                 </div>
             </div>

@@ -1108,6 +1108,33 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     exportação) e Playwright (`rf045_053_shot.js`, mais rerun de
     `projeto_rf041_shot.js`/`documentos_shot.js`/`indicadores_shot.js`/
     `cadastro.js`), sem erros de console nem 500 reais no log.
+31. **Painel de maturidade (resto do RF-045)** — usuário pediu pra
+    "finalizar as pendências da RF-045 e do painel de maturidade" logo
+    depois do item 30. **A peça mais barata desta sessão inteira**: não
+    escrevi nenhuma função de agregação nova — `resumo_recadastramento()`
+    (`app/services/maturidade.py`) já existia desde o RF-048 (usada só
+    pra gerar o PDF de recadastramento) e já continha exatamente o que
+    um "painel de maturidade" precisa (nível vigente, validade do
+    reconhecimento com dias-para-vencer, histórico de avaliações,
+    lacunas da avaliação vigente). Só precisei chamar essa função a mais
+    uma vez, no dashboard (`app/web/routes_indicadores.py`, contexto
+    `maturidade`), e criar o card no template — mesmo padrão de reúso
+    já visto em `resumo_cadastral()` (dashboard + relatório de impacto)
+    e agora repetido pela terceira vez. Adicionei também um 6º KPI no
+    topo do dashboard (`row-cols-md-6`, era `-5`) com o nível de
+    maturidade atual (texto, não número — `kpi-valor small` porque o
+    valor é uma string como "cpl consolidada", não um dígito). Card
+    "Maturidade (RF-045)" reaproveita o mesmo alerta de vencimento já
+    formatado no PDF de recadastramento (vencido → `alert-danger`,
+    vencendo em breve → `alert-warning`), com link pra
+    `/painel/maturidade/cpls/{id}` (avaliações completas). Testado o
+    caminho vazio também (CPL sem nenhuma avaliação/reconhecimento
+    ainda — "não reconhecida"/"Sem reconhecimento formal registrado
+    ainda", sem erro). **Com isso, RF-045 está completo**: os cinco
+    painéis do requisito (governança, planejamento/cadastro, projetos,
+    finanças, maturidade) existem no mesmo dashboard consolidado por
+    CPL — nenhuma migração, testado via curl + Playwright, sem 500
+    reais no log.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -1456,12 +1483,9 @@ ordem recomendada para o que vem depois:
    projeto** (item 29, RF-041) — **RF-048 está completo, todos os 6
    tipos**; o requisito não descreve um formato próprio pra "de
    projeto" além do que RF-041 já pede, então não houve um 7º tipo a
-   construir. RF-045 só cobre governança/planejamento/cadastro —
-   maturidade/projetos/finanças/impacto territorial ficam pra quando
-   esses módulos tiverem painel próprio (maturidade e projetos já
-   existem como módulos, mas sem um "painel" resumo dedicado — só as
-   próprias telas de avaliação/
-   portfólio, ver item 9).
+   construir. RF-045 nesta época só cobria governança/planejamento/
+   cadastro — completo desde os itens 30/31 (projetos/finanças e
+   maturidade, ver seção "O que falta", item 12).
 9. **Maturidade e reconhecimento: limitações conhecidas** — "habilitação
    jurídica" (RF-027) não tem modelo/etapa própria; "simular cenários"
    (RF-026, ver o efeito de uma nota hipotética antes de salvar) não foi
@@ -1481,7 +1505,17 @@ ordem recomendada para o que vem depois:
     de portfólio/financeiro/execução agregados de todos os projetos de
     uma CPL no dashboard de indicadores. Segue pendente, sem relação com
     este trabalho: exportação de outras listagens (projetos, documentos,
-    auditoria) e painel de maturidade (resto do RF-045).
+    auditoria).
+12. ~~Painel de maturidade (resto do RF-045)~~ — **feito**: ver item 31
+    da seção "Ordem em que este projeto foi construído". Reaproveitou
+    `resumo_recadastramento()` (já existia desde o RF-048), sem nenhuma
+    agregação nova — só um card a mais no dashboard de indicadores.
+    **RF-045 está completo**: os cinco painéis do requisito (governança,
+    planejamento/cadastro, projetos, finanças, maturidade) existem no
+    mesmo dashboard consolidado por CPL. As limitações conhecidas do
+    módulo de Maturidade em si (item 9 acima — habilitação jurídica,
+    simular cenários, validade/versão de evidência) não têm relação com
+    o painel e seguem como estavam.
 
 ## Deploy em produção
 

@@ -356,16 +356,20 @@ os outros módulos já coletam:
   no modelo e no resumo (`percentual_associativismo`) desde antes, mas
   nunca tinham sido expostos nesse formulário, então na prática nunca
   eram preenchidos por uma entidade respondendo à campanha.
-- **Painéis** (RF-045): `resumo_governanca` e `resumo_planejamento`
-  complementam o resumo cadastral acima, formando o dashboard de
-  `/painel/indicadores/cpls/{cpl_id}`. Ganhou depois um card de
-  **projetos e finanças** — `resumo_projetos_cpl()` em
+- **Painéis** (RF-045, completo): `resumo_governanca` e
+  `resumo_planejamento` complementam o resumo cadastral acima, formando
+  o dashboard de `/painel/indicadores/cpls/{cpl_id}`. Ganhou depois um
+  card de **projetos e finanças** — `resumo_projetos_cpl()` em
   `app/services/projeto.py`, agregando todo o portfólio da CPL (não um
   projeto só, que já é coberto pelos relatórios do RF-041): contagem por
   estágio/prioridade, financeiro (previsto/desembolsado/saldo somados de
   todas as origens de recurso e desembolsos dos projetos da CPL) e
-  execução (etapas/marcos/entregas/metas/riscos agregados). Só
-  **maturidade** ainda não tem painel próprio — não foi priorizado ainda.
+  execução (etapas/marcos/entregas/metas/riscos agregados). Por fim, um
+  card de **maturidade** — reaproveita `resumo_recadastramento()` (já
+  existia desde o RF-048, nenhuma agregação nova) pra mostrar nível
+  vigente, validade do reconhecimento (com o mesmo alerta de vencimento
+  do relatório de recadastramento) e lacunas da avaliação vigente,
+  fechando os cinco painéis que o requisito pede.
 - **Relatório executivo em PDF** (RF-048) — dos seis tipos de relatório
   citados no requisito (executivo, anual, recadastramento, comissão,
   projeto, impacto), dois foram construídos até agora (ver item seguinte
@@ -1224,8 +1228,9 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    **feito**: card "Projetos" no mesmo dashboard, agregando todo o
    portfólio da CPL (contagem por estágio/prioridade, financeiro e
    execução somados de todos os projetos), complementando os relatórios
-   por projeto do RF-041 — ver seção "Painéis" acima. Só falta
-   **maturidade** no RF-045 (não priorizado ainda).
+   por projeto do RF-041 — ver seção "Painéis" acima. Painel de
+   maturidade (resto do RF-045) também feito, ver item 10 abaixo —
+   **RF-045 está completo**.
 6. ~~RF-048: recadastramento, anual, comissão, impacto e de projeto~~ —
    **feito, todos os seis tipos**: recadastramento (dossiê de
    maturidade), anual (mesma base do executivo recortada a um
@@ -1264,5 +1269,12 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    financeiro e execução de todos os projetos de uma CPL — ver seções
    "Cadastro dinâmico" e "Painéis" acima. Exportação fica restrita a
    entidades — outras listagens (projetos, documentos, auditoria) não
-   ganharam exportação própria; painel de maturidade (resto do RF-045)
-   segue sem priorização.
+   ganharam exportação própria.
+10. ~~Painel de maturidade (resto do RF-045)~~ — **feito**: card
+    "Maturidade" no mesmo dashboard de indicadores, reaproveitando
+    `resumo_recadastramento()` (RF-048, nenhuma agregação nova) — nível
+    vigente, validade do reconhecimento com alerta de vencimento e
+    lacunas da avaliação vigente. **RF-045 está completo, os cinco
+    painéis do requisito** (governança, planejamento/cadastro, projetos,
+    finanças, maturidade) existem no mesmo dashboard consolidado por
+    CPL.
