@@ -155,6 +155,13 @@
                 </div>
                 <div class="card-body small">
                     <p class="mb-1">Empresas vinculadas: <strong>{{ cadastral.total_empresas }}</strong> ({{ cadastral.total_com_diagnostico }} com diagnóstico respondido)</p>
+                    {% if cadastral.total_diagnosticos_desatualizados %}
+                        <p class="mb-1">
+                            <i class="bi bi-clock-history text-warning me-1"></i>
+                            <strong>{{ cadastral.total_diagnosticos_desatualizados }}</strong>
+                            diagnóstico(s) sem atualização há mais de 1 ano
+                        </p>
+                    {% endif %}
                     <p class="mb-1">Empregos diretos: <strong>{{ cadastral.soma_empregos_diretos }}</strong> — indiretos: <strong>{{ cadastral.soma_empregos_indiretos }}</strong></p>
                     {% if cadastral.novos_empregos_diretos_12_meses %}
                         <p class="mb-1">Novos empregos diretos (últimos 12 meses): <strong>{{ cadastral.novos_empregos_diretos_12_meses }}</strong></p>

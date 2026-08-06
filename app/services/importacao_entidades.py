@@ -35,6 +35,7 @@ from app.models.cadastro_dinamico import DiagnosticoCadastral, ImportacaoLinha, 
 from app.models.entidade import Entidade, EntidadeCPL
 from app.models.enums import StatusLinhaImportacao, StatusLoteImportacao, TipoEntidade
 from app.services.armazenamento import caminho_absoluto, salvar_arquivo
+from app.services.validadores import cnpj_valido, cpf_valido, normalizar_cnpj, normalizar_cpf, uf_valida
 from app.services.indicadores import registrar_snapshot_diagnostico
 
 _ALIASES_CAMPO: dict[str, list[str]] = {
@@ -193,7 +194,32 @@ def _processar_linhas(
             continue
 
         cnpj_bruto = valores.get("cnpj", "")
-        cnpj_normalizado = "".join(c for c in cnpj_bruto if c.isdigit()) or None
+        cnpj_normalizado = normalizar_cnpj(cnpj_bruto) or None
+        cpf_bruto = valores.get("cpf", "")
+        cpf_normalizado = normalizar_cpf(cpf_bruto) or None
+        uf_bruta = valores.get("uf", "")
+
+        # RF-014 ("máscaras"): dígito verificador de verdade, não só
+        # contagem de dígitos — linha com CNPJ/CPF/UF mal formado vira
+        # erro em vez de gravar dado ruim silenciosamente.
+        erro_mascara = None
+        if cnpj_normalizado and not cnpj_valido(cnpj_normalizado):
+            erro_mascara = f"CNPJ {cnpj_bruto!r} inválido (dígito verificador não confere)."
+        elif cpf_normalizado and not cpf_valido(cpf_normalizado):
+            erro_mascara = f"CPF {cpf_bruto!r} inválido (dígito verificador não confere)."
+        elif uf_bruta and not uf_valida(uf_bruta):
+            erro_mascara = f"UF {uf_bruta!r} não é uma unidade da federação válida."
+        if erro_mascara:
+            db.add(
+                ImportacaoLinha(
+                    lote_id=lote.id,
+                    numero_linha=indice,
+                    status=StatusLinhaImportacao.ERRO,
+                    mensagem=erro_mascara,
+                )
+            )
+            total_erros += 1
+            continue
 
         entidade = None
         if cnpj_normalizado:
@@ -213,8 +239,8 @@ def _processar_linhas(
             entidade.nome_fantasia = valores["nome_fantasia"]
         if cnpj_normalizado:
             entidade.cnpj = cnpj_normalizado
-        if valores.get("cpf"):
-            entidade.cpf = "".join(c for c in valores["cpf"] if c.isdigit())
+        if cpf_normalizado:
+            entidade.cpf = cpf_normalizado
         if valores.get("cnae"):
             entidade.cnae = valores["cnae"]
         if valores.get("porte"):

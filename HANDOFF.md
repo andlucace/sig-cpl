@@ -125,6 +125,9 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
       sem gotcha nenhum dos dois de sempre (enum `statusitemhabilitacao`
       criado pela primeira vez, tabela nova). RF-026 não precisou de
       migração — só reaproveitou funções de cálculo já existentes.
+  24. `ec51d69e4f77` — tabela `requisitos_habilitacao_edital` (RF-003) —
+      sem gotcha nenhum dos dois de sempre (sem enum, tabela nova sem
+      coluna `NOT NULL` retroativa)
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos;
     mesma coisa para RF-041/045/053/017, feitas depois da nº 20)
@@ -1432,6 +1435,65 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     estão completos** — só a limitação deliberada de validade/versão de
     evidência (RF-025, depende do versionamento que `Documento` já tem)
     permanece.
+36. **RF-014: máscaras de qualidade de dados + validade temporal** e
+    **RF-003: requisitos de habilitação parametrizáveis por edital** —
+    usuário pediu "fazer as implementações pendentes do RF-14 e RF-03",
+    as duas pendências que sobraram de uma avaliação de backlog
+    anterior (RF-003 tinha a premissa desatualizada de "depende do
+    módulo de Maturidade", que já existia desde o item 10).
+    - **RF-014 (máscaras)**: `app/services/validadores.py`, novo —
+      `cnpj_valido`/`cpf_valido` com dígito verificador oficial (mod-11,
+      não só contagem de dígitos) e `uf_valida` contra a lista fechada
+      das 27 UFs. Aplicado nos três pontos de escrita já estabelecidos
+      pra dado cadastral, pra nunca ficar divergente entre eles: criação
+      de entidade via API (`_validar_mascaras` em
+      `app/api/routes/entidades.py`, 400 se inválido), importação de
+      planilha (`app/services/importacao_entidades.py` — linha vai pra
+      `ImportacaoLinha(status=ERRO)` em vez de derrubar o import
+      inteiro, mesmo padrão de erro-por-linha já usado ali) e
+      formulário público de campanha (`routes_atualizacao_publica.py` —
+      só valida UF, único campo de máscara exposto nesse formulário;
+      re-renderiza com erro em vez de 400 cru, porque é usuário externo
+      sem acesso a JSON). Nenhum campo é obrigatório em si (entidade
+      estrangeira pode não ter CNPJ/CPF brasileiro) — ausência não é
+      erro, valor presente e mal formado é.
+      **Validade temporal**: `diagnostico_desatualizado()` em
+      `app/services/indicadores.py`, função pura sem campo novo no
+      banco — compara `DiagnosticoCadastral.updated_at` contra
+      `VALIDADE_DIAGNOSTICO_DIAS = 365` (mesma janela de um ano já usada
+      em `_novos_empregos_diretos`, o requisito não fixa um número).
+      Só sinaliza (badge "desatualizado" em `entidade_detail.html` +
+      contagem em `cpl_dashboard.html`), não invalida nem esconde nada
+      — a última resposta continua valendo até alguém atualizar de
+      novo.
+    - **RF-003 (requisitos parametrizáveis)**: `RequisitoHabilitacaoEdital`
+      (`app/models/maturidade.py`) — template por edital, mesmo padrão
+      template-vs-instância já usado em `CriterioMaturidade` (template)
+      vs. `AvaliacaoCriterio` (instância): aqui é
+      `RequisitoHabilitacaoEdital` (template, `PAPEIS_EDITAL_GESTAO`) vs.
+      `ItemHabilitacaoJuridica` (instância por CPL, já existia desde o
+      RF-027, item 35). Fecha a peça que faltava de "parametrizar...
+      documentos... sem alteração de código" — editais/critérios/
+      pesos/prazos já eram configuráveis via UI desde o RF-024 (item
+      10), só faltava o board de "quais documentos este edital exige"
+      também ser dado e não código. Endpoint novo
+      `POST /api/maturidade/cpls/{id}/habilitacao/usar-requisitos-edital`
+      (e equivalente web) instancia o checklist da CPL a partir do
+      template — **idempotente**: só cria item pra requisito cujo
+      `descricao` a CPL ainda não tem, pra poder clicar de novo depois
+      que o edital ganha mais um requisito sem duplicar os que já
+      existem. Reafirmei que "níveis de maturidade" continuam enum fixo
+      por design (RN-004 já dizia isso) — o que é parametrizável são os
+      limiares, não os quatro nomes.
+    Migração `ec51d69e4f77` — sem gotcha nenhum dos dois de sempre (sem
+    enum, tabela nova sem coluna `NOT NULL` retroativa). Testado via curl
+    (CNPJ/CPF/UF válidos e inválidos nos três pontos de escrita, import
+    com linha inválida vira erro-por-linha sem derrubar o resto,
+    idempotência do "usar requisitos do edital" chamado duas vezes) e
+    Playwright (`rf014_003_shot.js` — criar requisito novo no edital via
+    UI, ir na tela da CPL, clicar "usar requisitos do edital", confirmar
+    que só o requisito novo aparece como item novo) mais rerun da suíte
+    de regressão, sem erros de console nem 500 reais no log.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -1842,6 +1904,18 @@ ordem recomendada para o que vem depois:
     escrita de sempre, e automaticamente exportável pelo RF-053 sem
     código extra). Nova tela de detalhe de entidade
     (`/painel/cadastro/entidades/{id}`), que não existia antes.
+16. ~~RF-014: máscaras + validade temporal~~ e ~~RF-003: requisitos de
+    habilitação parametrizáveis~~ — **feito**: ver item 36 da seção
+    "Ordem em que este projeto foi construído". `app/services/
+    validadores.py` novo (CNPJ/CPF por dígito verificador, UF pela lista
+    fechada), aplicado nos 3 pontos de escrita de sempre; validade
+    temporal do diagnóstico é função pura, sem campo novo no banco.
+    `RequisitoHabilitacaoEdital` fecha a peça de RF-003 que ainda
+    faltava (a marcação de "depende do módulo de Maturidade" estava
+    desatualizada — editais já eram parametrizáveis via UI desde o
+    RF-024). **Pendência real, não de código**: nenhuma — item 14 acima
+    (SMTP em produção) é a única pendência de configuração aberta no
+    projeto.
 
 ## Deploy em produção
 

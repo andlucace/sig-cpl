@@ -13,6 +13,10 @@
                 </p>
             </div>
 
+            {% if erro %}
+                <div class="alert alert-danger" role="alert">{{ erro }}</div>
+            {% endif %}
+
             <form method="post" action="/atualizacao/{{ convite.token }}" class="card">
                 <div class="card-body">
                     <h2 class="h6 text-body-secondary text-uppercase">Dados cadastrais</h2>

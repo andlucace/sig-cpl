@@ -70,6 +70,48 @@
                     </div>
                 {% endif %}
             </div>
+
+            <div class="card mt-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-file-earmark-check text-primary me-2"></i>Requisitos de habilitação jurídica (RF-003)
+                </div>
+                <div class="list-group list-group-flush">
+                    {% for r in requisitos_habilitacao %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <span class="small">{{ r.descricao }}</span>
+                            {% if r.obrigatorio %}<span class="badge text-bg-secondary">obrigatório</span>{% endif %}
+                        </div>
+                    {% else %}
+                        <div class="list-group-item text-body-secondary small">Nenhum requisito cadastrado ainda.</div>
+                    {% endfor %}
+                </div>
+                {% if e_administrador %}
+                    <div class="card-body border-top">
+                        <form method="post" action="/painel/maturidade/editais/{{ edital.id }}/requisitos-habilitacao">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-8">
+                                    <label class="form-label small mb-1">Documento exigido</label>
+                                    <input type="text" class="form-control form-control-sm" name="descricao" placeholder="Ex.: Certidão de regularidade fiscal" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check mt-4">
+                                        <input type="checkbox" class="form-check-input" id="req_obrigatorio" name="obrigatorio" checked>
+                                        <label class="form-check-label small" for="req_obrigatorio">Obrigatório</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-1">
+                                    <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-plus-lg"></i></button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                {% endif %}
+                <div class="card-body border-top small text-body-secondary">
+                    <i class="bi bi-info-circle me-1"></i>Cada CPL que participar deste edital pode usar esta
+                    lista pra pré-preencher o próprio checklist de habilitação, em vez de digitar do zero
+                    (botão "Usar requisitos do edital" na tela de maturidade da CPL).
+                </div>
+            </div>
         </div>
 
         <div class="col-lg-5">

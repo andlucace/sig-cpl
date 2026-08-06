@@ -18,9 +18,23 @@ from app.schemas.entidade import (
     OfertaEntidadeCreate,
     OfertaEntidadeRead,
 )
+from app.services.validadores import cnpj_valido, cpf_valido, normalizar_cnpj, normalizar_cpf, uf_valida
 
 router = APIRouter(prefix="/entidades", tags=["Cadastro e cadeia"])
 cpl_router = APIRouter(prefix="/cpls", tags=["Cadastro e cadeia"])
+
+
+def _validar_mascaras(cnpj: str | None, cpf: str | None, uf: str | None) -> None:
+    """RF-014: "máscara" = validação de formato de verdade (dígito
+    verificador, não só contagem de dígitos) — só valida quando o campo
+    vem preenchido, nenhum é obrigatório em si."""
+
+    if cnpj and not cnpj_valido(cnpj):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "CNPJ inválido.")
+    if cpf and not cpf_valido(cpf):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "CPF inválido.")
+    if uf and not uf_valida(uf):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "UF inválida.")
 
 
 def _get_entidade_visivel_or_404(db: Session, usuario: Usuario, entidade_id: uuid.UUID) -> Entidade:
@@ -61,8 +75,17 @@ def criar_entidade(
     vinculada."""
 
     verificar_papel(db, usuario_atual, PAPEIS_GESTAO)
+    _validar_mascaras(dados.cnpj, dados.cpf, dados.uf)
 
-    entidade = Entidade(**dados.model_dump())
+    valores = dados.model_dump()
+    if valores.get("cnpj"):
+        valores["cnpj"] = normalizar_cnpj(valores["cnpj"])
+    if valores.get("cpf"):
+        valores["cpf"] = normalizar_cpf(valores["cpf"])
+    if valores.get("uf"):
+        valores["uf"] = valores["uf"].strip().upper()
+
+    entidade = Entidade(**valores)
     db.add(entidade)
     db.commit()
     db.refresh(entidade)

@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.models.cadastro_dinamico import CampanhaConvite, DiagnosticoCadastral
 from app.models.entidade import Entidade
 from app.services.indicadores import registrar_snapshot_diagnostico
+from app.services.validadores import uf_valida
 from app.web.templates import templates
 
 router = APIRouter(prefix="/atualizacao", tags=["Autopreenchimento público"])
@@ -78,6 +79,25 @@ def processar_atualizacao(
     if convite is None:
         return templates.TemplateResponse(
             request, "publico/atualizacao_invalida.html", {}, status_code=404
+        )
+
+    if uf and not uf_valida(uf):
+        diagnostico = (
+            db.query(DiagnosticoCadastral)
+            .filter(DiagnosticoCadastral.entidade_id == convite.entidade_id)
+            .first()
+        )
+        return templates.TemplateResponse(
+            request,
+            "publico/atualizacao_form.html",
+            {
+                "convite": convite,
+                "entidade": convite.entidade,
+                "campanha": convite.campanha,
+                "diagnostico": diagnostico,
+                "erro": f"UF {uf!r} não é uma unidade da federação válida.",
+            },
+            status_code=400,
         )
 
     entidade: Entidade = convite.entidade

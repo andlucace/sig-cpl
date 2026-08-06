@@ -27,6 +27,7 @@ from app.models.maturidade import (
     Edital,
     ItemHabilitacaoJuridica,
     RecursoAvaliacao,
+    RequisitoHabilitacaoEdital,
 )
 from app.models.notificacao import Notificacao
 from app.models.pessoa import Pessoa, PessoaVinculo
@@ -98,6 +99,7 @@ __all__ = [
     "AvaliacaoCriterio",
     "RecursoAvaliacao",
     "ItemHabilitacaoJuridica",
+    "RequisitoHabilitacaoEdital",
     "Notificacao",
     "DemandaProjeto",
     "Projeto",

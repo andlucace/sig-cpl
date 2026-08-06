@@ -130,6 +130,23 @@ def _novos_empregos_diretos(db: Session, entidade_ids: list[uuid.UUID], dias: in
     return _novos_empregos_diretos_periodo(db, entidade_ids, agora - timedelta(days=dias), agora)
 
 
+VALIDADE_DIAGNOSTICO_DIAS = 365
+"""RF-014 ("validade temporal"): um diagnóstico cadastral sem nenhuma
+atualização há mais de um ano é considerado desatualizado — não fica
+inválido nem some do sistema (a última resposta continua valendo até
+alguém responder de novo), só é sinalizado pra CPL saber que vale
+revalidar. Um ano não está fixado no documento de requisitos — mesmo
+ciclo de atualização já usado como janela padrão em `_novos_empregos_diretos`."""
+
+
+def diagnostico_desatualizado(diagnostico: DiagnosticoCadastral) -> bool:
+    limite = datetime.now(timezone.utc) - timedelta(days=VALIDADE_DIAGNOSTICO_DIAS)
+    atualizado_em = diagnostico.updated_at
+    if atualizado_em.tzinfo is None:
+        atualizado_em = atualizado_em.replace(tzinfo=timezone.utc)
+    return atualizado_em < limite
+
+
 def resumo_cadastral(db: Session, cpl_id: uuid.UUID) -> dict:
     """RF-046/047: agrega o que já é coletado via campanha de atualização
     cadastral (`DiagnosticoCadastral`) — não introduz coleta de dado novo."""
@@ -168,6 +185,7 @@ def resumo_cadastral(db: Session, cpl_id: uuid.UUID) -> dict:
     return {
         "total_empresas": len(entidade_ids),
         "total_com_diagnostico": total_com_diagnostico,
+        "total_diagnosticos_desatualizados": sum(1 for d in diagnosticos if diagnostico_desatualizado(d)),
         "soma_empregos_diretos": sum(d.empregos_diretos or 0 for d in diagnosticos),
         "soma_empregos_indiretos": sum(d.empregos_indiretos or 0 for d in diagnosticos),
         "novos_empregos_diretos_12_meses": _novos_empregos_diretos(db, entidade_ids),

@@ -32,6 +32,7 @@ from app.models.maturidade import (
     Edital,
     ItemHabilitacaoJuridica,
     RecursoAvaliacao,
+    RequisitoHabilitacaoEdital,
 )
 from app.models.pessoa import Pessoa
 from app.models.usuario import Usuario
@@ -137,12 +138,18 @@ def edital_detail(
         return RedirectResponse("/painel/maturidade", status_code=status.HTTP_303_SEE_OTHER)
     verificar_papel(db, usuario, PAPEIS_GOVERNANCA_LEITURA, cpl_id=None)
     criterios = db.query(CriterioMaturidade).filter(CriterioMaturidade.edital_id == edital_id).all()
+    requisitos_habilitacao = (
+        db.query(RequisitoHabilitacaoEdital)
+        .filter(RequisitoHabilitacaoEdital.edital_id == edital_id)
+        .all()
+    )
     return templates.TemplateResponse(
         request,
         "restrito/maturidade/edital_detail.html",
         {
             "edital": edital,
             "criterios": criterios,
+            "requisitos_habilitacao": requisitos_habilitacao,
             "dimensoes": list(DimensaoMaturidade),
             "e_administrador": _e_administrador(db, usuario),
             "usuario": usuario,
@@ -200,6 +207,29 @@ def criar_criterio(
         nota_corte=float(nota_corte) if nota_corte else None,
     )
     db.add(criterio)
+    db.commit()
+    return RedirectResponse(f"/painel/maturidade/editais/{edital_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/editais/{edital_id}/requisitos-habilitacao")
+def criar_requisito_habilitacao(
+    edital_id: uuid.UUID,
+    descricao: str = Form(...),
+    obrigatorio: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-003: template de documento exigido, definido uma vez por
+    edital — RF-027 usa isso pra pré-preencher o checklist de uma CPL."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    if db.get(Edital, edital_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Edital não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_EDITAL_GESTAO, cpl_id=None)
+    db.add(
+        RequisitoHabilitacaoEdital(edital_id=edital_id, descricao=descricao, obrigatorio=obrigatorio == "on")
+    )
     db.commit()
     return RedirectResponse(f"/painel/maturidade/editais/{edital_id}", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -494,6 +524,49 @@ def criar_item_habilitacao(
             cpl_id=cpl_id, edital_id=edital_id, descricao=descricao, obrigatorio=obrigatorio == "on"
         )
     )
+    db.commit()
+    return RedirectResponse(f"/painel/maturidade/cpls/{cpl_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/cpls/{cpl_id}/habilitacao/usar-requisitos-edital")
+def usar_requisitos_edital(
+    cpl_id: uuid.UUID,
+    edital_id: uuid.UUID = Form(...),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-003: instancia o checklist da CPL a partir do template do
+    edital (`RequisitoHabilitacaoEdital`) — pula requisitos que a CPL já
+    tem um item com a mesma descrição pra este edital."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    if db.get(CPL, cpl_id) is None or db.get(Edital, edital_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL ou edital não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=cpl_id)
+
+    requisitos = (
+        db.query(RequisitoHabilitacaoEdital)
+        .filter(RequisitoHabilitacaoEdital.edital_id == edital_id)
+        .all()
+    )
+    descricoes_existentes = {
+        item.descricao
+        for item in db.query(ItemHabilitacaoJuridica).filter(
+            ItemHabilitacaoJuridica.cpl_id == cpl_id, ItemHabilitacaoJuridica.edital_id == edital_id
+        )
+    }
+    for requisito in requisitos:
+        if requisito.descricao in descricoes_existentes:
+            continue
+        db.add(
+            ItemHabilitacaoJuridica(
+                cpl_id=cpl_id,
+                edital_id=edital_id,
+                descricao=requisito.descricao,
+                obrigatorio=requisito.obrigatorio,
+            )
+        )
     db.commit()
     return RedirectResponse(f"/painel/maturidade/cpls/{cpl_id}", status_code=status.HTTP_303_SEE_OTHER)
 

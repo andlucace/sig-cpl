@@ -191,3 +191,20 @@ class ItemHabilitacaoRead(BaseModel):
     parecer: str | None
     analisado_por_id: uuid.UUID | None
     data_analise: date | None
+
+
+# Requisitos de habilitação por edital — template (RF-003)
+
+
+class RequisitoHabilitacaoCreate(BaseModel):
+    descricao: str
+    obrigatorio: bool = True
+
+
+class RequisitoHabilitacaoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    edital_id: uuid.UUID
+    descricao: str
+    obrigatorio: bool

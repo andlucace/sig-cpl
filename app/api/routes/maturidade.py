@@ -22,6 +22,7 @@ from app.models.maturidade import (
     Edital,
     ItemHabilitacaoJuridica,
     RecursoAvaliacao,
+    RequisitoHabilitacaoEdital,
 )
 from app.models.usuario import Usuario
 from app.schemas.maturidade import (
@@ -41,6 +42,8 @@ from app.schemas.maturidade import (
     RecursoAvaliacaoCreate,
     RecursoAvaliacaoDecisao,
     RecursoAvaliacaoRead,
+    RequisitoHabilitacaoCreate,
+    RequisitoHabilitacaoRead,
     SimulacaoAvaliacaoRead,
 )
 from app.models.documento import Documento
@@ -141,6 +144,47 @@ def listar_criterios(
     _get_edital_or_404(db, edital_id)
     verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_LEITURA, cpl_id=None)
     return db.query(CriterioMaturidade).filter(CriterioMaturidade.edital_id == edital_id).all()
+
+
+@router.post(
+    "/editais/{edital_id}/requisitos-habilitacao",
+    response_model=RequisitoHabilitacaoRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def criar_requisito_habilitacao(
+    edital_id: uuid.UUID,
+    dados: RequisitoHabilitacaoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> RequisitoHabilitacaoEdital:
+    """RF-003: template de documento exigido, definido uma vez por
+    edital — RF-027 usa isso pra pré-preencher o checklist de uma CPL
+    em vez de cada uma digitar a mesma lista do zero."""
+
+    _get_edital_or_404(db, edital_id)
+    verificar_papel(db, usuario_atual, PAPEIS_EDITAL_GESTAO, cpl_id=None)
+    requisito = RequisitoHabilitacaoEdital(edital_id=edital_id, **dados.model_dump())
+    db.add(requisito)
+    db.commit()
+    db.refresh(requisito)
+    return requisito
+
+
+@router.get(
+    "/editais/{edital_id}/requisitos-habilitacao", response_model=list[RequisitoHabilitacaoRead]
+)
+def listar_requisitos_habilitacao(
+    edital_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[RequisitoHabilitacaoEdital]:
+    _get_edital_or_404(db, edital_id)
+    verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_LEITURA, cpl_id=None)
+    return (
+        db.query(RequisitoHabilitacaoEdital)
+        .filter(RequisitoHabilitacaoEdital.edital_id == edital_id)
+        .all()
+    )
 
 
 # --- Avaliações (RF-024/025/026) --------------------------------------------
@@ -381,6 +425,55 @@ def listar_itens_habilitacao(
         .order_by(ItemHabilitacaoJuridica.created_at)
         .all()
     )
+
+
+@router.post(
+    "/cpls/{cpl_id}/habilitacao/usar-requisitos-edital",
+    response_model=list[ItemHabilitacaoRead],
+    status_code=status.HTTP_201_CREATED,
+)
+def usar_requisitos_edital(
+    cpl_id: uuid.UUID,
+    edital_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[ItemHabilitacaoJuridica]:
+    """RF-003: instancia o checklist da CPL a partir do template do
+    edital (`RequisitoHabilitacaoEdital`) — pula requisitos que a CPL já
+    tem um item com a mesma descrição pra este edital, pra poder clicar
+    de novo sem duplicar depois que o edital ganha um requisito novo."""
+
+    if db.get(CPL, cpl_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL não encontrada.")
+    _get_edital_or_404(db, edital_id)
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=cpl_id)
+
+    requisitos = (
+        db.query(RequisitoHabilitacaoEdital)
+        .filter(RequisitoHabilitacaoEdital.edital_id == edital_id)
+        .all()
+    )
+    descricoes_existentes = {
+        item.descricao
+        for item in db.query(ItemHabilitacaoJuridica).filter(
+            ItemHabilitacaoJuridica.cpl_id == cpl_id, ItemHabilitacaoJuridica.edital_id == edital_id
+        )
+    }
+    novos = [
+        ItemHabilitacaoJuridica(
+            cpl_id=cpl_id,
+            edital_id=edital_id,
+            descricao=requisito.descricao,
+            obrigatorio=requisito.obrigatorio,
+        )
+        for requisito in requisitos
+        if requisito.descricao not in descricoes_existentes
+    ]
+    db.add_all(novos)
+    db.commit()
+    for item in novos:
+        db.refresh(item)
+    return novos
 
 
 @router.post("/habilitacao/{item_id}/analisar", response_model=ItemHabilitacaoRead)

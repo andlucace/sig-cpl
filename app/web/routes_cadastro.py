@@ -15,6 +15,7 @@ from app.models.entidade import Entidade, EntidadeCPL, OfertaEntidade
 from app.models.enums import StatusLoteImportacao, TipoOferta
 from app.models.usuario import Usuario
 from app.services.armazenamento import caminho_absoluto
+from app.services.indicadores import diagnostico_desatualizado
 from app.services.importacao_entidades import (
     CAMPOS_CONHECIDOS,
     confirmar_importacao,
@@ -397,6 +398,7 @@ def detalhe_entidade(
         {
             "entidade": entidade,
             "diagnostico": diagnostico,
+            "diagnostico_desatualizado": diagnostico_desatualizado(diagnostico) if diagnostico else False,
             "ofertas": ofertas,
             "tipos_oferta": list(TipoOferta),
             "usuario": usuario,

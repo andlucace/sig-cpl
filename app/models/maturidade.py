@@ -39,6 +39,7 @@ class Edital(TimestampedBase):
     limiar_cpl_madura: Mapped[float | None] = mapped_column(Float)
 
     criterios: Mapped[list["CriterioMaturidade"]] = relationship(back_populates="edital")
+    requisitos_habilitacao: Mapped[list["RequisitoHabilitacaoEdital"]] = relationship(back_populates="edital")
 
 
 class CriterioMaturidade(TimestampedBase):
@@ -178,3 +179,27 @@ class ItemHabilitacaoJuridica(TimestampedBase):
     edital: Mapped["Edital"] = relationship()
     documento: Mapped["Documento | None"] = relationship()
     analisado_por: Mapped["Usuario | None"] = relationship()
+
+
+class RequisitoHabilitacaoEdital(TimestampedBase):
+    """RF-003: template de item de checklist de habilitação jurídica,
+    definido uma vez por edital — mesmo raciocínio de `CriterioMaturidade`
+    (template por edital) vs. `AvaliacaoCriterio` (instância por
+    avaliação): aqui é `RequisitoHabilitacaoEdital` (template, gerido por
+    quem administra o edital) vs. `ItemHabilitacaoJuridica` (instância
+    por CPL, criada a partir do template — ver
+    `POST /api/maturidade/cpls/{id}/habilitacao/usar-requisitos-edital`).
+
+    Fecha a peça de RF-003 ("parametrizar... documentos... sem alteração
+    de código") que ainda faltava — editais/critérios/pesos/prazos já
+    eram configuráveis via UI desde o RF-024; só a lista de documentos
+    exigidos não tinha um lugar próprio ainda (RF-027 criava cada item
+    digitado à mão, sem reaproveitar nada entre CPLs do mesmo edital)."""
+
+    __tablename__ = "requisitos_habilitacao_edital"
+
+    edital_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("editais.id"), nullable=False)
+    descricao: Mapped[str] = mapped_column(String(255), nullable=False)
+    obrigatorio: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    edital: Mapped["Edital"] = relationship(back_populates="requisitos_habilitacao")

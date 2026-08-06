@@ -261,6 +261,30 @@ dos módulos anteriores; a rota pública de autopreenchimento não passa por
 RBAC nenhum (é intencionalmente sem autenticação — a segurança vem do
 token ser imprevisível e de uso único por convite, não de login).
 
+**Regras de qualidade de dados — máscaras e validade temporal (RF-014)**
+— obrigatoriedade de razão social e dedup por CNPJ (na importação) já
+existiam; esta fatia fechou o resto:
+- **Máscaras** (`app/services/validadores.py`) — "máscara" aqui significa
+  validação de formato de verdade, não só normalização: dígito
+  verificador oficial de CNPJ/CPF (módulo 11 — pega erro de digitação
+  que só contar 14/11 dígitos não pegaria) e UF contra a lista fechada
+  de 27 unidades da federação. Reaproveitado nos três pontos de escrita
+  de sempre: criação direta via API (`POST /api/entidades`, rejeita com
+  400), importação de planilha (linha com CNPJ/CPF/UF mal formado vira
+  `ImportacaoLinha` de erro, com mensagem, em vez de gravar dado ruim
+  silenciosamente) e formulário público de campanha (só valida UF ali —
+  CNPJ não é editável nesse formulário, é a chave de identidade fixada
+  na criação).
+- **Validade temporal** — `diagnostico_desatualizado()`
+  (`app/services/indicadores.py`) sinaliza (não invalida) um
+  `DiagnosticoCadastral` sem nenhuma atualização há mais de um ano
+  (`VALIDADE_DIAGNOSTICO_DIAS`, não fixado no documento de requisitos —
+  mesma janela já usada como padrão em `_novos_empregos_diretos`).
+  Contagem em `resumo_cadastral()` (card "Resumo cadastral" do
+  dashboard de indicadores) e badge "desatualizado" na tela de detalhe
+  da entidade — a última resposta continua valendo até alguém responder
+  de novo, só fica sinalizada.
+
 O bloco **Documentos** (RF-042/043) foi implementado com escopo recortado
 deliberadamente — repositório completo (RF-042), mas geração de documento
 padronizado (RF-043) limitada a exportar a ata de uma reunião em PDF, não
@@ -582,6 +606,22 @@ compartilhados entre CPLs em vez de configuração por CPL (sim, RN-006):
   regularidade jurídica, não uma decisão interna da CPL.
   `POST/GET /api/maturidade/cpls/{id}/habilitacao`,
   `POST /api/maturidade/habilitacao/{id}/analisar`.
+- **Requisitos de habilitação por edital — template** (RF-003) —
+  `RequisitoHabilitacaoEdital`, definido uma vez por edital por quem o
+  administra (mesmo raciocínio de `CriterioMaturidade`: template por
+  edital, gerido por `PAPEIS_EDITAL_GESTAO`). Fecha a peça de RF-003
+  ("parametrizar... documentos... sem alteração de código") que ainda
+  faltava — editais/critérios/pesos/prazos já eram configuráveis via UI
+  desde o RF-024 (a marcação anterior de "depende do módulo de
+  Maturidade" estava desatualizada). `POST
+  /api/maturidade/cpls/{id}/habilitacao/usar-requisitos-edital`
+  instancia o checklist de uma CPL a partir do template — idempotente
+  (pula requisitos que a CPL já tem um item com a mesma descrição, pra
+  poder clicar de novo depois que o edital ganha um requisito a mais
+  sem duplicar os que já existem). Níveis de maturidade continuam um
+  enum fixo — RN-004 já documentava que o que é "parametrizável" são os
+  limiares (já configuráveis por edital), não os quatro nomes em si,
+  definidos pelo programa estadual.
 - **Limitação conhecida remanescente**: validade/versão de evidência
   (RF-025) dependem do versionamento que `Documento` já tem, não algo
   modelado à parte aqui — decisão de escopo deliberada, não pendência.
