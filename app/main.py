@@ -11,10 +11,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.routes import (
     auditoria,
     auth,
+    biblioteca,
     cadastro_dinamico,
     cpl,
     documentos,
     entidades,
+    eventos,
     governanca,
     indicadores,
     maturidade,
@@ -37,9 +39,11 @@ from app.services.observabilidade import registrar_falha, registrar_requisicao, 
 from app.web import (
     routes_atualizacao_publica,
     routes_auditoria,
+    routes_biblioteca,
     routes_cadastro,
     routes_cpl,
     routes_documentos,
+    routes_eventos,
     routes_governanca,
     routes_indicadores,
     routes_maturidade,
@@ -194,6 +198,8 @@ app.include_router(maturidade.router, prefix="/api")
 app.include_router(notificacoes.router, prefix="/api")
 app.include_router(projeto.router, prefix="/api")
 app.include_router(observabilidade_routes.router, prefix="/api")
+app.include_router(eventos.router, prefix="/api")
+app.include_router(biblioteca.router, prefix="/api")
 for stub_router in stub_routers:
     app.include_router(stub_router, prefix="/api")
 
@@ -210,6 +216,8 @@ app.include_router(routes_maturidade.router)
 app.include_router(routes_notificacoes.router)
 app.include_router(routes_projeto.router)
 app.include_router(routes_observabilidade.router)
+app.include_router(routes_eventos.router)
+app.include_router(routes_biblioteca.router)
 app.include_router(routes_atualizacao_publica.router)
 app.include_router(routes_publico.router)
 

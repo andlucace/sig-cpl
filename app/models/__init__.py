@@ -1,4 +1,5 @@
 from app.models.auditoria import RegistroAuditoria
+from app.models.biblioteca import RecursoBiblioteca
 from app.models.cadastro_dinamico import (
     CampanhaCadastral,
     CampanhaConvite,
@@ -10,6 +11,7 @@ from app.models.cadastro_dinamico import (
 from app.models.cpl import CPL
 from app.models.documento import Documento
 from app.models.entidade import Entidade, EntidadeCPL, EntidadeElo, OfertaEntidade
+from app.models.evento import Evento, InscricaoEvento
 from app.models.governanca import (
     DeclaracaoImpedimento,
     Deliberacao,
@@ -118,4 +120,7 @@ __all__ = [
     "EntregaProjeto",
     "AlteracaoPlanoProjeto",
     "RegistroFalha",
+    "Evento",
+    "InscricaoEvento",
+    "RecursoBiblioteca",
 ]

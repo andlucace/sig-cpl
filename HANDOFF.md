@@ -131,6 +131,11 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   25. `4fc9db3f454d` — tabela `registros_falha` (RNF-012) — sem gotcha
       nenhum dos dois de sempre (sem enum, tabela nova sem coluna
       `NOT NULL` retroativa)
+  26. `3163d6162f16` — tabelas `eventos`, `recursos_biblioteca`,
+      `inscricoes_evento` (RF-050/RF-051) — sem gotcha nenhum dos dois de
+      sempre (dois enums novos — `tipoevento`/`statusevento` e
+      `tiporecursobiblioteca` — nenhum reaproveitado; tabelas novas sem
+      coluna `NOT NULL` retroativa)
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos;
     mesma coisa para RF-041/045/053/017, feitas depois da nº 20)
@@ -1573,6 +1578,79 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     `documentos_shot.js`, sem erros de console nem 500 reais no log
     (confirmado tanto antes quanto depois do fix do bug de log
     duplicado acima).
+38. **RF-050: eventos, capacitações, mentorias, missões técnicas** e
+    **RF-051: biblioteca de conhecimento** — usuário perguntou "quais as
+    pendências do backlog" e, entre os candidatos levantados, pediu pra
+    seguir com estes dois — ambos eram os únicos "S" ainda 100%
+    ❌ pendentes que reaproveitavam padrões já existentes no sistema, sem
+    depender de módulo novo nenhum.
+    - **RF-050 (eventos)**: `Evento` (`app/models/evento.py`) — mesmo
+      raciocínio de `Edital`/RN-006: `cpl_id` nulo é aberto a todas as
+      CPLs (gerido por `PAPEIS_EDITAL_GESTAO`), `cpl_id` preenchido é
+      local de uma CPL (gerido por `PAPEIS_GESTAO` dela). Decisão de
+      design deliberada: inscrição, presença e avaliação viraram um
+      único registro por pessoa+evento (`InscricaoEvento`), não três
+      tabelas — são estados sucessivos do mesmo vínculo (inscrita →
+      presente/ausente → avaliação), não entidades independentes.
+      `presente` fica `None` até alguém marcar, diferente de
+      `Presenca.presente` em Governança (sempre preenchido na criação,
+      porque ali o registro só existe depois da reunião acontecer — aqui
+      a inscrição existe antes do evento). Inscrição é feita por quem
+      tem papel de gestão, mesmo padrão de `MembroOrgao`/`Presenca` — ao
+      revisar como `MembroOrgao` já funciona, descobri que o sistema
+      **não** valida que a `Pessoa` escolhida já tenha vínculo formal com
+      a CPL (dropdown lista todas as pessoas, sem filtro); alinhei
+      `InscricaoEvento` ao mesmo comportamento em vez de inventar uma
+      validação mais rígida — um evento pode inclusive ser a porta de
+      entrada de alguém ainda não vinculado. Limite de vagas verificado
+      na inscrição (conta inscritos existentes contra `Evento.vagas`).
+      `/painel/eventos` (lista + criação) → `/painel/eventos/{id}`
+      (inscrever, marcar presença, avaliar, atualizar status).
+    - **RF-051 (biblioteca)**: `RecursoBiblioteca`
+      (`app/models/biblioteca.py`) — conteúdo compartilhado entre todas
+      as CPLs, **sem** `cpl_id` (diferente de `Documento`/RF-042, que
+      exige uma CPL) — por isso não reaproveita esse modelo, só o
+      mecanismo de armazenamento em disco (`salvar_arquivo_biblioteca`
+      em `app/services/armazenamento.py`, mesma lógica de
+      `salvar_arquivo` mas numa subpasta fixa `_biblioteca/` em vez de
+      uma por CPL). Seis tipos citados no requisito viraram enum
+      (`modelo`/`estudo`/`boa_pratica`/`edital`/`oportunidade`/
+      `conteudo_tecnico`) — "atas" ficou de fora de propósito, já é
+      `Documento`/RF-042. Um recurso pode ser arquivo, link externo ou
+      só texto (`descricao`) — ao menos um dos três é exigido, validado
+      na rota. `publicado` controla rascunho (só quem administra vê) vs.
+      publicado (qualquer usuário autenticado navega). Gerido por
+      `PAPEIS_EDITAL_GESTAO`, mesma autoridade de `Edital`.
+    - **Bug pego e corrigido durante o desenvolvimento**: a primeira
+      versão de `criar_recurso` (API e web) declarava `arquivo:
+      UploadFile | None = None` sem `File(None)` explícito, misturado
+      com parâmetros `Form(...)`. FastAPI exige que, quando a rota tem
+      qualquer parâmetro de arquivo, TODOS os campos não-arquivo do
+      corpo sejam declarados `Form(...)` explicitamente — sem isso a
+      rota nem chega a levantar erro em teste manual simples (só
+      apareceria num caso de uso que dependesse da inferência correta).
+      Corrigido usando `File(None)` explícito pro parâmetro opcional,
+      seguindo o mesmo padrão já usado em `enviar_documento`
+      (RF-042/`app/api/routes/documentos.py`) pro caso obrigatório.
+    Migração `3163d6162f16` — sem gotcha nenhum dos dois de sempre (dois
+    enums novos, nenhum reaproveitado; tabelas novas sem coluna
+    `NOT NULL` retroativa). Testado via curl (criar evento global e local,
+    inscrever pessoa, marcar presença/avaliação com nota 1-5 validada,
+    rejeitar reinscrição duplicada, rejeitar inscrição além do limite de
+    vagas, rejeitar inscrição em evento local por CPL diferente da dona;
+    criar recurso de biblioteca só com texto, com arquivo, rejeitar
+    recurso sem nenhum conteúdo, baixar arquivo) e Playwright
+    (`rf050_051_shot.js` — criar evento aberto a todas as CPLs via UI,
+    inscrever pessoa, criar recurso de biblioteca via UI) mais rerun de
+    `maturidade_shot.js`/`maturidade_shot2.js`/`rbac_403_shot.js`/
+    `documentos_shot.js`/`rf043_rnf012_shot.js`, sem erros de console nem
+    500 reais no log. **Achadinho no teste com Playwright, não no
+    código**: o script de teste selecionava `select[name=tipo]` sem
+    escopo, batendo no `<select>` do formulário de FILTRO da biblioteca
+    (que tem `onchange="this.form.submit()"`) em vez do formulário de
+    criação — dois elementos com o mesmo `name` na mesma página, mesma
+    classe de cuidado do item "armadilhas" sobre reaproveitar seletor
+    sem checar ambiguidade, mas aqui do lado do teste, não do app.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -2030,6 +2108,23 @@ ordem recomendada para o que vem depois:
     **Pendência real, não de código**: nenhuma nova — SMTP em produção
     (item 14) segue sendo a única, e agora também afeta o alerta por
     e-mail do RNF-012 (mesmo mecanismo, mesma pendência).
+18. ~~RF-050: eventos, capacitações, mentorias, missões técnicas~~ e
+    ~~RF-051: biblioteca de conhecimento~~ — **feito**: ver item 38 da
+    seção "Ordem em que este projeto foi construído". `Evento`/
+    `InscricaoEvento` reaproveitam o raciocínio de `Edital` (global vs.
+    local de uma CPL) e de `Presenca`/`MembroOrgao` (quem gere
+    inscreve); inscrição/presença/avaliação viraram um único registro
+    por pessoa+evento, decisão deliberada de não normalizar em três
+    tabelas. `RecursoBiblioteca` é conteúdo global (sem `cpl_id`), com
+    armazenamento próprio (`salvar_arquivo_biblioteca`) em vez de
+    reaproveitar `Documento` (que exige uma CPL). **Pendência real, não
+    de código**: nenhuma nova — SMTP em produção (item 14) segue sendo a
+    única pendência de configuração aberta. Do documento de requisitos,
+    seguem ❌ pendentes (não candidatos óbvios pra próxima fatia, cada
+    um depende de escopo/infra que ainda não existe): RF-011
+    (georreferenciamento), RF-052 (matchmaking), RF-054 (integrações
+    externas), RF-055 (portal público expandido) e RF-057 (IA
+    assistiva, fora do MVP por definição).
 
 ## Deploy em produção
 

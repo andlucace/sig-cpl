@@ -268,13 +268,13 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 | ID | Requisito macro | Pri. | Status no repo |
 |---|---|---|---|
 | RF-049 | Enviar notificações de prazos, pendências, reuniões, tarefas, validade documental e metas. | M | ✅ Implementado — `Notificacao` (`app/models/notificacao.py`) + `app/services/notificacoes.py::gerar_notificacoes()`, cobrindo as 5 fontes citadas: reunião agendada nos próximos 7 dias (aos membros ativos do órgão), tarefa/meta com prazo vencendo ou vencido (ao responsável), documento perdendo validade (a quem criou), e recadastramento de CPL vencendo em até 90 dias — RN-005 (aos administradores da plataforma). "Enviar" é dentro do próprio sistema (`/painel/notificacoes`, `GET /api/notificacoes`), não e-mail/push — não há esse canal hoje. Sem agendador/worker (sem Celery/cron neste stack): a varredura roda sob demanda, sempre que a tela/endpoint é acessado, idempotente (nunca duplica o mesmo aviso) |
-| RF-050 | Gerenciar eventos, capacitações, mentorias, missões técnicas, inscrições, presença e avaliação. | S | ❌ Pendente |
+| RF-050 | Gerenciar eventos, capacitações, mentorias, missões técnicas, inscrições, presença e avaliação. | S | ✅ Implementado — `Evento` (capacitação/mentoria/missão técnica/outro), mesmo raciocínio de `Edital` (RN-006): `cpl_id` nulo é aberto a todas as CPLs, gerido pela plataforma (`PAPEIS_EDITAL_GESTAO`); `cpl_id` preenchido é local de uma CPL, gerida por `PAPEIS_GESTAO` dela. Inscrição, presença e avaliação ficam num único registro por pessoa+evento (`InscricaoEvento`) em vez de três tabelas — são estados sucessivos do mesmo vínculo, não entidades independentes. Limite de vagas respeitado na inscrição. `/painel/eventos`, `POST/GET /api/eventos`, `POST /api/eventos/{id}/inscricoes`, `PATCH /api/eventos/inscricoes/{id}` |
 
 ### Conhecimento
 
 | ID | Requisito macro | Pri. | Status no repo |
 |---|---|---|---|
-| RF-051 | Manter biblioteca de modelos, atas, estudos, boas práticas, editais, oportunidades e conteúdos técnicos. | S | ❌ Pendente |
+| RF-051 | Manter biblioteca de modelos, atas, estudos, boas práticas, editais, oportunidades e conteúdos técnicos. | S | ✅ Implementado — `RecursoBiblioteca`, conteúdo compartilhado entre todas as CPLs (sem `cpl_id`, diferente do repositório de documentos operacionais do RF-042, sempre preso a uma CPL), gerido por `PAPEIS_EDITAL_GESTAO`. Seis tipos (`modelo`, `estudo`, `boa_pratica`, `edital`, `oportunidade`, `conteudo_tecnico`) — "atas" não virou um sétimo tipo porque já é `Documento`/RF-042, duplicar seria o mesmo conteúdo em dois lugares. Cada recurso pode ser um arquivo enviado, um link externo ou só texto (ao menos um dos três é exigido); `publicado` controla rascunho vs. visível a todos. `/painel/biblioteca`, `POST/GET /api/biblioteca`, `GET /api/biblioteca/{id}/arquivo` |
 
 ### Ecossistema
 
@@ -367,7 +367,7 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 | Projeto | Demanda, proposta, eixo, plano de trabalho, equipe, etapa, atividade, entrega e resultado. | ✅ Completo — `DemandaProjeto`, `Projeto`, `EtapaProjeto` (demanda/proposta, eixo, portfólio, plano de trabalho, etapa/atividade com cronograma e marcos), `EquipeProjeto`, `EntregaProjeto` (com aprovação); "resultado" coberto por `MetaProjeto`/`IndicadorProjeto` |
 | Financeiro do projeto | Item, cotação, fornecedor, fonte, contrapartida, desembolso, comprovante e saldo. | ✅ Completo — `AquisicaoProjeto` (item/contrapartida), `CotacaoAquisicao` (fornecedor), `OrigemRecursoProjeto` (fonte), `DesembolsoProjeto` (comprovante via Documentos); saldo calculado, não armazenado |
 | Documento | Tipo, arquivo, metadados, validade, versão, aprovação, assinatura e confidencialidade. | ✅ `Documento` |
-| Evento e comunicação | Evento, inscrição, presença, notícia, aviso, notificação e campanha. | ❌ Pendente |
+| Evento e comunicação | Evento, inscrição, presença, notícia, aviso, notificação e campanha. | ⚠️ Evento/inscrição/presença (RF-050) e notificação (RF-049) e campanha (RF-012) implementados; "notícia"/"aviso" ficam para o portal público (RF-055, ainda não expandido) |
 | Auditoria | Evento de sistema, usuário, data, objeto, ação, valor anterior e valor posterior. | ✅ `RegistroAuditoria` |
 
 ## 11. Fluxos de negócio prioritários
@@ -473,14 +473,14 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 
 1. Usuários conseguem cadastrar uma entidade e vinculá-la corretamente à CPL e a um ou mais elos. ✅
 2. A entidade gestora consegue criar uma reunião, registrar ata, decisão, responsável e acompanhar a execução. ✅
-3. O sistema consegue representar o planejamento estratégico, metas, indicadores e projetos vinculados. ⚠️ (projetos ainda não existem como módulo — só planejamento)
-4. A matriz de maturidade pode ser configurada por edital e recebe evidências, notas, justificativas e pareceres. ❌
-5. O sistema gera checklist de reconhecimento/recadastro e identifica pendências de prazo, documento e evidência. ❌
-6. Um plano de trabalho completo pode ser preenchido, versionado, aprovado e exportado. ❌
-7. O orçamento aceita cotações, contrapartidas e cronograma físico-financeiro, mantendo rastreabilidade. ❌
-8. Dashboards apresentam indicadores consolidados sem expor dados pessoais indevidamente. ⚠️ (dashboard existe, mas não foi auditado quanto a exposição de dados pessoais)
-9. Logs permitem reconstruir as principais alterações, avaliações, aprovações e submissões. ❌
-10. Importação da planilha atual produz registros consistentes, relatório de inconsistências e controle de duplicidade. ❌
+3. O sistema consegue representar o planejamento estratégico, metas, indicadores e projetos vinculados. ✅ (módulo de Projetos completo desde RF-029 a RF-041, ver seção 17 — item desatualizado corrigido em 2026-08-06)
+4. A matriz de maturidade pode ser configurada por edital e recebe evidências, notas, justificativas e pareceres. ✅ (RF-024 a RF-028, critérios/pesos/notas de corte por edital, evidência por critério via `Documento`)
+5. O sistema gera checklist de reconhecimento/recadastro e identifica pendências de prazo, documento e evidência. ✅ (checklist de habilitação — RF-027/RF-003 — e recadastro bienal com alerta de vencimento — RF-028)
+6. Um plano de trabalho completo pode ser preenchido, versionado, aprovado e exportado. ✅ (plano de trabalho do módulo de Projetos + exportação em PDF, RF-048)
+7. O orçamento aceita cotações, contrapartidas e cronograma físico-financeiro, mantendo rastreabilidade. ✅ (RF-036 a RF-038)
+8. Dashboards apresentam indicadores consolidados sem expor dados pessoais indevidamente. ⚠️ (dashboard existe — RF-044/045 — mas não foi auditado formalmente quanto a exposição de dados pessoais, ver RNF-002)
+9. Logs permitem reconstruir as principais alterações, avaliações, aprovações e submissões. ✅ (trilha de auditoria automática, RF-056, mais rastreamento de falhas do sistema em si, RNF-012)
+10. Importação da planilha atual produz registros consistentes, relatório de inconsistências e controle de duplicidade. ✅ (RF-013, com remapeamento manual de colunas e relatório de erro por linha)
 
 ## 19. Premissas, riscos e dependências
 

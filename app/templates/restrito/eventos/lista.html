@@ -1,0 +1,101 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Eventos{% endblock %}
+{% block subtitulo %}Eventos{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1"><i class="bi bi-calendar-event text-primary me-2"></i>Eventos</h1>
+    <p class="text-body-secondary">
+        Capacitações, mentorias, missões técnicas e outros eventos do Programa SP Produz (RF-050) —
+        inscrição, presença e avaliação por pessoa.
+    </p>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-list-ul text-primary me-2"></i>Próximos e passados
+                </div>
+                <div class="list-group list-group-flush">
+                    {% for e in eventos %}
+                        <a href="/painel/eventos/{{ e.id }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="fw-semibold">{{ e.titulo }}</span>
+                                <span class="badge text-bg-secondary">{{ e.tipo.value.replace('_', ' ') }}</span>
+                                <div class="small text-body-secondary">
+                                    {{ e.data_inicio.strftime('%d/%m/%Y %H:%M') }}
+                                    {% if e.cpl %} — {{ e.cpl.nome }}{% else %} — aberto a todas as CPLs{% endif %}
+                                </div>
+                            </div>
+                            <span class="badge {% if e.status.value == 'realizado' %}text-bg-success{% elif e.status.value == 'cancelado' %}text-bg-danger{% else %}text-bg-info{% endif %}">
+                                {{ e.status.value }}
+                            </span>
+                        </a>
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhum evento cadastrado ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Novo evento
+                </div>
+                <div class="card-body">
+                    {% if cpls_gestao is none or cpls_gestao %}
+                        <form method="post" action="/painel/eventos">
+                            <div class="mb-2">
+                                <label class="form-label small mb-1">Título</label>
+                                <input type="text" class="form-control form-control-sm" name="titulo" required>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small mb-1">Tipo</label>
+                                <select class="form-select form-select-sm" name="tipo" required>
+                                    {% for t in tipos %}
+                                        <option value="{{ t.value }}">{{ t.value.replace('_', ' ') }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small mb-1">Descrição</label>
+                                <textarea class="form-control form-control-sm" name="descricao" rows="2"></textarea>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small mb-1">Início</label>
+                                <input type="datetime-local" class="form-control form-control-sm" name="data_inicio" required>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small mb-1">Fim (opcional)</label>
+                                <input type="datetime-local" class="form-control form-control-sm" name="data_fim">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small mb-1">Local</label>
+                                <input type="text" class="form-control form-control-sm" name="local">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small mb-1">Vagas (opcional)</label>
+                                <input type="number" min="1" class="form-control form-control-sm" name="vagas">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small mb-1">CPL</label>
+                                <select class="form-select form-select-sm" name="cpl_id">
+                                    {% if e_administrador %}
+                                        <option value="">Aberto a todas as CPLs</option>
+                                    {% endif %}
+                                    {% for c in opcoes_cpl %}
+                                        <option value="{{ c.id }}">{{ c.nome }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-plus-lg me-1"></i>Criar evento
+                            </button>
+                        </form>
+                    {% else %}
+                        <div class="text-body-secondary small">Você não tem permissão para criar eventos.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

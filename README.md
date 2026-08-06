@@ -1406,6 +1406,58 @@ de novo enquanto existir pelo menos um administrador.
   replicando como o `rh-nepen` já funcionava). Nada impede de configurar um
   remoto depois se for útil (ex.: para revisão de código ou CI/CD futuro).
 
+## Eventos (RF-050)
+
+Capacitações, mentorias, missões técnicas e eventos genéricos do Programa SP
+Produz, com inscrição, presença e avaliação:
+
+- `Evento` (`app/models/evento.py`) — mesmo raciocínio de `Edital` (RN-006):
+  `cpl_id` nulo é um evento aberto a todas as CPLs, gerido pela plataforma
+  (`PAPEIS_EDITAL_GESTAO`); `cpl_id` preenchido é um evento local de uma CPL
+  específica, gerido pela própria gestão dela (`PAPEIS_GESTAO`). Tipo
+  (`capacitacao`/`mentoria`/`missao_tecnica`/`outro`), status
+  (`agendado`/`realizado`/`cancelado`, mesmo raciocínio de `StatusReuniao`),
+  local, vagas.
+- `InscricaoEvento` — inscrição, presença e avaliação de uma pessoa num
+  evento num único registro por pessoa+evento, não três tabelas separadas:
+  são estados sucessivos do mesmo vínculo (inscrita → presente/ausente →
+  avaliação), não entidades independentes. `presente` fica `None` até
+  alguém marcar (diferente de `Presenca` em Governança, que já nasce
+  preenchida — ali o registro só existe depois da reunião acontecer; aqui a
+  inscrição existe antes do evento). Inscrição é feita por quem tem papel de
+  gestão (mesmo padrão de `MembroOrgao`/`Presenca` — não é autoatendimento,
+  e também não exige que a `Pessoa` já tenha vínculo formal com a CPL, já
+  que um evento pode ser justamente a porta de entrada de alguém ainda não
+  vinculado). Limite de vagas verificado na inscrição.
+- UI web em `/painel/eventos` (lista + criação) →
+  `/painel/eventos/{id}` (inscrever pessoa, marcar presença, registrar
+  avaliação, atualizar status). `POST/GET /api/eventos`,
+  `POST /api/eventos/{id}/inscricoes`,
+  `PATCH /api/eventos/inscricoes/{id}`.
+
+## Biblioteca de conhecimento (RF-051)
+
+Conteúdo compartilhado entre todas as CPLs — modelos, estudos, boas
+práticas, editais/oportunidades em destaque e conteúdo técnico. Diferente
+do repositório de documentos operacionais de uma CPL (RF-042, `Documento`,
+sempre preso a um `cpl_id`), por isso não reaproveita esse modelo:
+
+- `RecursoBiblioteca` (`app/models/biblioteca.py`) — seis tipos (`modelo`,
+  `estudo`, `boa_pratica`, `edital`, `oportunidade`, `conteudo_tecnico`);
+  "atas" não virou um sétimo tipo porque já é `Documento`/RF-042 (ligada a
+  uma `Reuniao`) — duplicar seria o mesmo conteúdo em dois lugares. Um
+  recurso pode ser um arquivo enviado (`salvar_arquivo_biblioteca`, mesmo
+  mecanismo de `salvar_arquivo` mas numa subpasta fixa em vez de uma por
+  CPL, já que este conteúdo não pertence a nenhuma CPL específica), um link
+  externo ou só texto — ao menos um dos três é exigido. `publicado`
+  controla visibilidade: rascunho só é visível a quem administra
+  (`PAPEIS_EDITAL_GESTAO`, mesma autoridade de `Edital` — conteúdo
+  compartilhado gerido pela plataforma).
+- UI web em `/painel/biblioteca` — lista com filtro por tipo, criação
+  (multipart, arquivo opcional) e alternância publicar/despublicar, tudo
+  numa página só. `POST/GET /api/biblioteca`,
+  `GET /api/biblioteca/{id}/arquivo`.
+
 ## Observabilidade (RNF-012)
 
 Sem infraestrutura externa nova (Prometheus/Grafana/Sentry) — falhas
@@ -1587,3 +1639,16 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
     estruturados, métricas em memória, rastreamento de falhas
     (`RegistroFalha`), alerta por limiar e painel de saúde — sem
     infraestrutura externa nova.
+17. ~~RF-050: eventos, capacitações, mentorias, missões técnicas~~ e
+    ~~RF-051: biblioteca de conhecimento~~ — **feitos**: ver seções
+    "Eventos (RF-050)" e "Biblioteca de conhecimento (RF-051)" acima.
+    `Evento`/`InscricaoEvento` reaproveitam o raciocínio de `Edital`
+    (conteúdo aberto a todas as CPLs ou local de uma só) e de
+    `Presenca`/`MembroOrgao` (quem gere inscreve, não é autoatendimento).
+    `RecursoBiblioteca` é conteúdo global (sem `cpl_id`), com
+    armazenamento próprio em vez de reaproveitar `Documento` (que exige
+    uma CPL). Restam no documento de requisitos, ainda não iniciados:
+    RF-011 (georreferenciamento), RF-052 (matchmaking), RF-054
+    (integrações externas), RF-055 (portal público expandido) e RF-057
+    (assistência de IA, declaradamente fora do MVP) — ver
+    `docs/requisitos_macros.md` para o levantamento completo.

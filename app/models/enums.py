@@ -329,3 +329,37 @@ class TipoRecursoSubmissao(str, enum.Enum):
     RECURSO = "recurso"
     CONTRARRAZAO = "contrarrazao"
     DILIGENCIA = "diligencia"
+
+
+class TipoEvento(str, enum.Enum):
+    """RF-050: as três modalidades citadas pelo requisito, mais um tipo
+    genérico pra qualquer evento que não se encaixe nelas."""
+
+    CAPACITACAO = "capacitacao"
+    MENTORIA = "mentoria"
+    MISSAO_TECNICA = "missao_tecnica"
+    OUTRO = "outro"
+
+
+class StatusEvento(str, enum.Enum):
+    """RF-050: ciclo de vida de um evento — mesmo raciocínio de
+    `StatusReuniao`."""
+
+    AGENDADO = "agendado"
+    REALIZADO = "realizado"
+    CANCELADO = "cancelado"
+
+
+class TipoRecursoBiblioteca(str, enum.Enum):
+    """RF-051: os tipos de conteúdo citados pelo requisito
+    ("modelos, atas, estudos, boas práticas, editais, oportunidades e
+    conteúdos técnicos") — "atas" não vira um tipo aqui porque já é
+    `Documento`/RF-042 (ligada a uma `Reuniao`); duplicar seria o mesmo
+    conteúdo em dois lugares."""
+
+    MODELO = "modelo"
+    ESTUDO = "estudo"
+    BOA_PRATICA = "boa_pratica"
+    EDITAL = "edital"
+    OPORTUNIDADE = "oportunidade"
+    CONTEUDO_TECNICO = "conteudo_tecnico"

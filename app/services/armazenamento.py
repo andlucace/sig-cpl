@@ -30,6 +30,21 @@ def salvar_arquivo(cpl_id: uuid.UUID, nome_original: str, conteudo: bytes) -> st
     return str(Path(str(cpl_id)) / nome_seguro)
 
 
+def salvar_arquivo_biblioteca(nome_original: str, conteudo: bytes) -> str:
+    """RF-051: mesma lógica de `salvar_arquivo`, mas para conteúdo da
+    biblioteca de conhecimento — compartilhado entre todas as CPLs, não
+    preso a uma (`RecursoBiblioteca` não tem `cpl_id`), então usa uma
+    subpasta fixa em vez de uma por CPL."""
+
+    extensao = Path(nome_original).suffix
+    nome_seguro = f"{uuid.uuid4()}{extensao}"
+    subpasta = _base_dir() / "_biblioteca"
+    subpasta.mkdir(parents=True, exist_ok=True)
+    destino = subpasta / nome_seguro
+    destino.write_bytes(conteudo)
+    return str(Path("_biblioteca") / nome_seguro)
+
+
 def caminho_absoluto(arquivo_path: str) -> Path:
     return _base_dir() / arquivo_path
 

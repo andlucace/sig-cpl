@@ -1,0 +1,122 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Evento — {{ evento.titulo }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/eventos" class="link-secondary text-decoration-none">Eventos</a>
+    <i class="bi bi-chevron-right small mx-1"></i>{{ evento.titulo }}
+{% endblock %}
+{% block conteudo %}
+    <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-2">
+        <h1 class="h3 mb-0">{{ evento.titulo }}</h1>
+        <span class="badge {% if evento.status.value == 'realizado' %}text-bg-success{% elif evento.status.value == 'cancelado' %}text-bg-danger{% else %}text-bg-info{% endif %} fs-6">
+            {{ evento.status.value }}
+        </span>
+    </div>
+    <p class="text-body-secondary">
+        <span class="badge text-bg-secondary">{{ evento.tipo.value.replace('_', ' ') }}</span>
+        {{ evento.data_inicio.strftime('%d/%m/%Y %H:%M') }}
+        {% if evento.data_fim %} até {{ evento.data_fim.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+        {% if evento.local %} — {{ evento.local }}{% endif %}
+        {% if evento.cpl %} — evento local de {{ evento.cpl.nome }}{% else %} — aberto a todas as CPLs{% endif %}
+        {% if evento.vagas %} — {{ inscricoes | length }}/{{ evento.vagas }} vaga(s) preenchida(s){% endif %}
+    </p>
+    {% if evento.descricao %}<p>{{ evento.descricao }}</p>{% endif %}
+
+    {% if pode_gerir_evento %}
+        <form method="post" action="/painel/eventos/{{ evento.id }}/status" class="d-flex gap-2 align-items-end mb-4">
+            <div>
+                <label class="form-label small mb-1">Status do evento</label>
+                <select class="form-select form-select-sm" name="status">
+                    {% for s in status_opcoes %}
+                        <option value="{{ s.value }}" {% if s == evento.status %}selected{% endif %}>{{ s.value }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-save me-1"></i>Atualizar status
+            </button>
+        </form>
+    {% endif %}
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-people text-primary me-2"></i>Inscritos, presença e avaliação
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Pessoa</th>
+                                <th>CPL</th>
+                                <th>Presença</th>
+                                <th>Avaliação</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for i in inscricoes %}
+                                <tr>
+                                    <td class="small">{{ i.pessoa.nome }}</td>
+                                    <td class="small">{{ i.cpl.nome if i.cpl else "—" }}</td>
+                                    <td class="small">
+                                        <form method="post" action="/painel/eventos/inscricoes/{{ i.id }}" class="d-flex gap-1">
+                                            <select class="form-select form-select-sm" name="presente" style="width: auto;">
+                                                <option value="" {% if i.presente is none %}selected{% endif %}>não marcado</option>
+                                                <option value="true" {% if i.presente == true %}selected{% endif %}>presente</option>
+                                                <option value="false" {% if i.presente == false %}selected{% endif %}>ausente</option>
+                                            </select>
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-check-lg"></i></button>
+                                        </form>
+                                    </td>
+                                    <td class="small">
+                                        {% if i.nota_avaliacao %}
+                                            <span class="badge text-bg-warning">{{ i.nota_avaliacao }}/5</span>
+                                        {% endif %}
+                                        {% if i.comentario_avaliacao %}<div class="text-body-secondary">{{ i.comentario_avaliacao }}</div>{% endif %}
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr><td colspan="4" class="text-body-secondary">Nenhuma inscrição ainda.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-person-plus me-2"></i>Inscrever pessoa
+                </div>
+                <div class="card-body">
+                    {% if pode_inscrever %}
+                        <form method="post" action="/painel/eventos/{{ evento.id }}/inscricoes">
+                            <div class="mb-2">
+                                <label class="form-label small mb-1">Pessoa</label>
+                                <select class="form-select form-select-sm" name="pessoa_id" required>
+                                    {% for p in pessoas %}
+                                        <option value="{{ p.id }}">{{ p.nome }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small mb-1">Em nome da CPL</label>
+                                <select class="form-select form-select-sm" name="cpl_id" required>
+                                    {% for c in cpls_inscricao %}
+                                        <option value="{{ c.id }}">{{ c.nome }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-plus-lg me-1"></i>Inscrever
+                            </button>
+                        </form>
+                    {% else %}
+                        <div class="text-body-secondary small">Você não tem permissão para inscrever pessoas neste evento.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

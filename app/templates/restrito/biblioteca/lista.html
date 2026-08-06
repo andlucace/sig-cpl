@@ -1,0 +1,118 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Biblioteca de conhecimento{% endblock %}
+{% block subtitulo %}Biblioteca de conhecimento{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1"><i class="bi bi-journal-richtext text-primary me-2"></i>Biblioteca de conhecimento</h1>
+    <p class="text-body-secondary">
+        Modelos, estudos, boas práticas, editais/oportunidades em destaque e conteúdo técnico
+        compartilhado entre todas as CPLs (RF-051).
+    </p>
+
+    <form method="get" class="row g-2 mb-3 align-items-end">
+        <div class="col-auto">
+            <label class="form-label small mb-1">Tipo</label>
+            <select class="form-select form-select-sm" name="tipo" onchange="this.form.submit()">
+                <option value="">Todos</option>
+                {% for t in tipos %}
+                    <option value="{{ t.value }}" {% if filtro_tipo and filtro_tipo.value == t.value %}selected{% endif %}>
+                        {{ t.value.replace('_', ' ') }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        {% if filtro_tipo %}
+            <div class="col-auto">
+                <a href="/painel/biblioteca" class="btn btn-outline-secondary btn-sm">Limpar filtro</a>
+            </div>
+        {% endif %}
+    </form>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-collection text-primary me-2"></i>Recursos
+                </div>
+                <div class="list-group list-group-flush">
+                    {% for r in recursos %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                <div>
+                                    <span class="fw-semibold">{{ r.titulo }}</span>
+                                    <span class="badge text-bg-secondary">{{ r.tipo.value.replace('_', ' ') }}</span>
+                                    {% if not r.publicado %}<span class="badge text-bg-warning">rascunho</span>{% endif %}
+                                    {% if r.descricao %}<div class="small text-body-secondary mt-1">{{ r.descricao }}</div>{% endif %}
+                                    <div class="small mt-1">
+                                        {% if r.arquivo_path %}
+                                            <a href="/painel/biblioteca/{{ r.id }}/arquivo"><i class="bi bi-download me-1"></i>{{ r.nome_arquivo_original }}</a>
+                                        {% endif %}
+                                        {% if r.url_externa %}
+                                            <a href="{{ r.url_externa }}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right me-1"></i>{{ r.url_externa }}</a>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% if e_administrador %}
+                                    <form method="post" action="/painel/biblioteca/{{ r.id }}/publicar">
+                                        <button type="submit" class="btn btn-outline-secondary btn-sm text-nowrap">
+                                            {% if r.publicado %}Despublicar{% else %}Publicar{% endif %}
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhum recurso cadastrado ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Novo recurso
+                </div>
+                <div class="card-body">
+                    {% if e_administrador %}
+                        <form method="post" action="/painel/biblioteca" enctype="multipart/form-data">
+                            <div class="mb-2">
+                                <label class="form-label small mb-1">Título</label>
+                                <input type="text" class="form-control form-control-sm" name="titulo" required>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small mb-1">Tipo</label>
+                                <select class="form-select form-select-sm" name="tipo" required>
+                                    {% for t in tipos %}
+                                        <option value="{{ t.value }}">{{ t.value.replace('_', ' ') }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small mb-1">Descrição</label>
+                                <textarea class="form-control form-control-sm" name="descricao" rows="3"></textarea>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small mb-1">Link externo (opcional)</label>
+                                <input type="url" class="form-control form-control-sm" name="url_externa" placeholder="https://...">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small mb-1">Arquivo (opcional)</label>
+                                <input type="file" class="form-control form-control-sm" name="arquivo">
+                            </div>
+                            <div class="form-check mb-3">
+                                <input type="checkbox" class="form-check-input" id="publicado" name="publicado" checked>
+                                <label class="form-check-label" for="publicado">Publicar imediatamente</label>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-plus-lg me-1"></i>Adicionar
+                            </button>
+                        </form>
+                        <div class="form-text mt-2">Informe ao menos um: arquivo, link externo ou descrição.</div>
+                    {% else %}
+                        <div class="text-body-secondary small">Só o administrador da plataforma mantém a biblioteca.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
