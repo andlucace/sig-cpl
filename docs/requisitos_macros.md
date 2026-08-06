@@ -153,7 +153,7 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 | ID | Requisito macro | Pri. | Status no repo |
 |---|---|---|---|
 | RF-009 | Classificar cada ator nos elos da cadeia: insumos, produção, transformação, comercialização/distribuição e apoio institucional, admitindo múltiplos elos. | M | ✅ Implementado (`EntidadeElo`) |
-| RF-010 | Registrar produtos, serviços, tecnologias, certificações, diferenciais competitivos, canais digitais e capacidade produtiva. | M | ❌ Pendente |
+| RF-010 | Registrar produtos, serviços, tecnologias, certificações, diferenciais competitivos, canais digitais e capacidade produtiva. | M | ✅ Implementado — certificações e diferenciais competitivos já existiam em `DiagnosticoCadastral` (RF-012/046). Nesta fatia: **produtos/serviços/tecnologias** — `OfertaEntidade` (`app/models/entidade.py`), tabela repetível (uma entidade pode ofertar vários), `tipo` (`TipoOferta`: produto/serviço/tecnologia), nome, descrição, `ativo` (desativação em vez de exclusão). **Canais digitais** — `Entidade.canais_digitais` (JSONB) já existia no modelo desde o RF-006/008 mas nunca tinha schema/rota/UI (campo órfão); ganhou `PATCH /api/entidades/{id}/canais-digitais` e formulário (site/Instagram/Facebook/LinkedIn/WhatsApp — conjunto fixo e conhecido, não chave livre, pelo padrão de formulário sem JS do projeto). **Capacidade produtiva** — campo novo `DiagnosticoCadastral.capacidade_produtiva` (texto livre), coletável pelos mesmos 3 pontos de escrita das demais respostas de diagnóstico (formulário público de campanha, importação de planilha via `_ALIASES_CAMPO`, API). Nova tela `/painel/cadastro/entidades/{id}` (detalhe de uma entidade — não existia nenhuma antes desta fatia; só havia lista por CPL) reúne ofertas + canais digitais + resumo do diagnóstico (ofertas/canais editáveis ali; diagnóstico continua só editável via campanha/planilha/API, mesmo padrão já estabelecido) |
 | RF-011 | Georreferenciar atores e exibir mapa da concentração territorial e das relações da cadeia. | S | ❌ Pendente |
 
 ### Formulários e dados
@@ -360,7 +360,7 @@ A planilha interna "CPLS - FORMS.xlsx" já contempla um conjunto inicial de dado
 | CPL | Identificação, setor, território, entidade gestora, reconhecimento, nível e vigência. | ✅ `CPL` |
 | Entidade | Empresa, órgão, associação, universidade, ICT, startup, fornecedor ou ambiente de inovação. | ✅ `Entidade`, `EntidadeCPL` |
 | Pessoa e vínculo | Representante, papel, mandato, contato, consentimento e relação com entidades/CPL. | ✅ `Pessoa`, `PessoaVinculo` |
-| Elo e oferta | Elo da cadeia, produto, serviço, tecnologia, competência, certificação e capacidade. | ⚠️ Elo ok (`EntidadeElo`); produto/serviço/competência (RF-010) pendente |
+| Elo e oferta | Elo da cadeia, produto, serviço, tecnologia, competência, certificação e capacidade. | ✅ Completo — Elo (`EntidadeElo`), produto/serviço/tecnologia (`OfertaEntidade`, RF-010), certificação e capacidade (`DiagnosticoCadastral`). "Competência" não tem campo próprio — não é um conceito claramente distinto de "serviço/tecnologia" no documento de requisitos |
 | Governança | Órgão, comissão, mandato, reunião, presença, votação, decisão e tarefa. | ✅ Completo (módulo Governança) |
 | Planejamento | Diagnóstico, objetivo, meta, iniciativa, indicador e risco. | ⚠️ Completo exceto "risco" (não modelado ainda) |
 | Maturidade | Edital, critério, peso, evidência, avaliação, nota, parecer e nível. | ✅ `Edital`, `CriterioMaturidade`, `Avaliacao`, `AvaliacaoCriterio`, `RecursoAvaliacao` |

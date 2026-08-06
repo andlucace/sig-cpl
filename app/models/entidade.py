@@ -2,12 +2,12 @@ import uuid
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampedBase
-from app.models.enums import Elo, TipoEntidade
+from app.models.enums import Elo, TipoEntidade, TipoOferta
 
 if TYPE_CHECKING:
     from app.models.cpl import CPL
@@ -34,9 +34,15 @@ class Entidade(TimestampedBase):
     endereco: Mapped[str | None] = mapped_column(String(500))
 
     situacao_cadastral: Mapped[str | None] = mapped_column(String(100))
+    # RF-010: dict de canais conhecidos (site/instagram/facebook/linkedin/
+    # whatsapp) -> URL ou contato; chaves não fechadas em enum porque o
+    # formulário só edita um conjunto pequeno e conhecido, mas o campo
+    # aceita qualquer chave (ex.: escrita direta via API).
     canais_digitais: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    ofertas: Mapped[list["OfertaEntidade"]] = relationship(back_populates="entidade")
 
 
 class EntidadeCPL(Base):
@@ -71,3 +77,23 @@ class EntidadeElo(Base):
     cpl_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("cpls.id"))
     elo: Mapped[Elo] = mapped_column(nullable=False)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class OfertaEntidade(TimestampedBase):
+    """RF-010: produto, serviço ou tecnologia ofertado por uma entidade —
+    junto com `EntidadeElo` (RF-009) e certificações/diferenciais
+    competitivos (já modelados em `DiagnosticoCadastral`), fecha "elo e
+    oferta" do modelo conceitual (seção 10 do documento de requisitos).
+    Não escopado por CPL como `EntidadeElo` — o que uma entidade produz é
+    uma característica dela, não algo que muda conforme a CPL em que
+    está vinculada."""
+
+    __tablename__ = "ofertas_entidade"
+
+    entidade_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("entidades.id"), nullable=False)
+    tipo: Mapped[TipoOferta] = mapped_column(nullable=False)
+    nome: Mapped[str] = mapped_column(String(255), nullable=False)
+    descricao: Mapped[str | None] = mapped_column(Text)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    entidade: Mapped["Entidade"] = relationship(back_populates="ofertas")

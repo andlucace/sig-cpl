@@ -49,6 +49,10 @@
                             <label class="form-label">Diferenciais competitivos</label>
                             <textarea class="form-control" name="diferenciais_competitivos" rows="2">{{ (diagnostico.diferenciais_competitivos or '') if diagnostico else '' }}</textarea>
                         </div>
+                        <div class="col-12">
+                            <label class="form-label">Capacidade produtiva</label>
+                            <textarea class="form-control" name="capacidade_produtiva" rows="2" placeholder="Ex.: 500 unidades/mês, 2 turnos de produção...">{{ (diagnostico.capacidade_produtiva or '') if diagnostico else '' }}</textarea>
+                        </div>
                         <div class="col-md-4">
                             <label class="form-label">Faixa de faturamento</label>
                             <input type="text" class="form-control" name="faturamento_faixa" value="{{ (diagnostico.faturamento_faixa or '') if diagnostico else '' }}">

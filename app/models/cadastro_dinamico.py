@@ -48,6 +48,10 @@ class DiagnosticoCadastral(TimestampedBase):
     possui_certificacoes: Mapped[bool | None] = mapped_column(Boolean)
     certificacoes: Mapped[str | None] = mapped_column(String(255))
     nivel_digitalizacao: Mapped[str | None] = mapped_column(String(100))
+    # RF-010: capacidade produtiva — texto livre (volume/capacidade varia
+    # demais entre tipos de negócio pra caber num campo numérico único,
+    # mesmo raciocínio de `quantidade` em `AquisicaoProjeto`).
+    capacidade_produtiva: Mapped[str | None] = mapped_column(Text)
 
     entidade: Mapped["Entidade"] = relationship()
 

@@ -46,9 +46,42 @@ Pessoa e Usuário/Papel — o suficiente para o módulo 1 (Identidade e acesso)
 e o módulo 2 (Cadastro e cadeia) do documento:
 
 - `CPL` (RF-001, RN-004, RN-005)
-- `Entidade` + `EntidadeCPL` + `EntidadeElo` (RF-006, RF-008, RF-009, RN-003)
+- `Entidade` + `EntidadeCPL` + `EntidadeElo` + `OfertaEntidade` (RF-006, RF-008, RF-009, RF-010, RN-003)
 - `Pessoa` + `PessoaVinculo` (RF-007)
 - `Usuario` + `UsuarioPapel` (RF-004, RF-005)
+
+**Produtos, serviços, tecnologias, canais digitais e capacidade
+produtiva (RF-010)** — certificações e diferenciais competitivos já
+existiam em `DiagnosticoCadastral` desde o RF-012/046; esta fatia fechou
+o resto:
+- `OfertaEntidade` — produto, serviço ou tecnologia ofertado por uma
+  entidade, tabela repetível (`TipoOferta`: produto/serviço/tecnologia),
+  com `ativo` (desativa, não exclui — mantém histórico).
+  `POST/GET /api/entidades/{id}/ofertas`,
+  `POST /api/entidades/ofertas/{id}/desativar`.
+- `Entidade.canais_digitais` (JSONB) já existia no modelo desde o
+  RF-006/008, mas era um **campo órfão** — sem schema, sem rota, sem UI,
+  nunca escrito nem lido em lugar nenhum. Ganhou
+  `PATCH /api/entidades/{id}/canais-digitais` e um formulário com um
+  conjunto fixo e conhecido de canais (site, Instagram, Facebook,
+  LinkedIn, WhatsApp) — não uma chave livre, pelo mesmo motivo de todo
+  form sem JS do projeto: um `<input>` por canal conhecido em vez de
+  "adicionar chave dinamicamente".
+- `DiagnosticoCadastral.capacidade_produtiva` (texto livre — capacidade
+  varia demais entre tipos de negócio pra caber num campo numérico
+  único, mesmo raciocínio de `quantidade` em `AquisicaoProjeto`),
+  coletável pelos mesmos 3 pontos de escrita das demais respostas de
+  diagnóstico (formulário público de campanha, importação de planilha,
+  API) — e automaticamente incluído na exportação do RF-053, sem
+  nenhuma mudança extra ali (`CAMPOS_CONHECIDOS` é derivado do
+  dicionário de aliases, não hardcoded).
+- **Nova tela** `/painel/cadastro/entidades/{id}` — não existia
+  nenhuma tela de detalhe de entidade antes desta fatia, só a lista por
+  CPL (`/painel/cadastro/cpls/{id}`). Reúne ofertas + canais digitais
+  (editáveis ali) e um resumo do diagnóstico cadastral (capacidade
+  produtiva, diferenciais, certificações — read-only: o diagnóstico
+  continua editável só via campanha/planilha/API, mesmo padrão já
+  estabelecido, não uma decisão nova desta fatia).
 
 O bloco **Governança** do modelo conceitual também foi implementado
 (RF-015 a RF-020):
@@ -1391,3 +1424,15 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
     variáveis `SMTP_*` ainda precisam de credenciais reais em produção
     para o envio de e-mail funcionar de fato lá (a funcionalidade em si
     está completa e testada localmente contra um SMTP de teste).
+13. ~~RF-010: produtos, serviços, tecnologias, canais digitais e
+    capacidade produtiva~~ — **feito**: ver seção "Modelos implementados
+    nesta fase" acima. `OfertaEntidade` (tabela nova, repetível),
+    `Entidade.canais_digitais` (campo órfão desde o RF-006/008, ganhou
+    schema/rota/UI pela primeira vez) e
+    `DiagnosticoCadastral.capacidade_produtiva` (novo, nos 3 pontos de
+    escrita de sempre — campanha/planilha/API — e automaticamente
+    exportável pelo RF-053, sem código extra ali). Nova tela de detalhe
+    de entidade, que não existia antes. Certificações e diferenciais
+    competitivos já estavam prontos desde antes; "competência" não
+    ganhou campo próprio (não é um conceito claramente distinto de
+    serviço/tecnologia no documento).

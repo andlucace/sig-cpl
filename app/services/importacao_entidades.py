@@ -73,6 +73,9 @@ _ALIASES_CAMPO: dict[str, list[str]] = {
     "possui_certificacoes": ["certificacoes", "possui certificacoes"],
     "certificacoes": ["lista de certificacoes", "certificacoes obtidas"],
     "nivel_digitalizacao": ["digitalizacao", "nivel de digitalizacao"],
+    # RF-010: capacidade produtiva — adicionado numa sessão posterior à
+    # criação do modelo, mesmo motivo dos campos do RF-046/047 acima.
+    "capacidade_produtiva": ["capacidade produtiva", "capacidade de producao"],
 }
 
 _CAMPOS_BOOLEANOS = {

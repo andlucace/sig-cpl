@@ -51,6 +51,7 @@ def processar_atualizacao(
     endereco: str | None = Form(None),
     atividades_produtos: str | None = Form(None),
     diferenciais_competitivos: str | None = Form(None),
+    capacidade_produtiva: str | None = Form(None),
     faturamento_faixa: str | None = Form(None),
     empregos_diretos: str | None = Form(None),
     empregos_indiretos: str | None = Form(None),
@@ -94,6 +95,7 @@ def processar_atualizacao(
         db.add(diagnostico)
     diagnostico.atividades_produtos = atividades_produtos or None
     diagnostico.diferenciais_competitivos = diferenciais_competitivos or None
+    diagnostico.capacidade_produtiva = capacidade_produtiva or None
     diagnostico.faturamento_faixa = faturamento_faixa or None
     diagnostico.empregos_diretos = int(empregos_diretos) if empregos_diretos else None
     diagnostico.empregos_indiretos = int(empregos_indiretos) if empregos_indiretos else None

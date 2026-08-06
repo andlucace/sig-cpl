@@ -9,10 +9,10 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user_optional
 from app.core.rbac import PAPEIS_GESTAO, PAPEIS_GOVERNANCA_LEITURA, cpl_ids_visiveis, verificar_papel
 from app.db.session import get_db
-from app.models.cadastro_dinamico import CampanhaCadastral, CampanhaConvite, ImportacaoLote
+from app.models.cadastro_dinamico import CampanhaCadastral, CampanhaConvite, DiagnosticoCadastral, ImportacaoLote
 from app.models.cpl import CPL
-from app.models.entidade import Entidade, EntidadeCPL
-from app.models.enums import StatusLoteImportacao
+from app.models.entidade import Entidade, EntidadeCPL, OfertaEntidade
+from app.models.enums import StatusLoteImportacao, TipoOferta
 from app.models.usuario import Usuario
 from app.services.armazenamento import caminho_absoluto
 from app.services.importacao_entidades import (
@@ -346,4 +346,140 @@ def exportar_entidades_cpl(
         content=conteudo,
         media_type=_MEDIA_TYPES_EXPORTACAO[formato],
         headers={"Content-Disposition": f'attachment; filename="entidades.{formato}"'},
+    )
+
+
+# --- Detalhe da entidade: canais digitais e ofertas (RF-010) ----------------
+
+
+def _entidade_visivel_ou_none(db: Session, usuario: Usuario, entidade_id: uuid.UUID) -> Entidade | None:
+    entidade = db.get(Entidade, entidade_id)
+    if entidade is None:
+        return None
+    ids_visiveis = cpl_ids_visiveis(db, usuario)
+    if ids_visiveis is not None:
+        vinculada = (
+            db.query(EntidadeCPL)
+            .filter(EntidadeCPL.entidade_id == entidade_id, EntidadeCPL.cpl_id.in_(ids_visiveis))
+            .first()
+        )
+        if vinculada is None:
+            return None
+    return entidade
+
+
+@router.get("/entidades/{entidade_id}")
+def detalhe_entidade(
+    request: Request,
+    entidade_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    verificar_papel(db, usuario, PAPEIS_GOVERNANCA_LEITURA)
+    entidade = _entidade_visivel_ou_none(db, usuario, entidade_id)
+    if entidade is None:
+        return RedirectResponse("/painel/cadastro", status_code=status.HTTP_303_SEE_OTHER)
+
+    diagnostico = (
+        db.query(DiagnosticoCadastral).filter(DiagnosticoCadastral.entidade_id == entidade_id).first()
+    )
+    ofertas = (
+        db.query(OfertaEntidade)
+        .filter(OfertaEntidade.entidade_id == entidade_id)
+        .order_by(OfertaEntidade.tipo, OfertaEntidade.nome)
+        .all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "restrito/cadastro/entidade_detail.html",
+        {
+            "entidade": entidade,
+            "diagnostico": diagnostico,
+            "ofertas": ofertas,
+            "tipos_oferta": list(TipoOferta),
+            "usuario": usuario,
+            "pagina_ativa": "cadastro",
+        },
+    )
+
+
+@router.post("/entidades/{entidade_id}/canais-digitais")
+def atualizar_canais_digitais(
+    entidade_id: uuid.UUID,
+    site: str | None = Form(None),
+    instagram: str | None = Form(None),
+    facebook: str | None = Form(None),
+    linkedin: str | None = Form(None),
+    whatsapp: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    entidade = db.get(Entidade, entidade_id)
+    if entidade is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entidade não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO)
+
+    canais = {
+        chave: valor
+        for chave, valor in {
+            "site": site,
+            "instagram": instagram,
+            "facebook": facebook,
+            "linkedin": linkedin,
+            "whatsapp": whatsapp,
+        }.items()
+        if valor
+    }
+    entidade.canais_digitais = canais or None
+    db.commit()
+    return RedirectResponse(
+        f"/painel/cadastro/entidades/{entidade_id}", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post("/entidades/{entidade_id}/ofertas")
+def criar_oferta(
+    entidade_id: uuid.UUID,
+    tipo: TipoOferta = Form(...),
+    nome: str = Form(...),
+    descricao: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-010: produto, serviço ou tecnologia ofertado pela entidade."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    if db.get(Entidade, entidade_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entidade não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO)
+
+    oferta = OfertaEntidade(entidade_id=entidade_id, tipo=tipo, nome=nome, descricao=descricao or None)
+    db.add(oferta)
+    db.commit()
+    return RedirectResponse(
+        f"/painel/cadastro/entidades/{entidade_id}", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post("/ofertas/{oferta_id}/desativar")
+def desativar_oferta(
+    oferta_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    oferta = db.get(OfertaEntidade, oferta_id)
+    if oferta is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Oferta não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO)
+    oferta.ativo = False
+    db.commit()
+    return RedirectResponse(
+        f"/painel/cadastro/entidades/{oferta.entidade_id}", status_code=status.HTTP_303_SEE_OTHER
     )

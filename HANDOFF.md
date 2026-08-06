@@ -51,7 +51,7 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   `http://127.0.0.1:8010`** — confira com `netstat -ano | grep 8010` antes
   de subir outro, e mate o processo antigo antes de reiniciar (o servidor
   não usa `--reload`, então mudanças de código exigem restart manual).
-- **Migrações Alembic aplicadas:** 21 revisões, todas no banco atual:
+- **Migrações Alembic aplicadas:** 22 revisões, todas no banco atual:
   1. `18541dca0a36` — modelos base (CPL, Entidade, Pessoa, Usuário)
   2. `0ba4d1a10f9d` — módulo Governança
   3. `5dd913b79202` — módulo Planejamento Estratégico
@@ -117,6 +117,10 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   21. `48be8b55a24d` — tabela `tokens_recuperacao_senha` + colunas
       `usuarios.mfa_secret`/`usuarios.mfa_backup_codes` (RF-004) — sem
       gotcha nenhum dos dois de sempre (colunas novas todas nullable)
+  22. `2f06d7b1b330` — tabela `ofertas_entidade` + coluna
+      `diagnosticos_cadastrais.capacidade_produtiva` (RF-010) — sem
+      gotcha nenhum dos dois de sempre (enum `tipooferta` criado pela
+      primeira vez, não reaproveitado; coluna nova nullable)
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos;
     mesma coisa para RF-041/045/053/017, feitas depois da nº 20)
@@ -1289,6 +1293,71 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     README e não escondido — é uma decisão consciente de "a
     funcionalidade está pronta e testada, falta só a chave de
     produção", não um bug.
+34. **RF-010: produtos, serviços, tecnologias, canais digitais e
+    capacidade produtiva** — usuário pediu "implementar a RF-010",
+    escolhida entre os candidatos que eu tinha sugerido numa avaliação
+    de backlog anterior. Certificações e diferenciais competitivos já
+    existiam desde o RF-012/046 (`DiagnosticoCadastral`); faltava o
+    resto.
+    - **`OfertaEntidade`** (`app/models/entidade.py`) — produto, serviço
+      ou tecnologia (`TipoOferta`), tabela nova e repetível (uma
+      entidade pode ofertar vários) — não escopada por CPL como
+      `EntidadeElo`, porque o que uma entidade produz é característica
+      dela, não algo que muda conforme a CPL. `ativo` em vez de exclusão
+      (mesmo padrão de `EquipeProjeto`/`EntidadeElo`).
+    - **`Entidade.canais_digitais`** — descoberta no meio do trabalho:
+      esse campo JSONB **já existia no modelo desde o RF-006/008**
+      (bem antes desta sessão), mas era completamente órfão — sem
+      schema Pydantic, sem rota, sem UI, `grep` confirmou zero uso em
+      qualquer lugar do código além da própria declaração da coluna.
+      Ganhou `PATCH /api/entidades/{id}/canais-digitais` e formulário
+      com um conjunto fixo de canais conhecidos (site/Instagram/
+      Facebook/LinkedIn/WhatsApp) em vez de chave livre — primeira vez
+      que o projeto precisou editar um campo JSONB via form sem JS, e a
+      solução foi a mesma lógica de sempre: um `<input>` por chave
+      conhecida, não "adicionar campo dinamicamente".
+    - **`DiagnosticoCadastral.capacidade_produtiva`** — campo novo,
+      texto livre (capacidade varia demais entre tipos de negócio pra
+      caber num campo numérico único). Adicionado aos 3 pontos de
+      escrita de sempre: formulário público de campanha
+      (`atualizacao_form.html`), `_ALIASES_CAMPO` da importação
+      (`app/services/importacao_entidades.py`) e schema da API. Como
+      `CAMPOS_CONHECIDOS`/`_CAMPOS_DIAGNOSTICO` (RF-053) são derivados
+      de `_ALIASES_CAMPO` por `set` subtraction, não hardcoded, o campo
+      **apareceu automaticamente na exportação de entidades sem
+      nenhuma linha de código a mais ali** — testado explicitamente
+      (exportei, conferi que `capacidade_produtiva` estava na 36ª
+      coluna do CSV com o valor certo).
+    - **Nova tela** `/painel/cadastro/entidades/{id}` — não existia
+      NENHUMA tela de detalhe de entidade antes desta fatia (só a lista
+      por CPL em `cpl_cadastro.html`, sem drill-down). Reúne ofertas +
+      canais digitais (editáveis ali, RBAC `PAPEIS_GESTAO`) e um resumo
+      read-only do diagnóstico — deliberadamente **não** um form de
+      edição do diagnóstico inteiro: esse continua só editável via
+      campanha/planilha/API, mesmo padrão já estabelecido há várias
+      sessões (não uma decisão nova). Link adicionado na lista de
+      "Entidades vinculadas" de `cpl_cadastro.html`.
+    - **RBAC**: reaproveitei a mesma lógica de visibilidade de
+      `obter_entidade` (entidade vinculada a uma CPL visível ao
+      usuário) fatorada num helper `_get_entidade_visivel_or_404`
+      (API) / `_entidade_visivel_ou_none` (web) — não inventei um
+      esquema novo de escopo.
+    Migração `2f06d7b1b330` — sem gotcha nenhum dos dois de sempre
+    (tabela nova com enum `tipooferta` criado pela primeira vez, sem
+    reaproveitamento; coluna nova nullable). Testado via curl (criar
+    oferta, listar, desativar, atualizar canais digitais, 401 sem auth)
+    — achei e contornei uma armadilha de acentuação do git-bash ao
+    passar `-d` com "ê"/"ã" direto na linha de comando (mesma família do
+    item 11 de "Armadilhas já resolvidas", mas do lado do `curl -d`
+    agora, não do `python -c`; contornado escrevendo o JSON num arquivo
+    com `python -c "print(json.dumps(...))"` e usando
+    `--data-binary @arquivo` em vez de `-d` direto) — e testei o
+    formulário público de verdade (busquei um convite real via API,
+    submeti `capacidade_produtiva` por ele, conferi que apareceu na
+    tela de detalhe da entidade). Playwright (`rf010_shot.js` — navegar
+    da lista de entidades da CPL até o detalhe, adicionar uma oferta via
+    UI, desativar via UI) mais rerun de `cadastro.js`/`documentos_shot.js`/
+    `rbac_403_shot.js`, sem erros de console nem 500 reais no log.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -1690,6 +1759,15 @@ ordem recomendada para o que vem depois:
     **Pendência real, não de código**: variáveis `SMTP_*` em produção
     (`.env.prod`) ainda vazias — `/esqueci-senha` vai 500 em produção
     até serem preenchidas com credenciais reais.
+15. ~~RF-010: produtos, serviços, tecnologias, canais digitais e
+    capacidade produtiva~~ — **feito**: ver item 34 da seção "Ordem em
+    que este projeto foi construído". `OfertaEntidade` (tabela nova),
+    `Entidade.canais_digitais` (campo órfão desde o RF-006/008, nunca
+    tinha schema/rota/UI — descoberto e corrigido nesta fatia), e
+    `DiagnosticoCadastral.capacidade_produtiva` (novo, nos 3 pontos de
+    escrita de sempre, e automaticamente exportável pelo RF-053 sem
+    código extra). Nova tela de detalhe de entidade
+    (`/painel/cadastro/entidades/{id}`), que não existia antes.
 
 ## Deploy em produção
 

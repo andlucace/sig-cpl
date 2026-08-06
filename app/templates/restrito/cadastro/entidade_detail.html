@@ -1,0 +1,143 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — {{ entidade.razao_social }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/cadastro" class="link-secondary text-decoration-none">Cadastro e dados</a>
+    <i class="bi bi-chevron-right small mx-1"></i>{{ entidade.razao_social }}
+{% endblock %}
+{% block conteudo %}
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+        <div>
+            <h1 class="h3 mb-1"><i class="bi bi-building text-primary me-2"></i>{{ entidade.razao_social }}</h1>
+            <p class="text-body-secondary mb-0">
+                <span class="badge text-bg-secondary">{{ entidade.tipo.value.replace('_', ' ') }}</span>
+                {% if entidade.cnpj %}CNPJ: {{ entidade.cnpj }}{% endif %}
+                {% if entidade.municipio %} — {{ entidade.municipio }}{% if entidade.uf %}/{{ entidade.uf }}{% endif %}{% endif %}
+            </p>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-box-seam text-primary me-2"></i>Produtos, serviços e tecnologias (RF-010)
+                </div>
+                <div class="list-group list-group-flush">
+                    {% for oferta in ofertas %}
+                        <div class="list-group-item{% if not oferta.ativo %} text-body-secondary{% endif %}">
+                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                <div>
+                                    <span class="badge text-bg-secondary">{{ oferta.tipo.value }}</span>
+                                    <strong>{{ oferta.nome }}</strong>
+                                    {% if not oferta.ativo %}<span class="badge text-bg-light border">inativo</span>{% endif %}
+                                    {% if oferta.descricao %}<div class="small text-body-secondary mt-1">{{ oferta.descricao }}</div>{% endif %}
+                                </div>
+                                {% if oferta.ativo %}
+                                    <form method="post" action="/painel/cadastro/ofertas/{{ oferta.id }}/desativar">
+                                        <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                            <i class="bi bi-x-lg"></i> Desativar
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhum produto, serviço ou tecnologia cadastrado ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-clipboard-data text-primary me-2"></i>Diagnóstico cadastral
+                </div>
+                <div class="card-body small">
+                    {% if diagnostico %}
+                        {% if diagnostico.capacidade_produtiva %}
+                            <p class="mb-2"><strong>Capacidade produtiva:</strong> {{ diagnostico.capacidade_produtiva }}</p>
+                        {% endif %}
+                        {% if diagnostico.diferenciais_competitivos %}
+                            <p class="mb-2"><strong>Diferenciais competitivos:</strong> {{ diagnostico.diferenciais_competitivos }}</p>
+                        {% endif %}
+                        {% if diagnostico.certificacoes %}
+                            <p class="mb-0"><strong>Certificações:</strong> {{ diagnostico.certificacoes }}</p>
+                        {% endif %}
+                        {% if not diagnostico.capacidade_produtiva and not diagnostico.diferenciais_competitivos and not diagnostico.certificacoes %}
+                            <p class="text-body-secondary mb-0">Nenhum campo relevante respondido ainda.</p>
+                        {% endif %}
+                    {% else %}
+                        <p class="text-body-secondary mb-0">Nenhum diagnóstico respondido ainda.</p>
+                    {% endif %}
+                    <p class="text-body-secondary small mt-3 mb-0">
+                        <i class="bi bi-info-circle me-1"></i>Editado pela própria entidade via campanha de
+                        atualização cadastral, ou por planilha — não diretamente por aqui.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Novo produto/serviço/tecnologia
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/painel/cadastro/entidades/{{ entidade.id }}/ofertas">
+                        <div class="mb-3">
+                            <label class="form-label">Tipo</label>
+                            <select class="form-select" name="tipo" required>
+                                {% for tipo in tipos_oferta %}
+                                    <option value="{{ tipo.value }}">{{ tipo.value }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Nome</label>
+                            <input type="text" class="form-control" name="nome" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Descrição</label>
+                            <textarea class="form-control" name="descricao" rows="2"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-plus-lg me-1"></i>Adicionar
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-globe2 me-2"></i>Canais digitais
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/painel/cadastro/entidades/{{ entidade.id }}/canais-digitais">
+                        <div class="mb-3">
+                            <label class="form-label">Site</label>
+                            <input type="text" class="form-control" name="site" value="{{ (entidade.canais_digitais or {}).get('site', '') }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Instagram</label>
+                            <input type="text" class="form-control" name="instagram" value="{{ (entidade.canais_digitais or {}).get('instagram', '') }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Facebook</label>
+                            <input type="text" class="form-control" name="facebook" value="{{ (entidade.canais_digitais or {}).get('facebook', '') }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">LinkedIn</label>
+                            <input type="text" class="form-control" name="linkedin" value="{{ (entidade.canais_digitais or {}).get('linkedin', '') }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">WhatsApp</label>
+                            <input type="text" class="form-control" name="whatsapp" value="{{ (entidade.canais_digitais or {}).get('whatsapp', '') }}">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-check-lg me-1"></i>Salvar canais digitais
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

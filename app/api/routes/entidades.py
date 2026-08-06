@@ -8,12 +8,39 @@ from app.core.deps import get_current_user
 from app.core.rbac import PAPEIS_GESTAO, PAPEIS_GOVERNANCA_LEITURA, cpl_ids_visiveis, verificar_papel
 from app.db.session import get_db
 from app.models.cpl import CPL
-from app.models.entidade import Entidade, EntidadeCPL
+from app.models.entidade import Entidade, EntidadeCPL, OfertaEntidade
 from app.models.usuario import Usuario
-from app.schemas.entidade import EntidadeCPLRead, EntidadeCreate, EntidadeRead
+from app.schemas.entidade import (
+    CanaisDigitaisUpdate,
+    EntidadeCPLRead,
+    EntidadeCreate,
+    EntidadeRead,
+    OfertaEntidadeCreate,
+    OfertaEntidadeRead,
+)
 
 router = APIRouter(prefix="/entidades", tags=["Cadastro e cadeia"])
 cpl_router = APIRouter(prefix="/cpls", tags=["Cadastro e cadeia"])
+
+
+def _get_entidade_visivel_or_404(db: Session, usuario: Usuario, entidade_id: uuid.UUID) -> Entidade:
+    """Mesma checagem de `obter_entidade` — reaproveitada pelas rotas de
+    ofertas/canais digitais, que também são escopadas por entidade, não
+    por CPL na URL."""
+
+    entidade = db.get(Entidade, entidade_id)
+    if entidade is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entidade não encontrada.")
+    ids_visiveis = cpl_ids_visiveis(db, usuario)
+    if ids_visiveis is not None:
+        vinculada = (
+            db.query(EntidadeCPL)
+            .filter(EntidadeCPL.entidade_id == entidade_id, EntidadeCPL.cpl_id.in_(ids_visiveis))
+            .first()
+        )
+        if vinculada is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Você não tem acesso a esta entidade.")
+    return entidade
 
 
 @router.post("", response_model=EntidadeRead, status_code=status.HTTP_201_CREATED)
@@ -71,19 +98,80 @@ def obter_entidade(
     usuario_atual: Usuario = Depends(get_current_user),
 ) -> Entidade:
     verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_LEITURA)
+    return _get_entidade_visivel_or_404(db, usuario_atual, entidade_id)
+
+
+# --- Canais digitais e ofertas (RF-010) --------------------------------------
+
+
+@router.patch("/{entidade_id}/canais-digitais", response_model=EntidadeRead)
+def atualizar_canais_digitais(
+    entidade_id: uuid.UUID,
+    dados: CanaisDigitaisUpdate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Entidade:
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO)
     entidade = db.get(Entidade, entidade_id)
     if entidade is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Entidade não encontrada.")
-    ids_visiveis = cpl_ids_visiveis(db, usuario_atual)
-    if ids_visiveis is not None:
-        vinculada = (
-            db.query(EntidadeCPL)
-            .filter(EntidadeCPL.entidade_id == entidade_id, EntidadeCPL.cpl_id.in_(ids_visiveis))
-            .first()
-        )
-        if vinculada is None:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Você não tem acesso a esta entidade.")
+    entidade.canais_digitais = dados.canais_digitais or None
+    db.commit()
+    db.refresh(entidade)
     return entidade
+
+
+@router.post(
+    "/{entidade_id}/ofertas", response_model=OfertaEntidadeRead, status_code=status.HTTP_201_CREATED
+)
+def criar_oferta(
+    entidade_id: uuid.UUID,
+    dados: OfertaEntidadeCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> OfertaEntidade:
+    """RF-010: produto, serviço ou tecnologia ofertado pela entidade."""
+
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO)
+    if db.get(Entidade, entidade_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entidade não encontrada.")
+    oferta = OfertaEntidade(entidade_id=entidade_id, **dados.model_dump())
+    db.add(oferta)
+    db.commit()
+    db.refresh(oferta)
+    return oferta
+
+
+@router.get("/{entidade_id}/ofertas", response_model=list[OfertaEntidadeRead])
+def listar_ofertas(
+    entidade_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[OfertaEntidade]:
+    verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_LEITURA)
+    _get_entidade_visivel_or_404(db, usuario_atual, entidade_id)
+    return (
+        db.query(OfertaEntidade)
+        .filter(OfertaEntidade.entidade_id == entidade_id)
+        .order_by(OfertaEntidade.tipo, OfertaEntidade.nome)
+        .all()
+    )
+
+
+@router.post("/ofertas/{oferta_id}/desativar", response_model=OfertaEntidadeRead)
+def desativar_oferta(
+    oferta_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> OfertaEntidade:
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO)
+    oferta = db.get(OfertaEntidade, oferta_id)
+    if oferta is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Oferta não encontrada.")
+    oferta.ativo = False
+    db.commit()
+    db.refresh(oferta)
+    return oferta
 
 
 # --- Vínculo Entidade <-> CPL (RN-003) --------------------------------------

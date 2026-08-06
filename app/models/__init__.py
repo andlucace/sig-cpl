@@ -9,7 +9,7 @@ from app.models.cadastro_dinamico import (
 )
 from app.models.cpl import CPL
 from app.models.documento import Documento
-from app.models.entidade import Entidade, EntidadeCPL, EntidadeElo
+from app.models.entidade import Entidade, EntidadeCPL, EntidadeElo, OfertaEntidade
 from app.models.governanca import (
     DeclaracaoImpedimento,
     Deliberacao,
@@ -62,6 +62,7 @@ __all__ = [
     "Entidade",
     "EntidadeCPL",
     "EntidadeElo",
+    "OfertaEntidade",
     "Pessoa",
     "PessoaVinculo",
     "TokenRecuperacaoSenha",

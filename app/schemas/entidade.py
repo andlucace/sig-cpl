@@ -3,7 +3,7 @@ from datetime import date
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.enums import TipoEntidade
+from app.models.enums import TipoEntidade, TipoOferta
 
 
 class EntidadeCreate(BaseModel):
@@ -30,6 +30,28 @@ class EntidadeRead(BaseModel):
     cpf: str | None
     municipio: str | None
     uf: str | None
+    ativo: bool
+    canais_digitais: dict | None = None
+
+
+class CanaisDigitaisUpdate(BaseModel):
+    canais_digitais: dict[str, str]
+
+
+class OfertaEntidadeCreate(BaseModel):
+    tipo: TipoOferta
+    nome: str
+    descricao: str | None = None
+
+
+class OfertaEntidadeRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    entidade_id: uuid.UUID
+    tipo: TipoOferta
+    nome: str
+    descricao: str | None
     ativo: bool
 
 

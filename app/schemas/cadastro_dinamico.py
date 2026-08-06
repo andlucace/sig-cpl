@@ -34,6 +34,7 @@ class DiagnosticoCadastralUpdate(BaseModel):
     possui_certificacoes: bool | None = None
     certificacoes: str | None = None
     nivel_digitalizacao: str | None = None
+    capacidade_produtiva: str | None = None
 
 
 class DiagnosticoCadastralRead(DiagnosticoCadastralUpdate):

@@ -32,6 +32,17 @@ class Elo(str, enum.Enum):
     APOIO_INSTITUCIONAL = "apoio_institucional"
 
 
+class TipoOferta(str, enum.Enum):
+    """RF-010: o que uma entidade oferece — produto, serviço ou
+    tecnologia. Repetível (uma entidade pode ofertar vários), por isso
+    vira tabela própria (`OfertaEntidade`) em vez de mais um campo de
+    texto único em `DiagnosticoCadastral`."""
+
+    PRODUTO = "produto"
+    SERVICO = "servico"
+    TECNOLOGIA = "tecnologia"
+
+
 class Papel(str, enum.Enum):
     """Seção 6: perfis de acesso e responsabilidades previstos no documento."""
 
