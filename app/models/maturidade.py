@@ -6,7 +6,13 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampedBase
-from app.models.enums import DimensaoMaturidade, NivelMaturidade, StatusAvaliacao, StatusRecurso
+from app.models.enums import (
+    DimensaoMaturidade,
+    NivelMaturidade,
+    StatusAvaliacao,
+    StatusItemHabilitacao,
+    StatusRecurso,
+)
 
 
 class Edital(TimestampedBase):
@@ -130,3 +136,45 @@ class RecursoAvaliacao(TimestampedBase):
     data_decisao: Mapped[date | None] = mapped_column(Date)
 
     avaliacao: Mapped["Avaliacao"] = relationship(back_populates="recurso")
+
+
+class ItemHabilitacaoJuridica(TimestampedBase):
+    """RF-027: item do checklist de habilitação jurídica de uma CPL
+    perante um edital — etapa do fluxo de reconhecimento que precede a
+    avaliação de maturidade (F05 do modelo conceitual: edital →
+    habilitação → PEN → evidências de maturidade → avaliação →
+    submissão → resultado → recurso), sem modelo próprio até esta
+    fatia — só citada na docstring de `Avaliacao`/RF-027 como algo que
+    poderia reaproveitar o repositório de Documentos.
+
+    `descricao` é texto livre (tipo de documento exigido — CNPJ,
+    estatuto social, certidão de regularidade fiscal etc.) — o
+    documento de requisitos não define um checklist fechado, mesmo
+    raciocínio de `eixo_sp_produz` (Projetos). `documento_id`
+    reaproveita o repositório de Documentos (RF-042), mesmo padrão de
+    `AvaliacaoCriterio.evidencia_documento_id`. Análise (aprovar/
+    rejeitar) é sempre de quem gere os editais (`PAPEIS_EDITAL_GESTAO`),
+    mesma autoridade de `RecursoAvaliacao` — é o órgão externo do
+    edital validando a regularidade jurídica da CPL, não uma decisão
+    interna dela."""
+
+    __tablename__ = "itens_habilitacao_juridica"
+
+    cpl_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("cpls.id"), nullable=False)
+    edital_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("editais.id"), nullable=False)
+    descricao: Mapped[str] = mapped_column(String(255), nullable=False)
+    obrigatorio: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    documento_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documentos.id"), nullable=True
+    )
+    status: Mapped[StatusItemHabilitacao] = mapped_column(default=StatusItemHabilitacao.PENDENTE, nullable=False)
+    parecer: Mapped[str | None] = mapped_column(Text)
+    analisado_por_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True
+    )
+    data_analise: Mapped[date | None] = mapped_column(Date)
+
+    cpl: Mapped["CPL"] = relationship()
+    edital: Mapped["Edital"] = relationship()
+    documento: Mapped["Documento | None"] = relationship()
+    analisado_por: Mapped["Usuario | None"] = relationship()

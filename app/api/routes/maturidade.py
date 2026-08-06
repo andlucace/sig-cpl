@@ -20,6 +20,7 @@ from app.models.maturidade import (
     AvaliacaoCriterio,
     CriterioMaturidade,
     Edital,
+    ItemHabilitacaoJuridica,
     RecursoAvaliacao,
 )
 from app.models.usuario import Usuario
@@ -34,9 +35,13 @@ from app.schemas.maturidade import (
     EditalCreate,
     EditalRead,
     EditalUpdate,
+    ItemHabilitacaoAnalise,
+    ItemHabilitacaoCreate,
+    ItemHabilitacaoRead,
     RecursoAvaliacaoCreate,
     RecursoAvaliacaoDecisao,
     RecursoAvaliacaoRead,
+    SimulacaoAvaliacaoRead,
 )
 from app.models.documento import Documento
 from app.models.enums import CategoriaDocumento, ConfidencialidadeDocumento
@@ -50,6 +55,7 @@ from app.services.maturidade import (
     decidir_nivel,
     lacunas,
     resumo_recadastramento,
+    simular_avaliacao,
 )
 
 router = APIRouter(prefix="/maturidade", tags=["Maturidade e reconhecimento"])
@@ -218,6 +224,20 @@ def lancar_nota(
     return nota
 
 
+@router.get("/avaliacoes/{avaliacao_id}/simulacao", response_model=SimulacaoAvaliacaoRead)
+def obter_simulacao(
+    avaliacao_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> dict:
+    """RF-026: pontuação/nível sugerido/lacunas com base nas notas já
+    lançadas até agora — sem precisar concluir a avaliação pra ver."""
+
+    avaliacao = _get_avaliacao_or_404(db, avaliacao_id)
+    verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_LEITURA, cpl_id=avaliacao.cpl_id)
+    return simular_avaliacao(avaliacao)
+
+
 @router.get("/avaliacoes/{avaliacao_id}/lacunas", response_model=list[AvaliacaoCriterioRead])
 def obter_lacunas(
     avaliacao_id: uuid.UUID,
@@ -318,6 +338,74 @@ def decidir_recurso(
     db.commit()
     db.refresh(recurso)
     return recurso
+
+
+# --- Habilitação jurídica (RF-027) -------------------------------------------
+
+
+@router.post(
+    "/cpls/{cpl_id}/habilitacao", response_model=ItemHabilitacaoRead, status_code=status.HTTP_201_CREATED
+)
+def criar_item_habilitacao(
+    cpl_id: uuid.UUID,
+    dados: ItemHabilitacaoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> ItemHabilitacaoJuridica:
+    """RF-027: item do checklist de habilitação jurídica da CPL perante
+    um edital — etapa que precede a avaliação de maturidade."""
+
+    if db.get(CPL, cpl_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL não encontrada.")
+    _get_edital_or_404(db, dados.edital_id)
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=cpl_id)
+    item = ItemHabilitacaoJuridica(cpl_id=cpl_id, **dados.model_dump())
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.get("/cpls/{cpl_id}/habilitacao", response_model=list[ItemHabilitacaoRead])
+def listar_itens_habilitacao(
+    cpl_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[ItemHabilitacaoJuridica]:
+    if db.get(CPL, cpl_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL não encontrada.")
+    verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_LEITURA, cpl_id=cpl_id)
+    return (
+        db.query(ItemHabilitacaoJuridica)
+        .filter(ItemHabilitacaoJuridica.cpl_id == cpl_id)
+        .order_by(ItemHabilitacaoJuridica.created_at)
+        .all()
+    )
+
+
+@router.post("/habilitacao/{item_id}/analisar", response_model=ItemHabilitacaoRead)
+def analisar_item_habilitacao(
+    item_id: uuid.UUID,
+    dados: ItemHabilitacaoAnalise,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> ItemHabilitacaoJuridica:
+    """Análise (aprovar/rejeitar) é sempre de quem gere os editais —
+    mesma autoridade de `RecursoAvaliacao` — é o órgão externo do
+    edital validando a regularidade jurídica, não uma decisão interna
+    da CPL."""
+
+    item = db.get(ItemHabilitacaoJuridica, item_id)
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Item de habilitação não encontrado.")
+    verificar_papel(db, usuario_atual, PAPEIS_EDITAL_GESTAO, cpl_id=None)
+    item.status = dados.status
+    item.parecer = dados.parecer
+    item.analisado_por_id = usuario_atual.id
+    item.data_analise = date.today()
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 # --- Alertas de vencimento (RF-028) ------------------------------------------

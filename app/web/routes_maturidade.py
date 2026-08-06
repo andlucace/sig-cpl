@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -17,8 +17,22 @@ from app.core.rbac import (
 from app.db.session import get_db
 from app.models.cpl import CPL
 from app.models.documento import Documento
-from app.models.enums import CategoriaDocumento, ConfidencialidadeDocumento, DimensaoMaturidade, NivelMaturidade
-from app.models.maturidade import Avaliacao, AvaliacaoCriterio, CriterioMaturidade, Edital, RecursoAvaliacao
+from app.models.enums import (
+    CategoriaDocumento,
+    ConfidencialidadeDocumento,
+    DimensaoMaturidade,
+    NivelMaturidade,
+    StatusAvaliacao,
+    StatusItemHabilitacao,
+)
+from app.models.maturidade import (
+    Avaliacao,
+    AvaliacaoCriterio,
+    CriterioMaturidade,
+    Edital,
+    ItemHabilitacaoJuridica,
+    RecursoAvaliacao,
+)
 from app.models.pessoa import Pessoa
 from app.models.usuario import Usuario
 from app.services.armazenamento import salvar_arquivo
@@ -29,6 +43,7 @@ from app.services.maturidade import (
     decidir_nivel,
     lacunas,
     resumo_recadastramento,
+    simular_avaliacao,
 )
 from app.web.templates import templates
 
@@ -206,6 +221,18 @@ def cpl_avaliacoes(
         db.query(Avaliacao).filter(Avaliacao.cpl_id == cpl_id).order_by(Avaliacao.data_avaliacao.desc()).all()
     )
     editais_ativos = db.query(Edital).filter(Edital.ativo.is_(True)).order_by(Edital.ciclo.desc()).all()
+    itens_habilitacao = (
+        db.query(ItemHabilitacaoJuridica)
+        .filter(ItemHabilitacaoJuridica.cpl_id == cpl_id)
+        .order_by(ItemHabilitacaoJuridica.created_at)
+        .all()
+    )
+    pode_gerir_habilitacao = True
+    try:
+        verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=cpl_id)
+    except HTTPException:
+        pode_gerir_habilitacao = False
+
     return templates.TemplateResponse(
         request,
         "restrito/maturidade/cpl_avaliacoes.html",
@@ -213,6 +240,9 @@ def cpl_avaliacoes(
             "cpl": cpl,
             "avaliacoes": avaliacoes,
             "editais_ativos": editais_ativos,
+            "itens_habilitacao": itens_habilitacao,
+            "pode_gerir_habilitacao": pode_gerir_habilitacao,
+            "e_administrador": _e_administrador(db, usuario),
             "usuario": usuario,
             "pagina_ativa": "maturidade",
         },
@@ -293,6 +323,7 @@ def avaliacao_detail(
     criterios = db.query(CriterioMaturidade).filter(CriterioMaturidade.edital_id == avaliacao.edital_id).all()
     notas_por_criterio = {n.criterio_id: n for n in avaliacao.notas}
     ids_lacunas = {n.id for n in lacunas(avaliacao)}
+    simulacao = simular_avaliacao(avaliacao) if avaliacao.status == StatusAvaliacao.EM_ANDAMENTO else None
 
     pode_avaliar = True
     try:
@@ -315,6 +346,7 @@ def avaliacao_detail(
             "criterios": criterios,
             "notas_por_criterio": notas_por_criterio,
             "ids_lacunas": ids_lacunas,
+            "simulacao": simulacao,
             "niveis": list(NivelMaturidade),
             "pessoas": pessoas,
             "pode_avaliar": pode_avaliar,
@@ -435,3 +467,93 @@ def decidir_recurso(
     return RedirectResponse(
         f"/painel/maturidade/avaliacoes/{recurso.avaliacao_id}", status_code=status.HTTP_303_SEE_OTHER
     )
+
+
+# --- Habilitação jurídica (RF-027) -------------------------------------------
+
+
+@router.post("/cpls/{cpl_id}/habilitacao")
+def criar_item_habilitacao(
+    cpl_id: uuid.UUID,
+    edital_id: uuid.UUID = Form(...),
+    descricao: str = Form(...),
+    obrigatorio: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-027: item do checklist de habilitação jurídica da CPL perante
+    um edital — etapa que precede a avaliação de maturidade."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    if db.get(CPL, cpl_id) is None or db.get(Edital, edital_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL ou edital não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=cpl_id)
+    db.add(
+        ItemHabilitacaoJuridica(
+            cpl_id=cpl_id, edital_id=edital_id, descricao=descricao, obrigatorio=obrigatorio == "on"
+        )
+    )
+    db.commit()
+    return RedirectResponse(f"/painel/maturidade/cpls/{cpl_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/habilitacao/{item_id}/comprovante")
+async def anexar_comprovante_habilitacao(
+    item_id: uuid.UUID,
+    arquivo: UploadFile,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    item = db.get(ItemHabilitacaoJuridica, item_id)
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Item de habilitação não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=item.cpl_id)
+
+    conteudo = await arquivo.read()
+    caminho = salvar_arquivo(item.cpl_id, arquivo.filename or "comprovante", conteudo)
+    documento = Documento(
+        cpl_id=item.cpl_id,
+        titulo=f"Habilitação jurídica — {item.descricao}",
+        categoria=CategoriaDocumento.DECLARACAO,
+        confidencialidade=ConfidencialidadeDocumento.INTERNO,
+        arquivo_path=caminho,
+        nome_arquivo_original=arquivo.filename or "comprovante",
+        tipo_mime=arquivo.content_type,
+        tamanho_bytes=len(conteudo),
+        criado_por_id=usuario.id,
+    )
+    db.add(documento)
+    db.flush()
+    item.documento_id = documento.id
+    item.status = StatusItemHabilitacao.ENTREGUE
+    db.commit()
+    return RedirectResponse(f"/painel/maturidade/cpls/{item.cpl_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/habilitacao/{item_id}/analisar")
+def analisar_item_habilitacao(
+    item_id: uuid.UUID,
+    status_item: StatusItemHabilitacao = Form(..., alias="status"),
+    parecer: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """Análise (aprovar/rejeitar) é sempre de quem gere os editais —
+    mesma autoridade de `decidir_recurso` — é o órgão externo do edital
+    validando a regularidade jurídica, não uma decisão interna da CPL."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    item = db.get(ItemHabilitacaoJuridica, item_id)
+    if item is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Item de habilitação não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_EDITAL_GESTAO, cpl_id=None)
+    item.status = status_item
+    item.parecer = parecer or None
+    item.analisado_por_id = usuario.id
+    item.data_analise = date.today()
+    db.commit()
+    return RedirectResponse(f"/painel/maturidade/cpls/{item.cpl_id}", status_code=status.HTTP_303_SEE_OTHER)

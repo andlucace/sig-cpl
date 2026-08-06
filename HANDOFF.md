@@ -51,7 +51,7 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   `http://127.0.0.1:8010`** — confira com `netstat -ano | grep 8010` antes
   de subir outro, e mate o processo antigo antes de reiniciar (o servidor
   não usa `--reload`, então mudanças de código exigem restart manual).
-- **Migrações Alembic aplicadas:** 22 revisões, todas no banco atual:
+- **Migrações Alembic aplicadas:** 23 revisões, todas no banco atual:
   1. `18541dca0a36` — modelos base (CPL, Entidade, Pessoa, Usuário)
   2. `0ba4d1a10f9d` — módulo Governança
   3. `5dd913b79202` — módulo Planejamento Estratégico
@@ -121,6 +121,10 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
       `diagnosticos_cadastrais.capacidade_produtiva` (RF-010) — sem
       gotcha nenhum dos dois de sempre (enum `tipooferta` criado pela
       primeira vez, não reaproveitado; coluna nova nullable)
+  23. `a6b25ad2bdeb` — tabela `itens_habilitacao_juridica` (RF-027) —
+      sem gotcha nenhum dos dois de sempre (enum `statusitemhabilitacao`
+      criado pela primeira vez, tabela nova). RF-026 não precisou de
+      migração — só reaproveitou funções de cálculo já existentes.
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos;
     mesma coisa para RF-041/045/053/017, feitas depois da nº 20)
@@ -1358,6 +1362,76 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     da lista de entidades da CPL até o detalhe, adicionar uma oferta via
     UI, desativar via UI) mais rerun de `cadastro.js`/`documentos_shot.js`/
     `rbac_403_shot.js`, sem erros de console nem 500 reais no log.
+35. **RF-026: simular cenários** e **RF-027: habilitação jurídica** —
+    usuário pediu "implementar a RF-26/27", os dois últimos itens
+    parciais do módulo de Maturidade, escolhidos entre os candidatos que
+    eu tinha sugerido numa avaliação de backlog anterior.
+    - **RF-026 (simular cenários)**: a peça mais barata desta sessão —
+      **nenhuma função de cálculo nova**. `calcular_pontuacao()`,
+      `sugerir_nivel()` e `lacunas()` (todas em
+      `app/services/maturidade.py`) já eram puras desde que foram
+      escritas pra `concluir_avaliacao()` — só leem `avaliacao.notas`,
+      nunca escrevem no banco. A única coisa que faltava era **chamar
+      essas mesmas funções enquanto a avaliação ainda está em
+      andamento** (hoje só eram chamadas dentro de
+      `concluir_avaliacao`, que persiste o resultado e muda o status pra
+      `CONCLUIDA`) e mostrar isso numa tela. `simular_avaliacao()` é só
+      essas 3 chamadas com o resultado empacotado num dict — 15 linhas.
+      "Ver o efeito de mudar uma nota antes de salvar" já era suportado
+      de graça: `PUT .../notas` (RF-025) sempre foi chamável múltiplas
+      vezes antes de concluir (upsert por critério); só faltava a tela
+      mostrar o resultado hipotético a cada recarregamento. Card
+      "Simulação" aparece em `avaliacao_detail.html` só enquanto
+      `status == em_andamento` — a partir da conclusão real, os campos
+      oficiais de `Avaliacao` (`pontuacao_calculada`/`nivel_sugerido`)
+      tomam o lugar do card, sem duplicar informação.
+      `GET /api/maturidade/avaliacoes/{id}/simulacao`.
+    - **RF-027 (habilitação jurídica)**: `ItemHabilitacaoJuridica`
+      (`app/models/maturidade.py`) — checklist por CPL+edital, `descricao`
+      livre (mesmo raciocínio de `eixo_sp_produz`: sem lista fechada de
+      documentos exigidos no requisito), `documento_id` reaproveitando
+      Documentos (RF-042), ciclo `pendente → entregue → aprovado/
+      rejeitado` (`StatusItemHabilitacao`, enum novo). **Autoridade
+      dividida em dois papéis, cuidadosamente**: criar item/anexar
+      comprovante é `PAPEIS_GESTAO` (a CPL reunindo a própria
+      documentação), analisar (aprovar/rejeitar) é `PAPEIS_EDITAL_GESTAO`
+      — mesma autoridade de `RecursoAvaliacao`/`decidir_recurso`, porque
+      é o órgão externo do edital validando a regularidade jurídica da
+      CPL, não uma decisão interna dela (mesma distinção já usada pra
+      `AlteracaoPlanoProjeto` vs. `RecursoSubmissaoProjeto` no módulo de
+      Projetos). Pra gating da UI, reaproveitei o flag `e_administrador`
+      já existente em `routes_maturidade.py` pro botão de "analisar" —
+      conferi antes que ele reflete exatamente `PAPEIS_EDITAL_GESTAO`
+      (`cpl_ids_visiveis(db, usuario) is None`, verdadeiro só pra
+      `ADMINISTRADOR_PLATAFORMA`, o único papel em
+      `PAPEIS_EDITAL_GESTAO`) — mesma lição do item 16 de "Armadilhas já
+      resolvidas" (nunca reaproveitar um flag de UI sem conferir contra
+      o `PAPEIS_*` exato que o backend valida), desta vez confirmando que
+      o flag existente já estava certo, em vez de achar um bug novo.
+      Nova seção "Habilitação jurídica" em `cpl_avaliacoes.html`
+      (`/painel/maturidade/cpls/{id}`), com upload de comprovante (form
+      separado, só aparece pra itens ainda sem `documento_id`) e forms de
+      análise (só pra `e_administrador`, só pra itens `entregue`/
+      `pendente`).
+    Migração `a6b25ad2bdeb` — sem gotcha nenhum dos dois de sempre (enum
+    `statusitemhabilitacao` criado pela primeira vez, tabela nova sem
+    coluna `NOT NULL` retroativa). Testado via curl: simulação vazia (0
+    notas), simulação após lançar uma nota abaixo da nota de corte
+    (lacuna detectada), simulação depois de **mudar a mesma nota** pra
+    acima da corte (lacuna some, nível sugerido muda de
+    `aglomerado_produtivo` pra `cpl_madura` — prova real de "ver o efeito
+    de mudar uma nota"), e confirmado que `Avaliacao.pontuacao_calculada`
+    continua `None` até `concluir` ser chamado de verdade (a simulação
+    nunca vaza pro real). RF-027 testado via curl (criar item, upload de
+    comprovante, analisar) e Playwright (`rf026_027_shot.js` — navegar
+    até a avaliação em andamento pra ver a simulação, depois criar um
+    item de habilitação, anexar comprovante e aprovar, tudo via UI real)
+    mais rerun de `maturidade_shot.js`/`maturidade_shot2.js`/
+    `rbac_403_shot.js`/`documentos_shot.js`, sem erros de console nem 500
+    reais no log. **Com isso, RF-024 a RF-028 (módulo de Maturidade)
+    estão completos** — só a limitação deliberada de validade/versão de
+    evidência (RF-025, depende do versionamento que `Documento` já tem)
+    permanece.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -1709,12 +1783,12 @@ ordem recomendada para o que vem depois:
    construir. RF-045 nesta época só cobria governança/planejamento/
    cadastro — completo desde os itens 30/31 (projetos/finanças e
    maturidade, ver seção "O que falta", item 12).
-9. **Maturidade e reconhecimento: limitações conhecidas** — "habilitação
-   jurídica" (RF-027) não tem modelo/etapa própria; "simular cenários"
-   (RF-026, ver o efeito de uma nota hipotética antes de salvar) não foi
-   construído, só o cálculo real ao concluir a avaliação; validade/versão
-   de evidência (RF-025) dependem do versionamento que `Documento` já tem,
-   não algo modelado à parte para maturidade.
+9. ~~Maturidade e reconhecimento: limitações conhecidas~~ — "habilitação
+   jurídica" (RF-027) e "simular cenários" (RF-026) **feitos**, ver item
+   35 da seção "Ordem em que este projeto foi construído". Segue como
+   limitação deliberada (não pendência): validade/versão de evidência
+   (RF-025) dependem do versionamento que `Documento` já tem, não algo
+   modelado à parte para maturidade.
 10. ~~Notificações automáticas (RF-049)~~ — **feito**: reunião próxima,
     tarefa/meta com prazo vencendo, documento perdendo validade e
     recadastramento de CPL vencendo — ver item 17 da seção "Ordem em que

@@ -25,6 +25,7 @@ from app.models.maturidade import (
     AvaliacaoCriterio,
     CriterioMaturidade,
     Edital,
+    ItemHabilitacaoJuridica,
     RecursoAvaliacao,
 )
 from app.models.notificacao import Notificacao
@@ -96,6 +97,7 @@ __all__ = [
     "Avaliacao",
     "AvaliacaoCriterio",
     "RecursoAvaliacao",
+    "ItemHabilitacaoJuridica",
     "Notificacao",
     "DemandaProjeto",
     "Projeto",

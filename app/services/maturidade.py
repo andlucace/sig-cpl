@@ -56,6 +56,28 @@ def lacunas(avaliacao: Avaliacao) -> list[AvaliacaoCriterio]:
     ]
 
 
+def simular_avaliacao(avaliacao: Avaliacao) -> dict:
+    """RF-026 ("simular cenários"): pontuação/nível que resultariam de
+    concluir a avaliação *agora*, com as notas já lançadas até este
+    ponto — sem persistir nada (`concluir_avaliacao` é quem persiste de
+    verdade). Reaproveita `calcular_pontuacao`/`sugerir_nivel`/`lacunas`,
+    que já eram puras (só leem `avaliacao.notas`, nunca escrevem); só
+    formata o resultado num dict pronto pra tela.
+
+    Deixar de ser "simulação" e virar fato é uma ação humana explícita
+    (`POST .../concluir`), nunca implícita por só olhar essa tela —
+    mesma cautela de RN-016 (decisão de nível também é sempre humana)."""
+
+    pontuacao = calcular_pontuacao(avaliacao)
+    return {
+        "pontuacao_simulada": pontuacao,
+        "nivel_sugerido_simulado": sugerir_nivel(avaliacao.edital, pontuacao),
+        "total_criterios": len(avaliacao.edital.criterios),
+        "total_notas_lancadas": len(avaliacao.notas),
+        "lacunas": lacunas(avaliacao),
+    }
+
+
 def concluir_avaliacao(db: Session, avaliacao: Avaliacao) -> Avaliacao:
     avaliacao.pontuacao_calculada = calcular_pontuacao(avaliacao)
     avaliacao.nivel_sugerido = sugerir_nivel(avaliacao.edital, avaliacao.pontuacao_calculada)

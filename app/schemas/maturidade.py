@@ -3,7 +3,13 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.enums import DimensaoMaturidade, NivelMaturidade, StatusAvaliacao, StatusRecurso
+from app.models.enums import (
+    DimensaoMaturidade,
+    NivelMaturidade,
+    StatusAvaliacao,
+    StatusItemHabilitacao,
+    StatusRecurso,
+)
 
 # Edital (RF-024/RN-006)
 
@@ -117,6 +123,20 @@ class DecisaoNivelCreate(BaseModel):
     decidido_por_id: uuid.UUID | None = None
 
 
+class SimulacaoAvaliacaoRead(BaseModel):
+    """RF-026: "simular cenários" — pontuação/nível que resultariam de
+    concluir a avaliação *agora*, com as notas já lançadas até este
+    ponto, sem persistir nada. Deixa de fazer sentido depois que a
+    avaliação é concluída de verdade (os campos reais de `Avaliacao` já
+    respondem a mesma pergunta a partir daí)."""
+
+    pontuacao_simulada: float | None
+    nivel_sugerido_simulado: NivelMaturidade | None
+    total_criterios: int
+    total_notas_lancadas: int
+    lacunas: list[AvaliacaoCriterioRead]
+
+
 # Recurso (RF-027)
 
 
@@ -141,3 +161,33 @@ class RecursoAvaliacaoRead(BaseModel):
     decidido_por_id: uuid.UUID | None
     data_decisao: date | None
     created_at: datetime
+
+
+# Habilitação jurídica (RF-027)
+
+
+class ItemHabilitacaoCreate(BaseModel):
+    edital_id: uuid.UUID
+    descricao: str
+    obrigatorio: bool = True
+    documento_id: uuid.UUID | None = None
+
+
+class ItemHabilitacaoAnalise(BaseModel):
+    status: StatusItemHabilitacao
+    parecer: str | None = None
+
+
+class ItemHabilitacaoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    cpl_id: uuid.UUID
+    edital_id: uuid.UUID
+    descricao: str
+    obrigatorio: bool
+    documento_id: uuid.UUID | None
+    status: StatusItemHabilitacao
+    parecer: str | None
+    analisado_por_id: uuid.UUID | None
+    data_analise: date | None

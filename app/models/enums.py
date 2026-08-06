@@ -210,6 +210,18 @@ class StatusRecurso(str, enum.Enum):
     INDEFERIDO = "indeferido"
 
 
+class StatusItemHabilitacao(str, enum.Enum):
+    """RF-027: ciclo de vida de um item do checklist de habilitação
+    jurídica de uma CPL perante um edital — etapa do fluxo de
+    reconhecimento que precede a avaliação de maturidade (edital →
+    habilitação → PEN → evidências → avaliação → ...)."""
+
+    PENDENTE = "pendente"
+    ENTREGUE = "entregue"
+    APROVADO = "aprovado"
+    REJEITADO = "rejeitado"
+
+
 class StatusLoteImportacao(str, enum.Enum):
     """RF-013: ciclo de vida de um lote de importação de planilha — desde
     que o remapeamento manual de colunas existe, o upload não processa as

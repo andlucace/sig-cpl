@@ -30,6 +30,22 @@
                 <div><strong>Nível decidido:</strong> {{ avaliacao.nivel_decidido.value.replace('_', ' ') }}</div>
             {% endif %}
         </div>
+    {% elif simulacao %}
+        <div class="alert alert-info d-flex flex-wrap gap-4 mb-4" role="alert">
+            <div>
+                <i class="bi bi-magic me-1"></i><strong>Simulação</strong>
+                <span class="small">(com as notas lançadas até agora — nada disto é salvo; conclua a avaliação pra tornar oficial)</span>
+            </div>
+            <div><strong>Pontuação simulada:</strong> {{ simulacao.pontuacao_simulada if simulacao.pontuacao_simulada is not none else "—" }}</div>
+            <div>
+                <strong>Nível sugerido simulado:</strong>
+                {{ simulacao.nivel_sugerido_simulado.value.replace('_', ' ') if simulacao.nivel_sugerido_simulado else "sem dados suficientes" }}
+            </div>
+            <div><strong>Notas lançadas:</strong> {{ simulacao.total_notas_lancadas }} de {{ simulacao.total_criterios }}</div>
+            {% if simulacao.lacunas %}
+                <div><strong>Lacunas:</strong> {{ simulacao.lacunas|length }}</div>
+            {% endif %}
+        </div>
     {% endif %}
 
     <div class="row g-4">

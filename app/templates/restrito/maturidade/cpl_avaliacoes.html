@@ -77,4 +77,97 @@
             </div>
         </div>
     </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-file-earmark-check text-primary me-2"></i>Habilitação jurídica (RF-027)
+                </div>
+                <div class="list-group list-group-flush">
+                    {% for item in itens_habilitacao %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                <div>
+                                    <strong>{{ item.descricao }}</strong>
+                                    {% if item.obrigatorio %}<span class="badge text-bg-secondary">obrigatório</span>{% endif %}
+                                    <span class="badge
+                                        {% if item.status.value == 'aprovado' %}text-bg-success
+                                        {% elif item.status.value == 'rejeitado' %}text-bg-danger
+                                        {% elif item.status.value == 'entregue' %}text-bg-info
+                                        {% else %}text-bg-secondary{% endif %}">{{ item.status.value }}</span>
+                                    <div class="small text-body-secondary">{{ item.edital.nome }} ({{ item.edital.ciclo }})</div>
+                                    {% if item.documento_id %}
+                                        <a href="/painel/documentos/{{ item.documento_id }}/arquivo" class="small">
+                                            <i class="bi bi-download me-1"></i>Ver comprovante
+                                        </a>
+                                    {% endif %}
+                                    {% if item.parecer %}<div class="small text-body-secondary mt-1">Parecer: {{ item.parecer }}</div>{% endif %}
+                                </div>
+                                <div class="d-flex flex-column gap-2 align-items-end">
+                                    {% if not item.documento_id and pode_gerir_habilitacao %}
+                                        <form method="post" action="/painel/maturidade/habilitacao/{{ item.id }}/comprovante" enctype="multipart/form-data" class="d-flex gap-1">
+                                            <input type="file" class="form-control form-control-sm" name="arquivo" required>
+                                            <button type="submit" class="btn btn-outline-primary btn-sm text-nowrap">
+                                                <i class="bi bi-upload"></i> Enviar
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                    {% if item.status.value in ('entregue', 'pendente') and e_administrador %}
+                                        <form method="post" action="/painel/maturidade/habilitacao/{{ item.id }}/analisar" class="d-flex gap-1">
+                                            <select class="form-select form-select-sm" name="status">
+                                                <option value="aprovado">Aprovar</option>
+                                                <option value="rejeitado">Rejeitar</option>
+                                            </select>
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                <i class="bi bi-check-lg"></i>
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">Nenhum item de habilitação registrado ainda.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Novo item de habilitação
+                </div>
+                <div class="card-body">
+                    {% if pode_gerir_habilitacao and editais_ativos %}
+                        <form method="post" action="/painel/maturidade/cpls/{{ cpl.id }}/habilitacao">
+                            <div class="mb-3">
+                                <label class="form-label">Edital</label>
+                                <select class="form-select" name="edital_id" required>
+                                    {% for e in editais_ativos %}
+                                        <option value="{{ e.id }}">{{ e.nome }} ({{ e.ciclo }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Descrição</label>
+                                <input type="text" class="form-control" name="descricao" placeholder="Ex.: Certidão de regularidade fiscal" required>
+                            </div>
+                            <div class="form-check mb-3">
+                                <input type="checkbox" class="form-check-input" id="obrigatorio" name="obrigatorio" checked>
+                                <label class="form-check-label" for="obrigatorio">Obrigatório</label>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-plus-lg me-1"></i>Adicionar
+                            </button>
+                        </form>
+                    {% elif not editais_ativos %}
+                        <div class="text-body-secondary small">Nenhum edital ativo no momento.</div>
+                    {% else %}
+                        <div class="text-body-secondary small">Você não tem permissão para gerenciar a habilitação jurídica desta CPL.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
 {% endblock %}

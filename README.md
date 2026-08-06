@@ -555,17 +555,42 @@ compartilhados entre CPLs em vez de configuração por CPL (sim, RN-006):
   (`PAPEIS_EDITAL_GESTAO` — administrador da plataforma), autoridade
   deliberadamente diferente de quem avaliou/decidiu originalmente, por ser
   uma contestação.
-- **Limitações conhecidas**: "habilitação jurídica" (RF-027) não tem
-  modelo/etapa própria — poderia reaproveitar Documentos como checklist,
-  mas não foi formalizado; "simular cenários" (RF-026, ver efeito de uma
-  nota hipotética antes de salvar) não foi construído, só o cálculo real
-  ao concluir; validade/versão de evidência (RF-025) dependem do
-  versionamento que `Documento` já tem, não algo modelado à parte aqui.
+- **Simular cenários** (RF-026) — `simular_avaliacao()`
+  (`app/services/maturidade.py`) reaproveita as mesmas funções puras já
+  usadas pra conclusão real (`calcular_pontuacao`/`sugerir_nivel`/
+  `lacunas`, nenhuma escreve no banco), mas chamadas **enquanto a
+  avaliação ainda está em andamento** — mostra "se você concluir agora,
+  o resultado seria X" com as notas já lançadas até aquele ponto, sem
+  persistir nada em `Avaliacao`. Mudar uma nota (já suportado, `PUT
+  .../notas`, chamável quantas vezes quiser antes de concluir) e
+  recarregar a tela atualiza a simulação — não precisa concluir a
+  avaliação de verdade só pra ver o efeito de uma nota diferente.
+  `GET /api/maturidade/avaliacoes/{id}/simulacao`, card na tela de
+  detalhe da avaliação (visível só enquanto `status = em_andamento`; a
+  partir da conclusão, os campos reais de `Avaliacao` já respondem a
+  mesma pergunta).
+- **Habilitação jurídica** (RF-027) — `ItemHabilitacaoJuridica`, item de
+  checklist por CPL+edital (`descricao` livre — o documento de
+  requisitos não define uma lista fechada de documentos exigidos,
+  mesmo raciocínio de `eixo_sp_produz`), com `documento_id`
+  reaproveitando o repositório de Documentos (RF-042, mesmo padrão de
+  `AvaliacaoCriterio.evidencia_documento_id`) e ciclo `pendente →
+  entregue → aprovado/rejeitado`. Criar item/anexar comprovante é
+  `PAPEIS_GESTAO` (a própria CPL reunindo a documentação); analisar
+  (aprovar/rejeitar) é `PAPEIS_EDITAL_GESTAO` — mesma autoridade de
+  `RecursoAvaliacao`, é o órgão externo do edital validando a
+  regularidade jurídica, não uma decisão interna da CPL.
+  `POST/GET /api/maturidade/cpls/{id}/habilitacao`,
+  `POST /api/maturidade/habilitacao/{id}/analisar`.
+- **Limitação conhecida remanescente**: validade/versão de evidência
+  (RF-025) dependem do versionamento que `Documento` já tem, não algo
+  modelado à parte aqui — decisão de escopo deliberada, não pendência.
 - UI web em `/painel/maturidade` (editais + seleção de CPL) →
   `/painel/maturidade/editais/{id}` (critérios + limiares, edição só pra
-  administrador) → `/painel/maturidade/cpls/{id}` (avaliações da CPL) →
+  administrador) → `/painel/maturidade/cpls/{id}` (avaliações da CPL +
+  checklist de habilitação jurídica) →
   `/painel/maturidade/avaliacoes/{id}` (notas por critério com lacunas
-  destacadas, conclusão, decisão de nível, recurso).
+  destacadas, simulação, conclusão, decisão de nível, recurso).
 
 **Tela de criação/edição de CPL** (RF-001) — antes só existia via API
 (`POST /api/cpls`), o que obrigava usar `/docs` até para o primeiro passo
@@ -1385,9 +1410,6 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
    `evidencia_documento_id` em `RiscoProjeto`) e RF-041 completo
    (relatório de execução, relatório financeiro e dossiê de evidências
    em PDF, sem entidade nova) — ver seção "Projetos" acima.
-   "Simular cenários" (RF-026) e "habilitação jurídica" (RF-027) também
-   ficaram de fora do que foi construído em Maturidade (ver seção do
-   módulo acima).
 8. ~~Notificações automáticas (RF-049)~~ — **feito**: reunião próxima,
    tarefa/meta com prazo vencendo, documento perdendo validade e
    recadastramento de CPL vencendo — ver seção "Notificações" acima.
@@ -1436,3 +1458,13 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
     competitivos já estavam prontos desde antes; "competência" não
     ganhou campo próprio (não é um conceito claramente distinto de
     serviço/tecnologia no documento).
+14. ~~RF-026: simular cenários~~ e ~~RF-027: habilitação jurídica~~ —
+    **feitos**: ver seção "Maturidade e reconhecimento" acima.
+    Simulação reaproveita as mesmas funções puras da conclusão real
+    (`calcular_pontuacao`/`sugerir_nivel`/`lacunas`), só chamadas antes
+    da avaliação ser concluída, sem persistir nada.
+    `ItemHabilitacaoJuridica` fecha o checklist de habilitação jurídica
+    por CPL+edital, reaproveitando o repositório de Documentos.
+    **Com isso, RF-024 a RF-028 (módulo de Maturidade) estão completos**
+    — só a limitação deliberada de validade/versão de evidência (RF-025)
+    permanece, por depender do versionamento que `Documento` já tem.
