@@ -10,7 +10,14 @@ from sqlalchemy.orm import Session
 
 from app.models.cpl import CPL
 from app.models.enums import NivelMaturidade, StatusAvaliacao
-from app.models.maturidade import Avaliacao, AvaliacaoCriterio, CriterioMaturidade, Edital
+from app.models.maturidade import (
+    Avaliacao,
+    AvaliacaoCriterio,
+    CriterioMaturidade,
+    Edital,
+    ItemHabilitacaoJuridica,
+    RequisitoHabilitacaoEdital,
+)
 
 VALIDADE_RECONHECIMENTO_DIAS = 365 * 2  # RN-005: recadastramento bienal
 
@@ -160,4 +167,42 @@ def resumo_recadastramento(db: Session, cpl_id: uuid.UUID) -> dict:
         "vencimento_proximo_ou_vencido": dias_para_vencer is not None and dias_para_vencer <= 90,
         "avaliacoes": avaliacoes,
         "lacunas_avaliacao_vigente": lacunas(avaliacao_vigente) if avaliacao_vigente else [],
+    }
+
+
+def pacote_submissao_habilitacao(db: Session, cpl_id: uuid.UUID, edital_id: uuid.UUID) -> dict:
+    """RF-043: dados do "pacote de submissão com índice e checklist" de
+    uma CPL perante um edital — reaproveita o checklist de habilitação
+    (RF-027) contra o template do próprio edital (RF-003, RequisitoHabilitacaoEdital)
+    pra listar também o que ainda nem foi iniciado, não só o que já virou
+    item, mais a avaliação de maturidade mais recente contra o mesmo
+    edital, se existir. Nenhuma coleta nova — só compõe dados que os
+    módulos de Maturidade/Habilitação já mantêm."""
+
+    itens = (
+        db.query(ItemHabilitacaoJuridica)
+        .filter(ItemHabilitacaoJuridica.cpl_id == cpl_id, ItemHabilitacaoJuridica.edital_id == edital_id)
+        .order_by(ItemHabilitacaoJuridica.created_at)
+        .all()
+    )
+    descricoes_instanciadas = {item.descricao for item in itens}
+    requisitos = (
+        db.query(RequisitoHabilitacaoEdital)
+        .filter(RequisitoHabilitacaoEdital.edital_id == edital_id)
+        .all()
+    )
+    requisitos_nao_iniciados = [r for r in requisitos if r.descricao not in descricoes_instanciadas]
+
+    avaliacao = (
+        db.query(Avaliacao)
+        .filter(Avaliacao.cpl_id == cpl_id, Avaliacao.edital_id == edital_id)
+        .order_by(Avaliacao.data_avaliacao.desc())
+        .first()
+    )
+
+    return {
+        "itens_habilitacao": itens,
+        "requisitos_nao_iniciados": requisitos_nao_iniciados,
+        "avaliacao": avaliacao,
+        "lacunas": lacunas(avaliacao) if avaliacao else [],
     }

@@ -1,0 +1,134 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Saúde do sistema{% endblock %}
+{% block subtitulo %}Saúde do sistema{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1">Saúde do sistema</h1>
+    <p class="text-body-secondary">
+        Observabilidade (RNF-012): status do banco, métricas de requisição desde o último
+        deploy do processo e falhas não tratadas registradas nos últimos {{ janela_minutos }} minutos.
+    </p>
+
+    {% if alerta_ativo %}
+        <div class="alert alert-danger d-flex align-items-center gap-2" role="alert">
+            <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+            <div>
+                <strong>Alerta:</strong> {{ falhas|length }} falha(s) nos últimos {{ janela_minutos }} minutos
+                (limiar configurado: {{ limiar_falhas }}). Administradores foram notificados por e-mail,
+                se o SMTP estiver configurado.
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="row row-cols-2 row-cols-md-5 g-3 mb-4">
+        <div class="col">
+            <div class="card kpi-card h-100">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <div class="kpi-icon {% if banco_ok %}bg-success-subtle text-success{% else %}bg-danger-subtle text-danger{% endif %}">
+                        <i class="bi bi-hdd-network-fill"></i>
+                    </div>
+                    <div>
+                        <div class="kpi-valor small">{{ "Disponível" if banco_ok else "Indisponível" }}</div>
+                        <div class="text-body-secondary small">Banco de dados</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card kpi-card h-100">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <div class="kpi-icon bg-primary-subtle text-primary"><i class="bi bi-clock-history"></i></div>
+                    <div>
+                        <div class="kpi-valor small">{{ (metricas.uptime_segundos // 60) }} min</div>
+                        <div class="text-body-secondary small">Uptime do processo</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card kpi-card h-100">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <div class="kpi-icon bg-dark-subtle text-dark"><i class="bi bi-arrow-left-right"></i></div>
+                    <div>
+                        <div class="kpi-valor small">{{ metricas.total_requisicoes }}</div>
+                        <div class="text-body-secondary small">Requisições (desde o deploy)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card kpi-card h-100">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <div class="kpi-icon bg-warning-subtle text-warning"><i class="bi bi-speedometer"></i></div>
+                    <div>
+                        <div class="kpi-valor small">{{ metricas.latencia_media_ms }} ms</div>
+                        <div class="text-body-secondary small">Latência média</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card kpi-card h-100">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <div class="kpi-icon {% if falhas %}bg-danger-subtle text-danger{% else %}bg-success-subtle text-success{% endif %}">
+                        <i class="bi bi-bug-fill"></i>
+                    </div>
+                    <div>
+                        <div class="kpi-valor small">{{ falhas|length }}</div>
+                        <div class="text-body-secondary small">Falhas ({{ janela_minutos }} min)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-transparent fw-semibold">
+            <i class="bi bi-bar-chart-line text-primary me-2"></i>Requisições por classe de status
+        </div>
+        <div class="card-body">
+            {% if metricas.por_status %}
+                <div class="d-flex flex-wrap gap-3">
+                    {% for classe, contagem in metricas.por_status.items() %}
+                        <span class="badge {% if classe == '5xx' %}text-bg-danger{% elif classe == '4xx' %}text-bg-warning{% else %}text-bg-secondary{% endif %} fs-6">
+                            {{ classe }}: {{ contagem }}
+                        </span>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-body-secondary mb-0">Nenhuma requisição registrada ainda nesta instância.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-transparent fw-semibold">
+            <i class="bi bi-bug text-primary me-2"></i>Falhas recentes
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Quando</th>
+                        <th>Rota</th>
+                        <th>Tipo</th>
+                        <th>Mensagem</th>
+                        <th>Usuário</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in falhas %}
+                        <tr>
+                            <td class="small text-nowrap">{{ f.created_at.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+                            <td class="small">{{ f.metodo }} {{ f.rota }}</td>
+                            <td class="small">{{ f.tipo_excecao }}</td>
+                            <td class="small">{{ f.mensagem or "—" }}</td>
+                            <td class="small">{{ f.usuario_id or "—" }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="5" class="text-body-secondary">Nenhuma falha registrada no período.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}

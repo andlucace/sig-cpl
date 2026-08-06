@@ -1,3 +1,5 @@
+import logging
+import time
 import uuid
 
 from fastapi import FastAPI, Request, status
@@ -17,6 +19,7 @@ from app.api.routes import (
     indicadores,
     maturidade,
     notificacoes,
+    observabilidade as observabilidade_routes,
     pessoas,
     planejamento,
     projeto,
@@ -26,8 +29,11 @@ from app.api.routes.stubs import stub_routers
 from app.core.audit_context import ip_atual, usuario_atual_id
 from app.core.config import get_settings
 from app.core.deps import extract_token
+from app.core.logging_config import configurar_logging
 from app.core.security import decode_access_token
+from app.db.session import SessionLocal
 from app.services import auditoria as auditoria_service  # noqa: F401 — registra o listener de auditoria
+from app.services.observabilidade import registrar_falha, registrar_requisicao, verificar_banco
 from app.web import (
     routes_atualizacao_publica,
     routes_auditoria,
@@ -38,12 +44,17 @@ from app.web import (
     routes_indicadores,
     routes_maturidade,
     routes_notificacoes,
+    routes_observabilidade,
     routes_planejamento,
     routes_projeto,
     routes_publico,
     routes_restrito,
 )
 from app.web.templates import templates
+
+configurar_logging()
+logger_requisicoes = logging.getLogger("sigcpl.requisicoes")
+logger_falhas = logging.getLogger("sigcpl.falhas")
 
 settings = get_settings()
 
@@ -81,7 +92,27 @@ async def contexto_auditoria(request: Request, call_next):
     """Popula os contextvars lidos pelo listener de auditoria
     (app/services/auditoria.py) com o usuário autenticado e o IP de cada
     requisição — decodifica o token localmente, sem consultar o banco,
-    para manter o middleware leve."""
+    para manter o middleware leve. RNF-012: também mede duração, grava
+    uma linha de log estruturado por requisição (`logging_config.py`),
+    alimenta os contadores em memória de `app/services/observabilidade.py`
+    e captura qualquer exceção não tratada (que não seja `HTTPException`
+    — essas já são fluxo de controle esperado, tratadas pelo handler
+    acima) pra persistir em `RegistroFalha` — tudo no mesmo middleware
+    pra não decodificar o token duas vezes.
+
+    A captura de exceção é feita aqui dentro, e não via
+    `@app.exception_handler(Exception)`, de propósito: o Starlette move
+    um handler de `Exception` "crua" pro `ServerErrorMiddleware`, que
+    fica ACIMA deste middleware — nessa altura os contextvars já foram
+    resetados pelo `finally` de baixo, e o ASGI ainda loga a exceção
+    de novo como "Exception in ASGI application" por baixo dos panos
+    (efeito colateral conhecido de `BaseHTTPMiddleware` + handler de
+    `Exception`), poluindo o log com um 500 duplicado. Capturando aqui,
+    a resposta nunca escapa deste middleware — nada sobra pra propagar."""
+
+    request_id = str(uuid.uuid4())
+    request.state.request_id = request_id
+    inicio = time.monotonic()
 
     usuario_id = None
     token = extract_token(request)
@@ -94,9 +125,54 @@ async def contexto_auditoria(request: Request, call_next):
 
     token_usuario = usuario_atual_id.set(usuario_id)
     token_ip = ip_atual.set(request.client.host if request.client else None)
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     try:
-        return await call_next(request)
+        response = await call_next(request)
+        status_code = response.status_code
+        response.headers["X-Request-ID"] = request_id
+        return response
+    except Exception as exc:
+        logger_falhas.error(
+            "falha_nao_tratada",
+            exc_info=exc,
+            extra={
+                "request_id": request_id,
+                "usuario_id": str(usuario_id) if usuario_id else None,
+                "metodo": request.method,
+                "rota": request.url.path,
+            },
+        )
+        db = SessionLocal()
+        try:
+            registrar_falha(
+                db,
+                metodo=request.method,
+                rota=request.url.path,
+                excecao=exc,
+                usuario_id=usuario_id,
+                request_id=request_id,
+            )
+        except Exception:
+            pass
+        finally:
+            db.close()
+        return JSONResponse(
+            {"detail": "Erro interno do servidor."}, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
     finally:
+        duracao_ms = (time.monotonic() - inicio) * 1000
+        registrar_requisicao(status_code, duracao_ms)
+        logger_requisicoes.info(
+            "requisicao",
+            extra={
+                "request_id": request_id,
+                "usuario_id": str(usuario_id) if usuario_id else None,
+                "metodo": request.method,
+                "rota": request.url.path,
+                "status_code": status_code,
+                "duracao_ms": round(duracao_ms, 1),
+            },
+        )
         usuario_atual_id.reset(token_usuario)
         ip_atual.reset(token_ip)
 
@@ -117,6 +193,7 @@ app.include_router(indicadores.router, prefix="/api")
 app.include_router(maturidade.router, prefix="/api")
 app.include_router(notificacoes.router, prefix="/api")
 app.include_router(projeto.router, prefix="/api")
+app.include_router(observabilidade_routes.router, prefix="/api")
 for stub_router in stub_routers:
     app.include_router(stub_router, prefix="/api")
 
@@ -132,11 +209,30 @@ app.include_router(routes_indicadores.router)
 app.include_router(routes_maturidade.router)
 app.include_router(routes_notificacoes.router)
 app.include_router(routes_projeto.router)
+app.include_router(routes_observabilidade.router)
 app.include_router(routes_atualizacao_publica.router)
 app.include_router(routes_publico.router)
 
 
 @app.get("/api/saude", tags=["Administração"])
 def saude() -> dict:
-    """Endpoint simples de verificação de disponibilidade (apoia RNF-004/RNF-012)."""
-    return {"status": "ok", "app": settings.app_name, "ambiente": settings.environment}
+    """RNF-012 (painel de saúde): além do "processo está de pé", checa
+    conectividade real com o banco — o healthcheck do Traefik
+    (`docker-compose.prod.yml`) usa esta rota, então precisa continuar
+    rápida e sem autenticação; métricas/falhas detalhadas ficam em
+    `/api/metricas` e no painel web, ambos admin-only."""
+
+    db = SessionLocal()
+    try:
+        banco_ok = verificar_banco(db)
+    finally:
+        db.close()
+    corpo = {
+        "status": "ok" if banco_ok else "degradado",
+        "app": settings.app_name,
+        "ambiente": settings.environment,
+        "banco": "ok" if banco_ok else "indisponível",
+    }
+    if not banco_ok:
+        return JSONResponse(corpo, status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
+    return corpo

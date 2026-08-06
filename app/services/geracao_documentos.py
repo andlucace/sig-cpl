@@ -1,4 +1,4 @@
-"""RF-043/RF-048: geração de documentos padronizados em PDF. Nove peças:
+"""RF-043/RF-048: geração de documentos padronizados em PDF. Dez peças:
 exportar a ata de uma reunião de governança (usa o campo `Reuniao.ata`
 que já existe), o relatório executivo consolidado (acumulado desde
 sempre), o relatório de recadastramento, o relatório anual (recortado a
@@ -7,9 +7,13 @@ de governança) e o relatório de impacto (reaproveita o resumo cadastral
 do RF-046/047, sem consolidar governança/planejamento) de uma CPL, mais
 os três relatórios "de projeto" do RF-041 (execução, financeiro e
 dossiê de evidências) — escopados a um único `Projeto`, não a uma CPL
-inteira. Com estes três, os seis tipos de relatório citados no RF-048
-estão completos (o tipo "de projeto" dependia do módulo de Projetos
-existir, ver README/HANDOFF).
+inteira — e o pacote de submissão com índice e checklist (RF-043),
+escopado a uma CPL perante um único edital. Com estes, os seis tipos de
+relatório citados no RF-048 estão completos (o tipo "de projeto"
+dependia do módulo de Projetos existir, ver README/HANDOFF), e o RF-043
+("pacotes de submissão com índice e checklist") deixa de ser parcial —
+o DOCX segue fora de escopo (PDF cobre o mesmo caso de uso e é o
+formato já usado em todos os outros relatórios do sistema).
 """
 
 from pathlib import Path
@@ -18,6 +22,7 @@ from fpdf import FPDF
 
 from app.models.cpl import CPL
 from app.models.governanca import OrgaoGovernanca, Reuniao
+from app.models.maturidade import Edital
 from app.models.planejamento import IndicadorEstrategico
 from app.models.projeto import Projeto
 
@@ -263,6 +268,63 @@ def gerar_pdf_relatorio_recadastramento(cpl: CPL, resumo: dict) -> bytes:
                 doc.linha(f"  Parecer: {avaliacao.parecer}")
     else:
         doc.linha("Nenhuma avaliação registrada ainda.")
+
+    return doc.bytes()
+
+
+def gerar_pdf_pacote_submissao(cpl: CPL, edital: Edital, resumo: dict) -> bytes:
+    """RF-043: pacote de submissão com índice e checklist — reúne o
+    checklist de habilitação jurídica de uma CPL perante um edital
+    (RF-027, contra o template de documentos exigidos do RF-003, pra
+    listar também o que ainda nem foi iniciado) e, se existir, a
+    avaliação de maturidade mais recente contra o mesmo edital. Dados
+    vêm prontos de
+    `app/services/maturidade.py::pacote_submissao_habilitacao`; esta
+    função só formata."""
+
+    doc = _GeradorPDF()
+
+    doc.linha(f"Pacote de Submissão — {cpl.nome}", altura=10, negrito=True, tamanho=16)
+    doc.linha(f"Edital: {edital.nome} ({edital.ciclo})")
+    doc.espaco(2)
+
+    doc.linha("Índice", negrito=True, tamanho=12)
+    doc.linha("1. Checklist de habilitação jurídica")
+    if resumo["avaliacao"] is not None:
+        doc.linha("2. Avaliação de maturidade")
+    doc.espaco()
+
+    doc.linha("1. Checklist de habilitação jurídica", negrito=True, tamanho=12)
+    total_itens = len(resumo["itens_habilitacao"]) + len(resumo["requisitos_nao_iniciados"])
+    aprovados = sum(1 for item in resumo["itens_habilitacao"] if item.status.value == "aprovado")
+    doc.linha(f"{aprovados} de {total_itens} item(ns) aprovado(s)")
+    for item in resumo["itens_habilitacao"]:
+        marca = "[x]" if item.status.value == "aprovado" else "[ ]"
+        linha = f"{marca} {item.descricao} — {item.status.value}"
+        if item.documento is not None:
+            linha += f" ({item.documento.titulo})"
+        doc.linha(linha)
+    for requisito in resumo["requisitos_nao_iniciados"]:
+        doc.linha(f"[ ] {requisito.descricao} — não iniciado")
+    if total_itens == 0:
+        doc.linha("Nenhum requisito de habilitação definido para este edital.")
+
+    if resumo["avaliacao"] is not None:
+        avaliacao = resumo["avaliacao"]
+        doc.espaco()
+        doc.linha("2. Avaliação de maturidade", negrito=True, tamanho=12)
+        doc.linha(f"Status: {avaliacao.status.value}")
+        if avaliacao.pontuacao_calculada is not None:
+            doc.linha(f"Pontuação: {avaliacao.pontuacao_calculada}")
+        if avaliacao.nivel_sugerido is not None:
+            doc.linha(f"Nível sugerido: {avaliacao.nivel_sugerido.value.replace('_', ' ')}")
+        if avaliacao.nivel_decidido is not None:
+            doc.linha(f"Nível decidido: {avaliacao.nivel_decidido.value.replace('_', ' ')}")
+        if resumo["lacunas"]:
+            doc.espaco()
+            doc.linha("Lacunas identificadas:")
+            for nota in resumo["lacunas"]:
+                doc.linha(f"- {nota.criterio.nome}: nota {nota.nota} (corte: {nota.criterio.nota_corte})")
 
     return doc.bytes()
 

@@ -128,6 +128,9 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   24. `ec51d69e4f77` — tabela `requisitos_habilitacao_edital` (RF-003) —
       sem gotcha nenhum dos dois de sempre (sem enum, tabela nova sem
       coluna `NOT NULL` retroativa)
+  25. `4fc9db3f454d` — tabela `registros_falha` (RNF-012) — sem gotcha
+      nenhum dos dois de sempre (sem enum, tabela nova sem coluna
+      `NOT NULL` retroativa)
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos;
     mesma coisa para RF-041/045/053/017, feitas depois da nº 20)
@@ -1494,6 +1497,82 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     UI, ir na tela da CPL, clicar "usar requisitos do edital", confirmar
     que só o requisito novo aparece como item novo) mais rerun da suíte
     de regressão, sem erros de console nem 500 reais no log.
+37. **RF-043: pacote de submissão com índice e checklist** e **RNF-012:
+    observabilidade** — usuário pediu "implementar a RF-043 e a
+    RNF-012". RF-043 estava marcado parcial com uma premissa
+    desatualizada ("depende do módulo de Editais/Reconhecimento, ainda
+    não construído" — o módulo existe desde o item 10/RF-024); RNF-012
+    era o único não-funcional totalmente pendente além de RNF-013.
+    - **RF-043**: `pacote_submissao_habilitacao()`
+      (`app/services/maturidade.py`) reúne o checklist de habilitação
+      jurídica de uma CPL perante um edital (`ItemHabilitacaoJuridica`,
+      RF-027) contra o template de documentos exigidos do próprio
+      edital (`RequisitoHabilitacaoEdital`, RF-003 — mesma composição já
+      usada no botão "usar requisitos do edital", agora reaproveitada
+      pra saber o que ainda falta instanciar, não só o que já é item),
+      mais a avaliação de maturidade mais recente contra o mesmo edital,
+      se existir. `gerar_pdf_pacote_submissao()`
+      (`app/services/geracao_documentos.py`) só formata — mesmo padrão
+      dos outros nove PDFs do módulo, reaproveitando `_GeradorPDF`.
+      Botão "Gerar pacote de submissão" (com seletor de edital) ao lado
+      do já existente "Usar requisitos do edital" no card de habilitação
+      de `cpl_avaliacoes.html`; `POST
+      /api/maturidade/cpls/{id}/pacote-submissao` e equivalente web,
+      mesmo padrão de salvar como `Documento` (RF-042) e redirecionar
+      pra `/painel/documentos/cpls/{id}` de todo relatório do RF-048.
+      DOCX ficou deliberadamente fora — PDF cobre o caso de uso e é o
+      formato já usado em todos os outros relatórios.
+    - **RNF-012**: três peças novas, nenhuma infraestrutura externa
+      (sem Prometheus/Grafana/Sentry — tudo no próprio Postgres/processo).
+      `RegistroFalha` (`app/models/observabilidade.py`) é o mesmo padrão
+      "log que só acumula" de `RegistroAuditoria`/`Notificacao` — uma
+      linha por exceção não tratada (não por 4xx esperado, que é fluxo
+      de controle). Métricas de requisição (`app/services/observabilidade.py`)
+      ficam em memória do processo (contadores que reiniciam a cada
+      deploy — aceitável pra "desde o último deploy", não uma série
+      histórica). Logs estruturados em JSON
+      (`app/core/logging_config.py`) com `request_id` por requisição
+      (também devolvido em `X-Request-ID`), emitidos pelo mesmo
+      middleware `contexto_auditoria` que já decodifica o token — não
+      criei um segundo middleware só pra não decodificar duas vezes.
+      **Bug pego e corrigido antes de fechar a fatia**: a primeira
+      versão registrava a falha via `@app.exception_handler(Exception)`
+      separado — só que o Starlette move um handler de `Exception`
+      "crua" pro `ServerErrorMiddleware`, que fica ACIMA do middleware
+      custom; nessa altura os contextvars de auditoria já tinham sido
+      resetados pelo `finally` do middleware, e o ASGI ainda logava a
+      exceção de novo como "Exception in ASGI application" por baixo
+      dos panos (efeito colateral conhecido de `BaseHTTPMiddleware` +
+      handler de `Exception`) — um 500 duplicado no log a cada falha
+      real, que teria poluído a disciplina de "zero 500 real no log"
+      usada pra validar toda fatia desta sessão. Corrigido movendo a
+      captura pra dentro do próprio `try/except` do middleware
+      `contexto_auditoria`, sem handler de `Exception` separado —
+      confirmado via rota de teste temporária (`/api/_test-falha`,
+      removida antes do commit) que o log parou de duplicar. Alerta por
+      limiar (padrão 5 falhas/15min, configurável via
+      `observabilidade_alerta_*` em `Settings`) mostra banner no painel
+      e tenta e-mail aos administradores via `app/services/email.py`
+      (RF-004) — melhor esforço, nunca derruba nada se o SMTP não
+      estiver configurado (não está, em produção, ver item 14 de "O que
+      falta"), no máximo uma vez por janela. `/api/saude` passou a
+      checar `SELECT 1` no banco (retorna 503 se falhar) — antes só
+      respondia "ok" sem checar nada; continua público/rápido porque o
+      healthcheck do Traefik em produção usa essa rota. Painel de saúde
+      novo em `/painel/administracao/saude` (admin, `PAPEIS_EDITAL_GESTAO`)
+      e `GET /api/metricas` (mesmo grupo).
+    Migração `4fc9db3f454d` — sem gotcha nenhum dos dois de sempre (sem
+    enum, tabela nova sem coluna `NOT NULL` retroativa). Testado via
+    curl (pacote de submissão gerado e baixado como PDF válido, conteúdo
+    conferido via `pypdf` — o "?" que aparece no terminal git-bash é só
+    exibição, o PDF em si renderiza acentuação corretamente, mesma
+    classe de falso-positivo já documentada; RBAC 401/403 nos endpoints
+    novos) e Playwright (`rf043_rnf012_shot.js` — gerar pacote de
+    submissão via UI, navegar até o painel de saúde) mais rerun de
+    `maturidade_shot.js`/`maturidade_shot2.js`/`rbac_403_shot.js`/
+    `documentos_shot.js`, sem erros de console nem 500 reais no log
+    (confirmado tanto antes quanto depois do fix do bug de log
+    duplicado acima).
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -1774,6 +1853,28 @@ só porque é um módulo novo).
     exatamente a rota de submissão desse form chama `verificar_papel` —
     se não for o mesmo conjunto, o flag existente vai mentir pra algum
     papel autorizado.
+17. **`@app.exception_handler(Exception)` junto com um `@app.middleware("http")`
+    custom duplica o log de todo 500 real** (RNF-012, item 37). O
+    Starlette trata um handler registrado pro tipo `Exception` "cru"
+    como especial: em vez de instalá-lo no `ExceptionMiddleware` de
+    sempre, ele move pro `ServerErrorMiddleware`, que fica ACIMA de
+    qualquer `@app.middleware("http")` customizado (não abaixo, como se
+    esperaria). Resultado: quando uma exceção não tratada sobe, ela
+    passa pelo middleware custom primeiro — cujo `finally` já reseta os
+    contextvars de auditoria — e só é capturada pelo handler depois, na
+    borda externa; nesse meio-tempo, o mecanismo interno do
+    `BaseHTTPMiddleware` (usado por baixo de todo `@app.middleware("http")`)
+    também loga a mesma exceção como "Exception in ASGI application",
+    então cada falha real vira dois 500 no log em vez de um — quebra
+    silenciosamente a disciplina de "conferir zero 500 real no log
+    depois de cada mudança" usada a sessão inteira, porque o segundo
+    500 não é um bug novo, é ruído do próprio mecanismo de captura.
+    **Regra**: se o middleware custom já existe e precisa reagir a
+    exceção não tratada (registrar falha, medir duração mesmo em erro),
+    capture com `try/except Exception` dentro do próprio middleware, não
+    com um `@app.exception_handler(Exception)` à parte — a exceção nunca
+    escapa do middleware, então nada sobra pra o `ServerErrorMiddleware`
+    logar de novo.
 
 ## O que falta (priorizado)
 
@@ -1916,6 +2017,19 @@ ordem recomendada para o que vem depois:
     RF-024). **Pendência real, não de código**: nenhuma — item 14 acima
     (SMTP em produção) é a única pendência de configuração aberta no
     projeto.
+17. ~~RF-043: pacote de submissão com índice e checklist~~ e ~~RNF-012:
+    observabilidade~~ — **feito**: ver item 37 da seção "Ordem em que
+    este projeto foi construído". Pacote de submissão junta habilitação
+    jurídica (RF-027, contra o template do RF-003) e avaliação de
+    maturidade de uma CPL perante um edital num PDF só; DOCX
+    deliberadamente fora de escopo. Observabilidade: logs estruturados,
+    métricas em memória, `RegistroFalha`, alerta por limiar e painel de
+    saúde — sem infraestrutura externa nova. Ver item 17 de "Armadilhas
+    já resolvidas" pro bug de log duplicado pego e corrigido nesta
+    fatia (`@app.exception_handler(Exception)` + `BaseHTTPMiddleware`).
+    **Pendência real, não de código**: nenhuma nova — SMTP em produção
+    (item 14) segue sendo a única, e agora também afeta o alerta por
+    e-mail do RNF-012 (mesmo mecanismo, mesma pendência).
 
 ## Deploy em produção
 

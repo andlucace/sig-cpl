@@ -41,6 +41,14 @@ class Settings(BaseSettings):
 
     password_reset_token_expire_minutes: int = 60
 
+    observabilidade_alerta_limiar_falhas: int = 5
+    observabilidade_alerta_janela_minutos: int = 15
+    """RNF-012: se `registros_falha` acumular pelo menos `_limiar_falhas`
+    linhas dentro dos últimos `_janela_minutos`, o painel de saúde marca
+    alerta e tenta notificar os administradores por e-mail (melhor
+    esforço, ver `app/services/observabilidade.py::verificar_e_alertar`).
+    Padrão conservador — não fixado pelo documento de requisitos."""
+
 
 @lru_cache
 def get_settings() -> Settings:

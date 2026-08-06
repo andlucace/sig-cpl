@@ -30,6 +30,7 @@ from app.models.maturidade import (
     RequisitoHabilitacaoEdital,
 )
 from app.models.notificacao import Notificacao
+from app.models.observabilidade import RegistroFalha
 from app.models.pessoa import Pessoa, PessoaVinculo
 from app.models.planejamento import (
     DiagnosticoItem,
@@ -116,4 +117,5 @@ __all__ = [
     "DesembolsoProjeto",
     "EntregaProjeto",
     "AlteracaoPlanoProjeto",
+    "RegistroFalha",
 ]

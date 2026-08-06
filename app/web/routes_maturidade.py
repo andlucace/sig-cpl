@@ -37,12 +37,13 @@ from app.models.maturidade import (
 from app.models.pessoa import Pessoa
 from app.models.usuario import Usuario
 from app.services.armazenamento import salvar_arquivo
-from app.services.geracao_documentos import gerar_pdf_relatorio_recadastramento
+from app.services.geracao_documentos import gerar_pdf_pacote_submissao, gerar_pdf_relatorio_recadastramento
 from app.services.maturidade import (
     concluir_avaliacao,
     cpls_com_vencimento_proximo,
     decidir_nivel,
     lacunas,
+    pacote_submissao_habilitacao,
     resumo_recadastramento,
     simular_avaliacao,
 )
@@ -298,6 +299,46 @@ def gerar_relatorio_recadastramento(
     documento = Documento(
         cpl_id=cpl_id,
         titulo=f"Relatório de Recadastramento — {cpl.nome}",
+        categoria=CategoriaDocumento.RELATORIO,
+        confidencialidade=ConfidencialidadeDocumento.INTERNO,
+        arquivo_path=caminho,
+        nome_arquivo_original=nome_arquivo,
+        tipo_mime="application/pdf",
+        tamanho_bytes=len(pdf_bytes),
+        criado_por_id=usuario.id,
+    )
+    db.add(documento)
+    db.commit()
+    return RedirectResponse(f"/painel/documentos/cpls/{cpl_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/cpls/{cpl_id}/pacote-submissao")
+def gerar_pacote_submissao(
+    cpl_id: uuid.UUID,
+    edital_id: uuid.UUID = Form(...),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-043: pacote de submissão com índice e checklist — habilitação
+    jurídica (RF-027, contra o template do RF-003) e avaliação de
+    maturidade mais recente, ambas escopadas ao mesmo edital."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    cpl = db.get(CPL, cpl_id)
+    if cpl is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=cpl_id)
+    edital = db.get(Edital, edital_id)
+    if edital is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Edital não encontrado.")
+
+    pdf_bytes = gerar_pdf_pacote_submissao(cpl, edital, pacote_submissao_habilitacao(db, cpl_id, edital_id))
+    nome_arquivo = f"Pacote de Submissao - {cpl.nome} - {edital.nome}.pdf"
+    caminho = salvar_arquivo(cpl_id, nome_arquivo, pdf_bytes)
+    documento = Documento(
+        cpl_id=cpl_id,
+        titulo=f"Pacote de Submissão — {edital.nome} ({edital.ciclo})",
         categoria=CategoriaDocumento.RELATORIO,
         confidencialidade=ConfidencialidadeDocumento.INTERNO,
         arquivo_path=caminho,

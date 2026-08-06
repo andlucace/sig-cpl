@@ -285,12 +285,10 @@ existiam; esta fatia fechou o resto:
   da entidade — a última resposta continua valendo até alguém responder
   de novo, só fica sinalizada.
 
-O bloco **Documentos** (RF-042/043) foi implementado com escopo recortado
-deliberadamente — repositório completo (RF-042), mas geração de documento
-padronizado (RF-043) limitada a exportar a ata de uma reunião em PDF, não
-um construtor genérico de "pacotes de submissão com índice e checklist"
-(que dependeria do módulo de Editais/Reconhecimento da Fase 2, ainda
-inexistente):
+O bloco **Documentos** (RF-042/043) tem repositório completo (RF-042) e
+geração de documento padronizado (RF-043) com duas peças: exportar a ata
+de uma reunião em PDF e um pacote de submissão com índice e checklist,
+escopado a uma CPL perante um edital:
 
 - `Documento` — classificação (`CategoriaDocumento`: ata, plano de
   trabalho, declaração, comprovante, relatório, outro), confidencialidade
@@ -314,6 +312,20 @@ inexistente):
 - Endpoint `POST /api/documentos/reunioes/{reuniao_id}/ata-pdf` (e botão
   "Gerar ata em PDF" na tela da reunião) gera o PDF e já cadastra o
   `Documento` automaticamente, ligado à reunião de origem.
+- **Pacote de submissão com índice e checklist** (RF-043) —
+  `gerar_pdf_pacote_submissao`, alimentado por
+  `pacote_submissao_habilitacao()` (`app/services/maturidade.py`): reúne
+  o checklist de habilitação jurídica de uma CPL perante um edital
+  (`ItemHabilitacaoJuridica`, RF-027) contra o template de documentos
+  exigidos do próprio edital (`RequisitoHabilitacaoEdital`, RF-003, pra
+  listar também o que ainda nem foi iniciado como item, não só o que já
+  foi), mais a avaliação de maturidade mais recente contra o mesmo
+  edital, se existir. Botão "Gerar pacote de submissão" (com seletor de
+  edital) na tela de habilitação da CPL
+  (`/painel/maturidade/cpls/{id}`), `POST
+  /api/maturidade/cpls/{id}/pacote-submissao`. DOCX segue fora de
+  escopo — PDF cobre o mesmo caso de uso e é o formato já usado em todos
+  os outros relatórios do sistema (RF-048).
 
 Confidencialidade controla leitura: documentos `confidencial` só para
 `PAPEIS_IMPEDIMENTO_LEITURA` (gestão + auditoria — mesmo grupo já usado
@@ -1394,6 +1406,54 @@ de novo enquanto existir pelo menos um administrador.
   replicando como o `rh-nepen` já funcionava). Nada impede de configurar um
   remoto depois se for útil (ex.: para revisão de código ou CI/CD futuro).
 
+## Observabilidade (RNF-012)
+
+Sem infraestrutura externa nova (Prometheus/Grafana/Sentry) — falhas
+persistidas no próprio Postgres, métricas em memória do processo, alerta
+por e-mail reaproveitando o SMTP genérico do RF-004:
+
+- **Logs centralizados** — `app/core/logging_config.py` formata cada
+  linha como JSON (`{"timestamp", "nivel", "logger", "mensagem", ...}`)
+  em vez de texto solto, pra ficar filtrável/agregável em qualquer
+  coletor que leia stdout do container (Docker já centraliza a coleta;
+  isto só estrutura o conteúdo). Um `request_id` (UUID) é gerado por
+  requisição em `contexto_auditoria` (`app/main.py`), devolvido também
+  no header `X-Request-ID`, e amarra a linha de log da requisição à
+  linha de log de uma eventual falha na mesma requisição. Coexiste com
+  o access log padrão do uvicorn — não foi desligado.
+- **Métricas** — contadores em memória (`app/services/observabilidade.py`):
+  total de requisições, contagem por classe de status (`2xx`/`3xx`/`4xx`/`5xx`)
+  e latência média, todos "desde o último deploy" (reiniciam com o
+  processo — não é uma série histórica, é operação corrente). `GET
+  /api/metricas` (admin, `PAPEIS_EDITAL_GESTAO`).
+- **Rastreamento de falhas** — `RegistroFalha` (mesmo padrão "log que só
+  acumula" de `RegistroAuditoria`/`Notificacao`): uma linha por exceção
+  não tratada (não por 4xx esperado — validação, RBAC, 404 são fluxo de
+  controle, não falha), com tipo, mensagem, traceback resumido, rota,
+  usuário (se autenticado) e `request_id`. Capturada dentro do próprio
+  middleware `contexto_auditoria`, não via
+  `@app.exception_handler(Exception)` — Starlette move um handler de
+  `Exception` "crua" pro `ServerErrorMiddleware`, acima do middleware
+  custom, e nessa altura os contextvars de auditoria já foram resetados
+  e o ASGI loga a exceção de novo como "Exception in ASGI application"
+  (efeito colateral conhecido de `BaseHTTPMiddleware` + handler de
+  `Exception`, que gerava 500 duplicado no log — pego e corrigido antes
+  de dar por encerrada esta fatia).
+- **Alerta por limiar** — se `registros_falha` acumular pelo menos
+  `observabilidade_alerta_limiar_falhas` (padrão: 5) linhas nos últimos
+  `observabilidade_alerta_janela_minutos` (padrão: 15) minutos, o painel
+  de saúde mostra um banner vermelho e tenta notificar os administradores
+  por e-mail — melhor esforço via `app/services/email.py` (RF-004), nunca
+  derruba nada se o SMTP ainda não estiver configurado; no máximo um
+  e-mail por janela, pra não inundar a caixa de entrada.
+- **Painel de saúde** — `/painel/administracao/saude` (admin,
+  `PAPEIS_EDITAL_GESTAO`): status do banco, uptime do processo, métricas
+  de requisição, requisições por classe de status e tabela de falhas
+  recentes. `GET /api/saude` (público, sem autenticação — é o que o
+  healthcheck do Traefik usa em produção) passou a checar conectividade
+  real com o banco (`SELECT 1`) em vez de só responder "ok" sem checar
+  nada; retorna `503` se o banco estiver indisponível.
+
 ## Próximos passos sugeridos
 
 Seguindo o roadmap (seção 17 do documento). **A Fase 1/MVP está completa**
@@ -1508,3 +1568,22 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
     **Com isso, RF-024 a RF-028 (módulo de Maturidade) estão completos**
     — só a limitação deliberada de validade/versão de evidência (RF-025)
     permanece, por depender do versionamento que `Documento` já tem.
+15. ~~RF-014: máscaras + validade temporal~~ e ~~RF-003: requisitos de
+    habilitação parametrizáveis~~ — **feitos**: ver seções "Regras de
+    qualidade de dados" e "Requisitos de habilitação por edital —
+    template" acima. `app/services/validadores.py` (CNPJ/CPF por dígito
+    verificador, UF pela lista fechada de 27 unidades) aplicado nos 3
+    pontos de escrita de sempre; validade temporal do diagnóstico
+    cadastral é função pura, sem campo novo no banco.
+    `RequisitoHabilitacaoEdital` fecha a peça de RF-003 que ainda
+    faltava — a marcação anterior de "depende do módulo de Maturidade"
+    estava desatualizada, o módulo existe desde o RF-024.
+16. ~~RF-043: pacote de submissão com índice e checklist~~ e ~~RNF-012:
+    observabilidade~~ — **feitos**: ver seções "Documentos" e
+    "Observabilidade (RNF-012)" acima. Pacote de submissão reúne
+    habilitação jurídica (RF-027, contra o template do RF-003) e
+    avaliação de maturidade de uma CPL perante um edital num único PDF
+    com índice e checklist. Observabilidade acrescenta logs
+    estruturados, métricas em memória, rastreamento de falhas
+    (`RegistroFalha`), alerta por limiar e painel de saúde — sem
+    infraestrutura externa nova.
