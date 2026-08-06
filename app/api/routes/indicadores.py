@@ -1,10 +1,14 @@
+import csv
+import io
+import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
-from app.core.rbac import PAPEIS_GESTAO, PAPEIS_GOVERNANCA_LEITURA, verificar_papel
+from app.core.rbac import PAPEIS_GESTAO, PAPEIS_GOVERNANCA_LEITURA, cpl_ids_visiveis, verificar_papel
 from app.db.session import get_db
 from app.models.cpl import CPL
 from app.models.documento import Documento
@@ -22,6 +26,7 @@ from app.services.geracao_documentos import (
 )
 from app.services.indicadores import (
     catalogo_indicadores,
+    feed_bi_cpls,
     resumo_anual,
     resumo_cadastral,
     resumo_governanca,
@@ -36,6 +41,43 @@ def _get_cpl_or_404(db: Session, cpl_id: uuid.UUID) -> CPL:
     if cpl is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL não encontrada.")
     return cpl
+
+
+# --- Feed de integração com BI (RF-054) --------------------------------------
+
+
+@router.get("/bi-feed")
+def feed_bi(
+    formato: str = "json",
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Response:
+    """RF-054: uma linha por CPL com KPIs cadastrais escalares, em JSON
+    ou CSV — formato aberto, pronto pra ferramenta de BI consumir
+    diretamente (conector de URL/JSON do Power BI, Metabase etc.), sem
+    depender de acesso direto ao banco. Administrador vê todas as CPLs;
+    os demais, só as que já enxergam em qualquer outra tela."""
+
+    if formato not in ("json", "csv"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Formato precisa ser 'json' ou 'csv'.")
+
+    ids_visiveis = cpl_ids_visiveis(db, usuario_atual)
+    linhas = feed_bi_cpls(db, cpl_ids=list(ids_visiveis) if ids_visiveis is not None else None)
+
+    if formato == "json":
+        return Response(content=json.dumps(linhas, ensure_ascii=False), media_type="application/json")
+
+    buffer = io.StringIO()
+    if linhas:
+        writer = csv.DictWriter(buffer, fieldnames=list(linhas[0].keys()))
+        writer.writeheader()
+        writer.writerows(linhas)
+    conteudo = buffer.getvalue().encode("utf-8-sig")
+    return Response(
+        content=conteudo,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="bi_feed_cpls.csv"'},
+    )
 
 
 @router.get("/cpls/{cpl_id}/catalogo", response_model=list[IndicadorEstrategicoRead])

@@ -19,6 +19,7 @@ from app.api.routes import (
     eventos,
     governanca,
     indicadores,
+    inovacao,
     maturidade,
     notificacoes,
     observabilidade as observabilidade_routes,
@@ -46,6 +47,7 @@ from app.web import (
     routes_eventos,
     routes_governanca,
     routes_indicadores,
+    routes_inovacao,
     routes_maturidade,
     routes_notificacoes,
     routes_observabilidade,
@@ -200,6 +202,7 @@ app.include_router(projeto.router, prefix="/api")
 app.include_router(observabilidade_routes.router, prefix="/api")
 app.include_router(eventos.router, prefix="/api")
 app.include_router(biblioteca.router, prefix="/api")
+app.include_router(inovacao.router, prefix="/api")
 for stub_router in stub_routers:
     app.include_router(stub_router, prefix="/api")
 
@@ -218,6 +221,7 @@ app.include_router(routes_projeto.router)
 app.include_router(routes_observabilidade.router)
 app.include_router(routes_eventos.router)
 app.include_router(routes_biblioteca.router)
+app.include_router(routes_inovacao.router)
 app.include_router(routes_atualizacao_publica.router)
 app.include_router(routes_publico.router)
 

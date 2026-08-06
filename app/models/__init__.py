@@ -22,6 +22,7 @@ from app.models.governanca import (
     TarefaGovernanca,
     VotoRegistro,
 )
+from app.models.inovacao import MatchInovacao
 from app.models.maturidade import (
     Avaliacao,
     AvaliacaoCriterio,
@@ -123,4 +124,5 @@ __all__ = [
     "Evento",
     "InscricaoEvento",
     "RecursoBiblioteca",
+    "MatchInovacao",
 ]

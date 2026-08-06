@@ -1,0 +1,118 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Matchmaking — {{ demanda.titulo }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/projetos/demandas/{{ demanda.id }}" class="link-secondary text-decoration-none">{{ demanda.titulo }}</a>
+    <i class="bi bi-chevron-right small mx-1"></i>Matchmaking
+{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1"><i class="bi bi-search-heart text-primary me-2"></i>Matchmaking de inovação</h1>
+    <p class="text-body-secondary">
+        Demanda: <strong>{{ demanda.titulo }}</strong> — busca de competências entre universidades, ICTs,
+        fornecedores e ambientes de inovação (RF-052). A sugestão é sempre de uma pessoa: o sistema só ajuda
+        a filtrar candidatos, nunca decide um match sozinho.
+    </p>
+
+    <div class="card mb-4">
+        <div class="card-header bg-transparent fw-semibold">
+            <i class="bi bi-people text-primary me-2"></i>Matches já sugeridos
+        </div>
+        <div class="list-group list-group-flush">
+            {% for m in matches %}
+                <div class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                        <div>
+                            <span class="fw-semibold">{{ m.entidade.razao_social }}</span>
+                            <span class="badge text-bg-secondary">{{ m.entidade.tipo.value.replace('_', ' ') }}</span>
+                            <span class="badge {% if m.status.value == 'firmado' %}text-bg-success{% elif m.status.value == 'descartado' %}text-bg-danger{% elif m.status.value == 'em_conversa' %}text-bg-info{% else %}text-bg-secondary{% endif %}">
+                                {{ m.status.value.replace('_', ' ') }}
+                            </span>
+                            {% if m.oferta %}<div class="small text-body-secondary">Competência: {{ m.oferta.nome }}</div>{% endif %}
+                            {% if m.observacao %}<div class="small text-body-secondary">{{ m.observacao }}</div>{% endif %}
+                        </div>
+                        {% if pode_gerir %}
+                            <form method="post" action="/painel/inovacao/matches/{{ m.id }}" class="d-flex gap-1">
+                                <select class="form-select form-select-sm" name="status" style="width: auto;">
+                                    {% for s in status_opcoes %}
+                                        <option value="{{ s.value }}" {% if s == m.status %}selected{% endif %}>{{ s.value.replace('_', ' ') }}</option>
+                                    {% endfor %}
+                                </select>
+                                <input type="text" class="form-control form-control-sm" name="observacao" value="{{ m.observacao or '' }}" placeholder="Observação">
+                                <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-save"></i></button>
+                            </form>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                <div class="list-group-item text-body-secondary">Nenhum match sugerido ainda.</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <form method="get" class="row g-2 mb-3 align-items-end">
+        <div class="col-auto">
+            <label class="form-label small mb-1">Buscar por nome ou competência</label>
+            <input type="text" class="form-control form-control-sm" name="termo" value="{{ filtro_termo }}" placeholder="Ex.: automação, ensaios, ...">
+        </div>
+        <div class="col-auto">
+            <label class="form-label small mb-1">Tipo</label>
+            <select class="form-select form-select-sm" name="tipo">
+                <option value="">Todos os tipos de competência</option>
+                {% for t in tipos %}
+                    <option value="{{ t.value }}" {% if filtro_tipo and filtro_tipo.value == t.value %}selected{% endif %}>{{ t.value.replace('_', ' ') }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-search me-1"></i>Buscar
+            </button>
+        </div>
+    </form>
+
+    <div class="card">
+        <div class="card-header bg-transparent fw-semibold">
+            <i class="bi bi-mortarboard text-primary me-2"></i>Candidatos ({{ candidatos|length }})
+        </div>
+        <div class="list-group list-group-flush">
+            {% for c in candidatos %}
+                <div class="list-group-item">
+                    <div class="fw-semibold">
+                        {{ c.razao_social }}
+                        <span class="badge text-bg-secondary">{{ c.tipo.value.replace('_', ' ') }}</span>
+                        {% if c.id in entidades_ja_sugeridas %}<span class="badge text-bg-info">já sugerido</span>{% endif %}
+                    </div>
+                    {% if c.municipio %}<div class="small text-body-secondary">{{ c.municipio }}{% if c.uf %}/{{ c.uf }}{% endif %}</div>{% endif %}
+                    {% set ofertas = ofertas_por_entidade.get(c.id, []) %}
+                    {% if ofertas %}
+                        <div class="small text-body-secondary">Ofertas: {{ ofertas | map(attribute='nome') | join(', ') }}</div>
+                    {% endif %}
+                    {% if pode_gerir and c.id not in entidades_ja_sugeridas %}
+                        <form method="post" action="/painel/inovacao/demandas/{{ demanda.id }}/matches" class="row g-2 mt-1 align-items-end">
+                            <input type="hidden" name="entidade_id" value="{{ c.id }}">
+                            {% if ofertas %}
+                                <div class="col-auto">
+                                    <select class="form-select form-select-sm" name="oferta_id">
+                                        <option value="">Competência não especificada</option>
+                                        {% for o in ofertas %}
+                                            <option value="{{ o.id }}">{{ o.nome }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            {% endif %}
+                            <div class="col-auto flex-grow-1">
+                                <input type="text" class="form-control form-control-sm" name="observacao" placeholder="Observação (opcional)">
+                            </div>
+                            <div class="col-auto">
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    <i class="bi bi-plus-lg me-1"></i>Sugerir match
+                                </button>
+                            </div>
+                        </form>
+                    {% endif %}
+                </div>
+            {% else %}
+                <div class="list-group-item text-body-secondary">Nenhum candidato encontrado com esse filtro.</div>
+            {% endfor %}
+        </div>
+    </div>
+{% endblock %}

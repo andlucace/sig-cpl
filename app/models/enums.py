@@ -363,3 +363,13 @@ class TipoRecursoBiblioteca(str, enum.Enum):
     EDITAL = "edital"
     OPORTUNIDADE = "oportunidade"
     CONTEUDO_TECNICO = "conteudo_tecnico"
+
+
+class StatusMatchInovacao(str, enum.Enum):
+    """RF-052: ciclo de vida da curadoria humana de um pareamento entre
+    demanda e competência — nunca decidido só por algoritmo (RN-016)."""
+
+    SUGERIDO = "sugerido"
+    EM_CONVERSA = "em_conversa"
+    FIRMADO = "firmado"
+    DESCARTADO = "descartado"

@@ -136,6 +136,9 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
       sempre (dois enums novos — `tipoevento`/`statusevento` e
       `tiporecursobiblioteca` — nenhum reaproveitado; tabelas novas sem
       coluna `NOT NULL` retroativa)
+  27. `bc65b64e9955` — tabela `matches_inovacao` (RF-052) — sem gotcha
+      nenhum dos dois de sempre (enum `statusmatchinovacao` criado pela
+      primeira vez, tabela nova sem coluna `NOT NULL` retroativa)
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos;
     mesma coisa para RF-041/045/053/017, feitas depois da nº 20)
@@ -1651,6 +1654,86 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     criação — dois elementos com o mesmo `name` na mesma página, mesma
     classe de cuidado do item "armadilhas" sobre reaproveitar seletor
     sem checar ambiguidade, mas aqui do lado do teste, não do app.
+39. **RF-052: matchmaking de inovação** e **RF-054: integrações
+    externas** — usuário pediu "elaborar a RF-052 e a RF-054"; perguntei
+    se "elaborar" queria dizer implementar em código ou escrever uma
+    proposta de design primeiro (palavra diferente de "implementar",
+    usada em todo pedido anterior da sessão) — resposta foi implementar
+    em código, mesmo padrão de sempre.
+    - **RF-052 (matchmaking)**: `MatchInovacao`
+      (`app/models/inovacao.py`) fecha o meio do fluxo F09 (demanda
+      empresarial → busca de competência → matchmaking → projeto de
+      P&D → instrumento jurídico → acompanhamento) reaproveitando
+      `DemandaProjeto` (RF-031, `origem_tipo=empresa` já é "demanda das
+      empresas") em vez de criar uma "demanda de inovação" paralela, e
+      `OfertaEntidade` (RF-010) pra "competência" — o documento de
+      requisitos já não distingue os dois conceitos (seção 10, modelo
+      conceitual). A ponta final do fluxo (matchmaking → projeto) não
+      precisou de nada novo — `POST /api/projetos/demandas/{id}/converter`
+      já existia desde RF-031/032. `buscar_competencias()`
+      (`app/services/inovacao.py`) só filtra candidatos por tipo (mapeei
+      "fornecedor"→`PRESTADOR`, "ambiente SPAI"→`AMBIENTE_INOVACAO`;
+      "startup" não tem tipo próprio, vira `EMPRESA`) e texto (nome da
+      entidade ou de alguma oferta) — quem sugere e decide o status
+      (`sugerido`/`em_conversa`/`firmado`/`descartado`) é sempre uma
+      pessoa (RN-016). Ao revisar como `MembroOrgao` já inscreve pessoa
+      em órgão de governança, notei que o sistema **não** valida que a
+      pessoa escolhida já tenha vínculo com a CPL (dropdown lista
+      todas) — alinhei a validação de `MatchInovacao` ao mesmo
+      comportamento em vez de inventar uma regra mais rígida que não
+      existe em nenhum outro lugar do sistema. UI web em
+      `/painel/inovacao/demandas/{id}`, acessível por um botão na tela
+      da demanda (só aparece pra origem empresa, ainda não convertida/
+      rejeitada).
+    - **RF-054 (integrações)**: dependência de contrato com terceiro é
+      real pra 2 das 4 integrações citadas (assinatura eletrônica,
+      "sistemas institucionais" — nenhum nomeado no documento) — não
+      dá pra implementar essas sem escolher um provedor específico,
+      decisão de negócio, não técnica. As outras 2 são "tecnicamente
+      disponíveis" sem contrato, então foram implementadas de verdade:
+      **dados cadastrais públicos** — consulta de CNPJ via BrasilAPI
+      (pública/gratuita), `app/services/integracao_publica.py`, usando
+      `urllib.request` da biblioteca padrão em vez de adicionar
+      `httpx`/`requests` como dependência nova só pra uma chamada (as
+      rotas que chamam são síncronas, então já rodam em threadpool,
+      mesmo padrão de toda chamada bloqueante existente — psycopg,
+      SMTP). Tela de conferência em
+      `/painel/cadastro/entidades/{id}` (botão "Conferir dados
+      públicos") com tabela cadastrado-vs-oficial e botão "usar dados
+      da base pública" que reconsulta (nunca confia em valor de
+      formulário) e aplica só os campos com correspondência direta no
+      cadastro (`Entidade` não tem telefone/e-mail — ficam só na
+      conferência). **BI** — `feed_bi_cpls()`
+      (`app/services/indicadores.py`) achata `resumo_cadastral()` pra
+      uma linha por CPL sem dict/Counter aninhado (a maioria dos
+      conectores de BI não entende bem estrutura aninhada), exposta em
+      `GET /api/indicadores/bi-feed?formato=json|csv`.
+    - **Bug pego e corrigido durante o desenvolvimento**: a primeira
+      chamada real pra BrasilAPI via `urllib.request` devolveu 403
+      Forbidden, mesmo a mesma URL funcionando via `curl` direto no
+      terminal — confirmado isolando a chamada fora da aplicação. Causa:
+      a BrasilAPI bloqueia o User-Agent padrão do `urllib` (proteção
+      anti-bot genérica, não falta de autorização de verdade — o CNPJ
+      de teste é público). Corrigido enviando um `User-Agent`
+      identificável (`SIG-CPL/1.0 (...)`) na requisição. **Regra**: ao
+      integrar com uma API pública de terceiro pela primeira vez, testar
+      a chamada real (não só ler a documentação) antes de assumir que
+      "pública e sem credencial" significa "sem nenhuma configuração de
+      requisição necessária" — bloqueio por User-Agent é comum o
+      suficiente pra não presumir que não vai acontecer.
+    Migração `bc65b64e9955` — sem gotcha nenhum dos dois de sempre (enum
+    novo, tabela nova sem coluna `NOT NULL` retroativa; RF-054 não
+    precisou de migração, só reaproveitou campos já existentes de
+    `Entidade`). Testado via curl (busca de competência por tipo/texto,
+    sugerir match, rejeitar match duplicado, atualizar status até
+    firmado; consulta de CNPJ público com CNPJ de teste real, aplicar
+    dados públicos no cadastro, feed de BI em JSON e CSV, formato
+    inválido rejeitado) e Playwright (`rf052_054_shot.js` — matchmaking
+    via UI a partir da tela da demanda, busca com filtro de texto,
+    conferência de dados públicos numa entidade) mais rerun de
+    `maturidade_shot.js`/`maturidade_shot2.js`/`rbac_403_shot.js`/
+    `documentos_shot.js`/`rf043_rnf012_shot.js`/`rf050_051_shot.js`, sem
+    erros de console nem 500 reais no log.
 
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
@@ -1953,6 +2036,21 @@ só porque é um módulo novo).
     com um `@app.exception_handler(Exception)` à parte — a exceção nunca
     escapa do middleware, então nada sobra pra o `ServerErrorMiddleware`
     logar de novo.
+18. **API pública de terceiro pode bloquear o User-Agent padrão do
+    `urllib`, mesmo sem exigir credencial nenhuma** (RF-054, item 39).
+    A primeira chamada real pra BrasilAPI devolveu 403 Forbidden via
+    `urllib.request` puro, enquanto a mesma URL funcionava normalmente
+    via `curl` no terminal — não é bloqueio por falta de autorização (o
+    CNPJ testado é público, sem chave de acesso nenhuma), é proteção
+    anti-bot genérica reagindo ao User-Agent padrão que o `urllib`
+    manda (`Python-urllib/x.x`). Corrigido passando um `User-Agent`
+    identificável explícito na requisição. **Regra**: ao integrar com
+    uma API pública de terceiro pela primeira vez, testar a chamada
+    real antes de assumir que "pública e sem credencial" quer dizer
+    "sem nenhuma configuração de requisição necessária" — teste isolado
+    fora da aplicação (como fiz aqui) é a forma mais rápida de separar
+    "bug no meu código" de "a API exige algo que a documentação não
+    deixou óbvio".
 
 ## O que falta (priorizado)
 
@@ -2125,6 +2223,24 @@ ordem recomendada para o que vem depois:
     (georreferenciamento), RF-052 (matchmaking), RF-054 (integrações
     externas), RF-055 (portal público expandido) e RF-057 (IA
     assistiva, fora do MVP por definição).
+19. ~~RF-052: matchmaking de inovação~~ e ~~RF-054: integrações
+    externas~~ — **feito**: ver item 39 da seção "Ordem em que este
+    projeto foi construído". `MatchInovacao` reaproveita
+    `DemandaProjeto`/`OfertaEntidade` já existentes pra fechar o meio do
+    fluxo F09; a conversão demanda→projeto já existia. RF-054 ficou
+    deliberadamente parcial: consulta pública de CNPJ (BrasilAPI) e
+    feed de BI implementados de verdade; assinatura eletrônica e
+    "sistemas institucionais" dependem de escolher um provedor
+    específico (decisão de negócio, não técnica) — ver item 18 de
+    "Armadilhas já resolvidas" pro gotcha de User-Agent bloqueado pego
+    nesta fatia. **Pendência real, não de código**: nenhuma nova — SMTP
+    em produção (item 14) segue sendo a única pendência de configuração
+    aberta, mais a escolha de provedor de assinatura
+    eletrônica/sistemas institucionais citada acima (decisão externa,
+    não uma tarefa de código pendente). Do documento de requisitos,
+    seguem ❌ pendentes: RF-011 (georreferenciamento), RF-055 (portal
+    público expandido) e RF-057 (IA assistiva, fora do MVP por
+    definição) — os três restantes depois desta fatia.
 
 ## Deploy em produção
 

@@ -18,6 +18,7 @@ from app.schemas.entidade import (
     OfertaEntidadeCreate,
     OfertaEntidadeRead,
 )
+from app.services.integracao_publica import ConsultaCNPJIndisponivel, consultar_cnpj_publico
 from app.services.validadores import cnpj_valido, cpf_valido, normalizar_cnpj, normalizar_cpf, uf_valida
 
 router = APIRouter(prefix="/entidades", tags=["Cadastro e cadeia"])
@@ -122,6 +123,57 @@ def obter_entidade(
 ) -> Entidade:
     verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_LEITURA)
     return _get_entidade_visivel_or_404(db, usuario_atual, entidade_id)
+
+
+# --- Dados cadastrais públicos (RF-054) --------------------------------------
+
+
+@router.get("/{entidade_id}/cnpj-publico")
+def consultar_dados_publicos(
+    entidade_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> dict:
+    """RF-054: consulta os dados oficiais do CNPJ na base pública
+    (BrasilAPI) — só leitura, nunca aplica na entidade sozinha (ver
+    `PATCH .../cnpj-publico/aplicar`)."""
+
+    verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_LEITURA)
+    entidade = _get_entidade_visivel_or_404(db, usuario_atual, entidade_id)
+    if not entidade.cnpj:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Esta entidade não tem CNPJ cadastrado.")
+    try:
+        return consultar_cnpj_publico(entidade.cnpj)
+    except (ValueError, ConsultaCNPJIndisponivel) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+@router.patch("/{entidade_id}/cnpj-publico/aplicar", response_model=EntidadeRead)
+def aplicar_dados_publicos(
+    entidade_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Entidade:
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO)
+    entidade = _get_entidade_visivel_or_404(db, usuario_atual, entidade_id)
+    if not entidade.cnpj:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Esta entidade não tem CNPJ cadastrado.")
+    try:
+        dados = consultar_cnpj_publico(entidade.cnpj)
+    except (ValueError, ConsultaCNPJIndisponivel) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    if dados["razao_social"]:
+        entidade.razao_social = dados["razao_social"]
+    entidade.nome_fantasia = dados["nome_fantasia"]
+    entidade.situacao_cadastral = dados["situacao_cadastral"]
+    entidade.cnae = dados["cnae"]
+    entidade.endereco = dados["endereco"]
+    entidade.municipio = dados["municipio"]
+    entidade.uf = dados["uf"]
+    db.commit()
+    db.refresh(entidade)
+    return entidade
 
 
 # --- Canais digitais e ofertas (RF-010) --------------------------------------

@@ -15,7 +15,6 @@ from app.models.entidade import Entidade, EntidadeCPL, OfertaEntidade
 from app.models.enums import StatusLoteImportacao, TipoOferta
 from app.models.usuario import Usuario
 from app.services.armazenamento import caminho_absoluto
-from app.services.indicadores import diagnostico_desatualizado
 from app.services.importacao_entidades import (
     CAMPOS_CONHECIDOS,
     confirmar_importacao,
@@ -26,6 +25,8 @@ from app.services.importacao_entidades import (
     mapear_colunas,
     preparar_importacao,
 )
+from app.services.indicadores import diagnostico_desatualizado
+from app.services.integracao_publica import ConsultaCNPJIndisponivel, consultar_cnpj_publico
 from app.web.templates import templates
 
 _MEDIA_TYPES_EXPORTACAO = {
@@ -373,6 +374,7 @@ def _entidade_visivel_ou_none(db: Session, usuario: Usuario, entidade_id: uuid.U
 def detalhe_entidade(
     request: Request,
     entidade_id: uuid.UUID,
+    consultar_publico: bool = False,
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user_optional),
 ):
@@ -392,6 +394,18 @@ def detalhe_entidade(
         .order_by(OfertaEntidade.tipo, OfertaEntidade.nome)
         .all()
     )
+
+    dados_publicos = None
+    erro_consulta_publica = None
+    if consultar_publico:
+        if not entidade.cnpj:
+            erro_consulta_publica = "Esta entidade não tem CNPJ cadastrado."
+        else:
+            try:
+                dados_publicos = consultar_cnpj_publico(entidade.cnpj)
+            except (ValueError, ConsultaCNPJIndisponivel) as exc:
+                erro_consulta_publica = str(exc)
+
     return templates.TemplateResponse(
         request,
         "restrito/cadastro/entidade_detail.html",
@@ -401,10 +415,49 @@ def detalhe_entidade(
             "diagnostico_desatualizado": diagnostico_desatualizado(diagnostico) if diagnostico else False,
             "ofertas": ofertas,
             "tipos_oferta": list(TipoOferta),
+            "dados_publicos": dados_publicos,
+            "erro_consulta_publica": erro_consulta_publica,
             "usuario": usuario,
             "pagina_ativa": "cadastro",
         },
     )
+
+
+@router.post("/entidades/{entidade_id}/dados-publicos/aplicar")
+def aplicar_dados_publicos(
+    entidade_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-054: reconsulta (não confia em valor vindo do formulário) e
+    aplica os dados oficiais do CNPJ na entidade — só os campos que têm
+    lugar próprio no cadastro (`Entidade` não guarda telefone/e-mail de
+    contato, esses ficam só na tela de conferência)."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    verificar_papel(db, usuario, PAPEIS_GESTAO)
+    entidade = _entidade_visivel_ou_none(db, usuario, entidade_id)
+    if entidade is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entidade não encontrada.")
+    if not entidade.cnpj:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Esta entidade não tem CNPJ cadastrado.")
+
+    try:
+        dados = consultar_cnpj_publico(entidade.cnpj)
+    except (ValueError, ConsultaCNPJIndisponivel) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    if dados["razao_social"]:
+        entidade.razao_social = dados["razao_social"]
+    entidade.nome_fantasia = dados["nome_fantasia"]
+    entidade.situacao_cadastral = dados["situacao_cadastral"]
+    entidade.cnae = dados["cnae"]
+    entidade.endereco = dados["endereco"]
+    entidade.municipio = dados["municipio"]
+    entidade.uf = dados["uf"]
+    db.commit()
+    return RedirectResponse(f"/painel/cadastro/entidades/{entidade_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/entidades/{entidade_id}/canais-digitais")

@@ -1458,6 +1458,79 @@ sempre preso a um `cpl_id`), por isso não reaproveita esse modelo:
   numa página só. `POST/GET /api/biblioteca`,
   `GET /api/biblioteca/{id}/arquivo`.
 
+## Matchmaking de inovação (RF-052)
+
+Fecha o meio do fluxo F09 do modelo conceitual (demanda empresarial →
+busca de competência → matchmaking → projeto de P&D → instrumento
+jurídico → acompanhamento) — as duas pontas já existiam antes desta
+fatia:
+
+- `MatchInovacao` (`app/models/inovacao.py`) — reaproveita `DemandaProjeto`
+  (RF-031) em vez de criar uma "demanda de inovação" paralela:
+  `origem_tipo=empresa` já é exatamente "demanda das empresas" citada
+  pelo requisito. "Competência" reaproveita `OfertaEntidade` (RF-010) —
+  o documento de requisitos já não distingue os dois conceitos (ver
+  seção "Modelo conceitual"). Um match cita a `Entidade` candidata
+  (universidade, ICT, prestador/fornecedor, ambiente de inovação) e,
+  opcionalmente, qual oferta dela motivou a sugestão.
+- **Curadoria humana, não algoritmo** (RN-016: priorização não pode ser
+  só algorítmica) — `buscar_competencias()`
+  (`app/services/inovacao.py`) só filtra candidatos por tipo/texto
+  (nome da entidade ou de alguma oferta dela); quem sugere um match e
+  decide seu status (`sugerido` → `em_conversa` → `firmado`/`descartado`)
+  é sempre uma pessoa.
+- Uma vez `firmado`, formalizar em projeto usa o fluxo que já existia
+  — `POST /api/projetos/demandas/{id}/converter` (RF-031/032) — sem
+  nenhuma peça nova para essa etapa.
+- UI web em `/painel/inovacao/demandas/{id}` (busca + sugestão + lista
+  de matches com atualização de status), acessível a partir de um
+  botão na tela da demanda (`/painel/projetos/demandas/{id}`, só
+  aparece para demandas de origem empresa ainda não convertidas/
+  rejeitadas). `POST/GET /api/inovacao/demandas/{id}/matches`,
+  `GET /api/inovacao/competencias`, `PATCH /api/inovacao/matches/{id}`.
+
+## Integrações externas (RF-054)
+
+O requisito cita quatro integrações "quando autorizado e tecnicamente
+disponível" — duas foram implementadas de verdade porque são
+tecnicamente disponíveis sem depender de contrato com terceiro; as
+outras duas dependem de escolher e contratar um provedor específico,
+decisão de negócio que só o programa pode tomar (mesma natureza da
+pendência de SMTP em produção, RF-004):
+
+- **Dados cadastrais públicos** — `app/services/integracao_publica.py::consultar_cnpj_publico`,
+  consulta de CNPJ via [BrasilAPI](https://brasilapi.com.br) (pública,
+  gratuita, sem credencial). Usa `urllib.request` da biblioteca padrão
+  em vez de adicionar `httpx`/`requests` só pra uma chamada — as rotas
+  que chamam são síncronas (`def`), então o FastAPI já roda numa
+  threadpool, mesmo padrão de toda chamada bloqueante já existente no
+  projeto (psycopg, SMTP). **Gotcha**: a BrasilAPI devolve 403 pro
+  User-Agent padrão do `urllib` (bloqueio anti-bot genérico, não falta
+  de autorização de verdade) — corrigido enviando um `User-Agent`
+  identificável. Botão "Conferir dados públicos" na tela de detalhe da
+  entidade (`/painel/cadastro/entidades/{id}`) mostra uma tabela
+  comparando o cadastrado com o oficial (inclusive telefone/e-mail, só
+  pra consulta — `Entidade` não tem esses campos) e um botão "usar
+  dados da base pública" que reconsulta (nunca confia em valor vindo do
+  formulário) e aplica os campos com correspondência direta no
+  cadastro. `GET /api/entidades/{id}/cnpj-publico`,
+  `PATCH /api/entidades/{id}/cnpj-publico/aplicar`.
+- **BI** — `feed_bi_cpls()` (`app/services/indicadores.py`) achata
+  `resumo_cadastral()` pra uma linha por CPL com KPIs escalares (sem
+  dict/Counter aninhado, que conector de BI não entende bem), pronta
+  pra consumo direto por qualquer ferramenta com conector de URL/JSON
+  (Power BI, Metabase etc.) — formato aberto (RNF-010), sem precisar de
+  acesso direto ao banco. `GET /api/indicadores/bi-feed?formato=json|csv`,
+  admin vê todas as CPLs, os demais só as que já enxergam em qualquer
+  outra tela.
+- **Assinatura eletrônica** e **sistemas institucionais** seguem
+  pendentes — não há provedor público/gratuito equivalente ao da
+  BrasilAPI para essas duas, então integrá-las de verdade exigiria
+  escolher e contratar um serviço específico (ex.: gov.br assinatura,
+  Clicksign, DocuSign, para a primeira; sistema institucional nenhum é
+  nomeado no documento de requisitos, para a segunda) antes de
+  qualquer código fazer sentido — ver "O que falta" no HANDOFF.md.
+
 ## Observabilidade (RNF-012)
 
 Sem infraestrutura externa nova (Prometheus/Grafana/Sentry) — falhas
@@ -1652,3 +1725,17 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
     (integrações externas), RF-055 (portal público expandido) e RF-057
     (assistência de IA, declaradamente fora do MVP) — ver
     `docs/requisitos_macros.md` para o levantamento completo.
+18. ~~RF-052: matchmaking de inovação~~ e ~~RF-054: integrações
+    externas~~ — **feitos**: ver seções "Matchmaking de inovação
+    (RF-052)" e "Integrações externas (RF-054)" acima.
+    `MatchInovacao` fecha o meio do fluxo F09 reaproveitando
+    `DemandaProjeto`/`OfertaEntidade` já existentes, sem entidade
+    "demanda de inovação" paralela. RF-054 ficou parcial por design:
+    consulta pública de CNPJ (BrasilAPI) e feed de BI foram
+    implementados de verdade (não dependem de contrato); assinatura
+    eletrônica e "sistemas institucionais" seguem pendentes até o
+    programa escolher um provedor específico — não é algo que dê pra
+    implementar sem essa decisão de negócio. Restam no documento de
+    requisitos, ainda não iniciados: RF-011 (georreferenciamento),
+    RF-055 (portal público expandido) e RF-057 (assistência de IA,
+    declaradamente fora do MVP).

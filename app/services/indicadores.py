@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.cadastro_dinamico import DiagnosticoCadastral, DiagnosticoCadastralHistorico
+from app.models.cpl import CPL
 from app.models.documento import Documento
 from app.models.entidade import EntidadeCPL
 from app.models.enums import ResultadoDeliberacao, StatusReuniao, StatusTarefa
@@ -405,3 +406,37 @@ def resumo_anual(db: Session, cpl_id: uuid.UUID, ano: int) -> dict:
             db, entidade_ids, inicio_dt, fim_dt
         ),
     }
+
+
+def feed_bi_cpls(db: Session, cpl_ids: list[uuid.UUID] | None = None) -> list[dict]:
+    """RF-054: uma linha por CPL com KPIs cadastrais escalares, pronta
+    pra consumo direto por ferramenta de BI (conectores de URL/JSON do
+    Power BI, Metabase etc.) — não introduz agregação nova, só achata
+    `resumo_cadastral()` pra um formato tabular (sem dict/Counter
+    aninhado, que a maioria dos conectores de BI não entende bem)."""
+
+    query = db.query(CPL).filter(CPL.ativo.is_(True))
+    if cpl_ids is not None:
+        query = query.filter(CPL.id.in_(cpl_ids))
+
+    linhas = []
+    for cpl in query.order_by(CPL.nome).all():
+        resumo = resumo_cadastral(db, cpl.id)
+        linhas.append(
+            {
+                "cpl_id": str(cpl.id),
+                "cpl_nome": cpl.nome,
+                "cpl_sigla": cpl.sigla,
+                "cpl_setor": cpl.setor,
+                "cpl_municipio": cpl.municipio,
+                "cpl_uf": cpl.uf,
+                "cpl_nivel_maturidade": cpl.nivel_maturidade.value if cpl.nivel_maturidade else None,
+                "total_empresas": resumo["total_empresas"],
+                "total_com_diagnostico": resumo["total_com_diagnostico"],
+                "total_diagnosticos_desatualizados": resumo["total_diagnosticos_desatualizados"],
+                "soma_empregos_diretos": resumo["soma_empregos_diretos"],
+                "soma_empregos_indiretos": resumo["soma_empregos_indiretos"],
+                "novos_empregos_diretos_12_meses": resumo["novos_empregos_diretos_12_meses"],
+            }
+        )
+    return linhas
