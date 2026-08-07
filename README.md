@@ -1093,10 +1093,11 @@ específica tipo Resend).
     `SMTP_USE_TLS` (`app/core/config.py`). `SMTP_HOST` ausente faz
     `enviar_email` levantar `RuntimeError` (500 na rota) em vez de
     falhar silenciosamente — sinal claro de "e-mail não configurado
-    ainda" em vez de fingir que enviou. **Pendência de deploy**: as
-    variáveis `SMTP_*` precisam ser preenchidas em produção
-    (`.env.prod`) com credenciais reais antes desta funcionalidade
-    funcionar de verdade lá — ver "Deploy em produção" abaixo.
+    ainda" em vez de fingir que enviou. **Configurado em produção**:
+    `SMTP_*` aponta pro Titan Mail do Hostinger (`smtp.hostinger.com`,
+    porta 587, STARTTLS) usando a caixa `no-reply@dedev.cloud`,
+    confirmado com um `POST /api/auth/esqueci-senha` real (200, sem
+    traceback no log) — ver "Deploy em produção" abaixo.
   - `app_base_url` (`app/core/config.py`) monta o link absoluto do
     e-mail (`{app_base_url}/redefinir-senha/{token}`) — diferente do
     resto do app, que só usa caminhos relativos (suficiente dentro do
@@ -1319,15 +1320,18 @@ VPS Hostinger:
   `SESSION_COOKIE_SECURE=true` e `ENVIRONMENT=production` (diferente do
   `.env` de dev). Vivem só em `/opt/sigcpl/.env.prod` na VPS — não estão
   neste repositório nem em nenhum arquivo local.
-- **`SMTP_*` (RF-004, recuperação de senha)**: `SMTP_HOST`/`SMTP_PORT`/
-  `SMTP_USER`/`SMTP_PASSWORD`/`SMTP_FROM`/`SMTP_USE_TLS` — ausentes em
-  `.env.prod` até alguém preencher credenciais de um provedor SMTP real;
-  até lá, `/esqueci-senha` responde 500 em produção (`enviar_email`
-  levanta `RuntimeError` de propósito em vez de fingir que enviou).
-  `APP_BASE_URL=https://sigcpl.dedev.cloud` também precisa estar
-  definido (usado para montar o link absoluto do e-mail) — sem ele, o
-  padrão de dev (`http://127.0.0.1:8000`) vazaria pro e-mail em
-  produção.
+- **`SMTP_*` (RF-004, recuperação de senha)** — **configurado**:
+  `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD`/`SMTP_FROM`/
+  `SMTP_USE_TLS` em `.env.prod` apontam pro Titan Mail do Hostinger
+  (`smtp.hostinger.com:587`, STARTTLS, caixa `no-reply@dedev.cloud` —
+  domínio já tinha MX/DKIM do Hostinger configurados via DNS, conferido
+  antes de escrever a config). `APP_BASE_URL=https://sigcpl.dedev.cloud`
+  também definido (usado para montar o link absoluto do e-mail — sem
+  ele, o padrão de dev `http://127.0.0.1:8000` vazaria pro e-mail em
+  produção). Confirmado com um `POST /api/auth/esqueci-senha` real
+  contra produção (200, ~2,5s de duração — tempo compatível com uma
+  conexão SMTP de verdade acontecendo, não com uma falha rápida de
+  autenticação) e log do container sem traceback.
 - **`ANTHROPIC_API_KEY` (RF-057, assistente de IA)**: ausente em
   `.env.prod` até alguém preencher uma chave real da Anthropic; até lá,
   o botão "Assistente de IA" do dashboard de indicadores fica
@@ -1504,8 +1508,8 @@ O requisito cita quatro integrações "quando autorizado e tecnicamente
 disponível" — duas foram implementadas de verdade porque são
 tecnicamente disponíveis sem depender de contrato com terceiro; as
 outras duas dependem de escolher e contratar um provedor específico,
-decisão de negócio que só o programa pode tomar (mesma natureza da
-pendência de SMTP em produção, RF-004):
+decisão de negócio que só o programa pode tomar (mesma natureza que a
+pendência de SMTP em produção tinha antes de ser resolvida, RF-004):
 
 - **Dados cadastrais públicos** — `app/services/integracao_publica.py::consultar_cnpj_publico`,
   consulta de CNPJ via [BrasilAPI](https://brasilapi.com.br) (pública,
@@ -1913,10 +1917,10 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
     "Autenticação: recuperação de senha e MFA" acima. Recuperação por
     e-mail via SMTP genérico (`TokenRecuperacaoSenha`, token de uso
     único) e MFA por TOTP (`pyotp`/`qrcode`, ativação em 2 passos, 8
-    códigos de backup, login web em 2 etapas). **Pendência de deploy**:
-    variáveis `SMTP_*` ainda precisam de credenciais reais em produção
-    para o envio de e-mail funcionar de fato lá (a funcionalidade em si
-    está completa e testada localmente contra um SMTP de teste).
+    códigos de backup, login web em 2 etapas). Na época deste item,
+    `SMTP_*` ainda não tinha credenciais reais em produção — **resolvido
+    depois**: `.env.prod` configurado com o Titan Mail do Hostinger
+    (`no-reply@dedev.cloud`), ver "Deploy em produção" abaixo.
 13. ~~RF-010: produtos, serviços, tecnologias, canais digitais e
     capacidade produtiva~~ — **feito**: ver seção "Modelos implementados
     nesta fase" acima. `OfertaEntidade` (tabela nova, repetível),

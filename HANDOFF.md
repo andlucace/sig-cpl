@@ -2007,6 +2007,48 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     inclusive o teste de dedup de entidade por CNPJ entre CPLs
     diferentes) — suíte completa em 66 (55 + 11), ruff limpo.
 
+44. **Configuração de SMTP em produção (RF-004)** — usuário pediu ajuda
+    pra configurar o servidor de e-mail, usando o e-mail do próprio
+    plano Hostinger. A API da Hostinger **não tem endpoint nenhum pra
+    caixa de e-mail** (sem listar, criar ou resetar senha via API) — só
+    dá pra confirmar infraestrutura via DNS. Consultei
+    `DNS_getDNSRecordsV1` pro domínio `dedev.cloud` e confirmei que o
+    Titan Mail do Hostinger já estava ativo (MX `mx1`/`mx2.hostinger.com`,
+    DKIM `hostingermail-*`, `autoconfig`/`autodiscover.mail.hostinger.com`)
+    — isso validou os parâmetros de SMTP padrão do Hostinger
+    (`smtp.hostinger.com`) antes de qualquer coisa ser escrita. Perguntei
+    ao usuário (via `AskUserQuestion`) qual endereço usar e como preferia
+    passar a senha — escolheu `no-reply@dedev.cloud` e "prefiro editar o
+    `.env.prod` eu mesmo"; ele criou a caixa no hPanel e, na mensagem
+    seguinte, colou a senha direto no chat (mudando de ideia sobre quem
+    editaria o arquivo) — segui a partir daí.
+    - Confirmei via `grep` (só nomes de chave, nunca valor) que nenhuma
+      variável `SMTP_*`/`APP_BASE_URL` existia ainda em `.env.prod`.
+    - Adicionei as duas de uma vez via `cat <<'EOF' | ssh ... "cat >>
+      .env.prod"` — heredoc com delimitador entre aspas simples (evita
+      expansão local) + `cat >>` remoto (escreve os bytes crus, sem o
+      shell remoto interpretar nada como comando). `SMTP_PASSWORD` e
+      `SMTP_FROM` entre aspas simples no arquivo — necessário porque
+      `deploy.sh` faz `. ./.env.prod` (fonte como shell script de
+      verdade, não parse tipo dotenv), e `SMTP_FROM` tem `<`/`>`
+      (metacaracteres de redirecionamento em shell) e a senha tem `!`.
+      Nunca imprimi a senha em nenhuma saída de comando.
+    - Redeploy via `./deploy.sh` (recria o container, único jeito de
+      pegar variável de ambiente nova — só editar o arquivo não basta).
+      Verificação: `docker exec sigcpl_backend env | grep SMTP_HOST` etc.
+      (valores não sensíveis) + `grep -c '^SMTP_PASSWORD='` (só confirma
+      presença, sem imprimir o valor) — container com poucos segundos de
+      uptime, confirmando que era a instância nova.
+    - **Teste real, não só configuração**: `POST
+      /api/auth/esqueci-senha` direto contra produção pro
+      `admin@sigcpl.dedev.cloud` — 200 em ~2,5s (tempo compatível com
+      uma conexão SMTP de verdade completando, não com uma falha rápida
+      de autenticação) e log do container sem traceback. A rota não tem
+      `try/except` em volta de `enviar_email` — se a senha estivesse
+      errada, teria propagado como 500, não 200. Essa ausência de
+      try/except foi o que tornou o teste conclusivo sem precisar
+      inspecionar a caixa de e-mail de destino.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for
@@ -2579,6 +2621,16 @@ ordem recomendada para o que vem depois:
     (retenção) — nenhum é um requisito funcional numerado, todos são
     trabalho transversal de maturidade organizacional, não uma feature
     isolada de implementar.
+24. ~~SMTP em produção (RF-004)~~ — **feito**: ver item 44 da seção
+    "Ordem em que este projeto foi construído". `.env.prod` configurado
+    com o Titan Mail do Hostinger (`smtp.hostinger.com:587`, STARTTLS,
+    caixa `no-reply@dedev.cloud`) + `APP_BASE_URL`; confirmado com um
+    `POST /api/auth/esqueci-senha` real contra produção (200, sem
+    traceback). Essa era a única pendência de configuração citada desde
+    o item 14 — daqui pra frente, "pendência de SMTP" nos itens
+    anteriores desta lista é histórico, não estado atual. **Pendência
+    real, não de código, que ainda resta**: só `ANTHROPIC_API_KEY`
+    (RF-057, item 22).
 
 ## Deploy em produção
 
