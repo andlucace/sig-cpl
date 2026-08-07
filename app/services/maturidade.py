@@ -13,7 +13,6 @@ from app.models.enums import NivelMaturidade, StatusAvaliacao
 from app.models.maturidade import (
     Avaliacao,
     AvaliacaoCriterio,
-    CriterioMaturidade,
     Edital,
     ItemHabilitacaoJuridica,
     RequisitoHabilitacaoEdital,

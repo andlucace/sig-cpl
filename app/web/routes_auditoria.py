@@ -71,7 +71,7 @@ def listar_registros(
     except HTTPException:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "Trilha de auditoria restrita à gestão e à auditoria/controle."
-        )
+        ) from None
 
     # RF-056: os <select> do formulário de filtro sempre enviam os dois
     # campos, mesmo quando o usuário só mexeu em um deles — a opção
@@ -136,7 +136,7 @@ def listar_registros_globais(
     except HTTPException:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "Visão global da auditoria restrita ao administrador da plataforma."
-        )
+        ) from None
 
     acao_filtro = AcaoAuditoria(acao) if acao else None
     pagina = max(pagina, 1)

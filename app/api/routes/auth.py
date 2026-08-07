@@ -9,11 +9,11 @@ from app.models.enums import AcaoAuditoria
 from app.models.usuario import Usuario
 from app.schemas.usuario import (
     EsqueciSenhaCreate,
+    MensagemRead,
     MFAConfirmarCreate,
     MFAConfirmarRead,
     MFADesativarCreate,
     MFAIniciarRead,
-    MensagemRead,
     RedefinirSenhaCreate,
     Token,
     UsuarioCreate,

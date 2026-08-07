@@ -3,7 +3,8 @@ import decimal
 import enum
 import uuid
 
-from sqlalchemy import event, insert, inspect as sa_inspect
+from sqlalchemy import event, insert
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
 from app.core.audit_context import ip_atual, usuario_atual_id

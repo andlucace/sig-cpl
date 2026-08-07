@@ -51,7 +51,7 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   `http://127.0.0.1:8010`** — confira com `netstat -ano | grep 8010` antes
   de subir outro, e mate o processo antigo antes de reiniciar (o servidor
   não usa `--reload`, então mudanças de código exigem restart manual).
-- **Migrações Alembic aplicadas:** 23 revisões, todas no banco atual:
+- **Migrações Alembic aplicadas:** 28 revisões, todas no banco atual:
   1. `18541dca0a36` — modelos base (CPL, Entidade, Pessoa, Usuário)
   2. `0ba4d1a10f9d` — módulo Governança
   3. `5dd913b79202` — módulo Planejamento Estratégico
@@ -139,6 +139,9 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   27. `bc65b64e9955` — tabela `matches_inovacao` (RF-052) — sem gotcha
       nenhum dos dois de sempre (enum `statusmatchinovacao` criado pela
       primeira vez, tabela nova sem coluna `NOT NULL` retroativa)
+  28. `970f9469baaa` — colunas `entidades.latitude`/`longitude` (RF-011) —
+      sem gotcha nenhum dos dois de sempre (colunas `Float` nulas, nenhum
+      enum envolvido)
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos;
     mesma coisa para RF-041/045/053/017, feitas depois da nº 20)
@@ -1735,6 +1738,74 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     `documentos_shot.js`/`rf043_rnf012_shot.js`/`rf050_051_shot.js`, sem
     erros de console nem 500 reais no log.
 
+40. **RF-011: georreferenciamento e mapa da cadeia** e **RNF-011:
+    manutenibilidade (testes automatizados + CI)** — usuário pediu
+    "Implementar a RF-011 e fechar a RNF-011"; segui direto sem
+    perguntar nada (precedente forte da sessão de fazer chamadas
+    técnicas livres quando o pedido já é "implementar").
+    - **RF-011**: `Entidade.latitude`/`longitude` (`Float` opcionais —
+      nem toda entidade tem endereço completo o bastante pra
+      geocodificar). `app/services/geocodificacao.py::geocodificar_endereco`
+      consulta o Nominatim/OpenStreetMap (pública, gratuita, mesmo
+      raciocínio "tecnicamente disponível sem contrato" do RF-054/item
+      39) — mesmo gotcha de bloqueio de User-Agent do item 18 se
+      repetiu, mas desta vez testado com `curl -A "..."` durante o
+      design, antes de escrever qualquer código, então não houve
+      retrabalho. `POST /api/entidades/{id}/geocodificar`, `PATCH
+      /api/entidades/{id}/localizacao` e `GET /api/cpls/{id}/mapa`
+      (só entidades vinculadas e já geocodificadas). UI: card
+      "Localização" na tela de detalhe da entidade e
+      `/painel/cadastro/cpls/{id}/mapa` com Leaflet + tiles OSM (via CDN
+      unpkg — confirmei que o projeto não tem middleware de
+      CSP/CORS que bloqueasse isso antes de adicionar), marcador
+      colorido por `tipo_entidade` como proxy de diversidade da cadeia.
+      **Escopo deliberado**: "relações da cadeia" do requisito não virou
+      aresta de verdade no mapa porque `EntidadeElo` (RF-009) ainda não
+      tem rota de CRUD própria — construir isso agora seria escopo novo,
+      não fechamento do RF-011. `base.html` ganhou
+      `{% block extra_head %}{% endblock %}` (não existia) pra permitir
+      CSS/JS só na página do mapa sem tocar nos outros templates —
+      única exceção deliberada à regra geral de "zero JavaScript além de
+      formulário simples" do projeto, porque mapa é widget
+      inerentemente visual/interativo.
+    - **RNF-011**: nenhum teste automatizado existia até aqui, apesar do
+      projeto já ser versionado/modular/documentado. Criei `tests/`
+      (pytest) com banco `sigcpl_test` isolado (Postgres de verdade, não
+      sqlite — o projeto usa `UUID`/`JSONB`) e `tests/conftest.py` com o
+      padrão de SAVEPOINT aninhado do SQLAlchemy (necessário porque toda
+      rota já chama `db.commit()` internamente — sem isso, testes
+      vazariam estado entre si). 43 testes cobrindo autenticação,
+      cadastro/RBAC (inclusive isolamento entre CPLs), geocodificação
+      (RF-011), governança, maturidade, matchmaking (RF-052) e
+      observabilidade (RNF-012) — 49% de cobertura de statements.
+      Configurei ruff (`select = ["E", "F", "I", "UP", "B"]`) pela
+      primeira vez no projeto: 927 erros na primeira rodada, quase todos
+      falso-positivo de dois padrões estruturais do projeto —
+      `extend-immutable-calls` pro idiom `Depends()`/`Query()` do
+      FastAPI (782 ocorrências de B008) e ignore documentado de F821 (47
+      ocorrências, todas `Mapped["NomeDaClasse"]` do SQLAlchemy, resolvido
+      pelo mapper em runtime, não pelo Python) — corrigidos com
+      configuração, não supressão cega, pra não esconder mutável de
+      verdade ou nome indefinido de verdade em outro lugar. `--fix`
+      automático (import sorting, `datetime.timezone.utc`→`datetime.UTC`)
+      resolveu o resto até sobrar só 4 (3 `B904` raise-sem-`from` em
+      `routes_auditoria.py`/`routes_observabilidade.py`, corrigidos com
+      `from None` — são substituição deliberada de um 403 genérico por
+      mensagem mais amigável, não engolir exceção sem querer; 1 `B905`
+      zip-sem-`strict` em `validadores.py`). `.github/workflows/ci.yml`
+      novo — GitHub Actions com serviço Postgres efêmero, rodando
+      `ruff check .` + `pytest` a cada push/PR contra `master`. CD
+      (implantação automática) não entrou — reimplantação em produção
+      segue manual via `deploy.sh`, é próximo passo, não parte deste
+      fechamento.
+    Testado: RF-011 via curl (geocodificação real com CNPJ/endereço de
+    teste, localização manual, feed do mapa filtrando corretamente,
+    400 em endereço vazio) e Playwright (`rf011_shot.js` — mapa Leaflet
+    renderizado, zero erro de console) mais rerun de toda a suíte de
+    Playwright existente; RNF-011 via `pytest` (43 passando) e
+    `ruff check .` (limpo) — nenhum erro real de servidor/500/traceback
+    no log em nenhuma das duas verificações.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for
@@ -2050,7 +2121,9 @@ só porque é um módulo novo).
     "sem nenhuma configuração de requisição necessária" — teste isolado
     fora da aplicação (como fiz aqui) é a forma mais rápida de separar
     "bug no meu código" de "a API exige algo que a documentação não
-    deixou óbvio".
+    deixou óbvio". **Reaplicado com sucesso no RF-011/Nominatim (item
+    40)** — desta vez testado com `curl -A` já na fase de design, antes
+    de escrever qualquer código, então não houve retrabalho nenhum.
 
 ## O que falta (priorizado)
 
@@ -2218,8 +2291,8 @@ ordem recomendada para o que vem depois:
     reaproveitar `Documento` (que exige uma CPL). **Pendência real, não
     de código**: nenhuma nova — SMTP em produção (item 14) segue sendo a
     única pendência de configuração aberta. Do documento de requisitos,
-    seguem ❌ pendentes (não candidatos óbvios pra próxima fatia, cada
-    um depende de escopo/infra que ainda não existe): RF-011
+    seguem ❌ pendentes nesta altura (não candidatos óbvios pra próxima
+    fatia, cada um depende de escopo/infra que ainda não existe): RF-011
     (georreferenciamento), RF-052 (matchmaking), RF-054 (integrações
     externas), RF-055 (portal público expandido) e RF-057 (IA
     assistiva, fora do MVP por definição).
@@ -2241,6 +2314,23 @@ ordem recomendada para o que vem depois:
     seguem ❌ pendentes: RF-011 (georreferenciamento), RF-055 (portal
     público expandido) e RF-057 (IA assistiva, fora do MVP por
     definição) — os três restantes depois desta fatia.
+20. ~~RF-011: georreferenciamento e mapa da cadeia~~ e ~~RNF-011:
+    manutenibilidade (testes automatizados + CI)~~ — **feito**: ver item
+    40 da seção "Ordem em que este projeto foi construído".
+    `Entidade.latitude`/`longitude` opcionais, geocodificados via
+    Nominatim/OpenStreetMap ou definidos manualmente; mapa Leaflet por
+    CPL com marcador colorido por tipo de entidade — "relações da
+    cadeia" ficou por fazer de propósito, dependendo de `EntidadeElo`
+    (RF-009) ganhar rota de CRUD própria primeiro. 43 testes automatizados
+    (pytest, banco Postgres isolado por SAVEPOINT, 49% de cobertura),
+    ruff limpo e CI (`.github/workflows/ci.yml`, GitHub Actions) rodando
+    lint + testes a cada push/PR. **Pendência real, não de código**:
+    nenhuma nova — SMTP em produção (item 14) segue sendo a única
+    pendência de configuração aberta. Do documento de requisitos, seguem
+    ❌ pendentes: RF-055 (portal público expandido) e RF-057 (IA
+    assistiva, fora do MVP por definição) — os dois únicos restantes.
+    CD (implantação automática em produção) não entrou neste
+    fechamento — reimplantação segue manual via `deploy.sh`.
 
 ## Deploy em produção
 

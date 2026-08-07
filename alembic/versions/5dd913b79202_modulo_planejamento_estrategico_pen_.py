@@ -5,9 +5,10 @@ Revises: 0ba4d1a10f9d
 Create Date: 2026-07-30 10:10:36.907481
 
 """
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 # 'elo' e 'statustarefa' já existem no banco (criados em migrações
 # anteriores para EntidadeElo e TarefaGovernanca) — precisam de

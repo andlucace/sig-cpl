@@ -26,7 +26,7 @@ def normalizar_cpf(valor: str) -> str:
 
 
 def _digito_verificador(base: str, pesos: list[int]) -> str:
-    soma = sum(int(digito) * peso for digito, peso in zip(base, pesos))
+    soma = sum(int(digito) * peso for digito, peso in zip(base, pesos, strict=True))
     resto = soma % 11
     return "0" if resto < 2 else str(11 - resto)
 

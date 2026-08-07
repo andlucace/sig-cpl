@@ -14,10 +14,13 @@ from app.schemas.entidade import (
     CanaisDigitaisUpdate,
     EntidadeCPLRead,
     EntidadeCreate,
+    EntidadeMapaRead,
     EntidadeRead,
+    LocalizacaoUpdate,
     OfertaEntidadeCreate,
     OfertaEntidadeRead,
 )
+from app.services.geocodificacao import GeocodificacaoIndisponivel, geocodificar_endereco
 from app.services.integracao_publica import ConsultaCNPJIndisponivel, consultar_cnpj_publico
 from app.services.validadores import cnpj_valido, cpf_valido, normalizar_cnpj, normalizar_cpf, uf_valida
 
@@ -176,6 +179,61 @@ def aplicar_dados_publicos(
     return entidade
 
 
+# --- Georreferenciamento (RF-011) --------------------------------------------
+
+
+@router.post("/{entidade_id}/geocodificar", response_model=EntidadeRead)
+def geocodificar_entidade(
+    entidade_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Entidade:
+    """RF-011: geocodifica a partir de endereco/municipio/uf já
+    cadastrados (Nominatim/OpenStreetMap, pública e gratuita) e aplica
+    latitude/longitude na entidade. Endereço mal formado ou não
+    encontrado não é erro de sistema — a entidade simplesmente não
+    aparece no mapa (RF-011) até alguém preencher/corrigir e tentar de
+    novo, ou definir a localização manualmente
+    (`PATCH .../localizacao`)."""
+
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO)
+    entidade = db.get(Entidade, entidade_id)
+    if entidade is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entidade não encontrada.")
+    try:
+        resultado = geocodificar_endereco(entidade.endereco, entidade.municipio, entidade.uf)
+    except (ValueError, GeocodificacaoIndisponivel) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    entidade.latitude = resultado["latitude"]
+    entidade.longitude = resultado["longitude"]
+    db.commit()
+    db.refresh(entidade)
+    return entidade
+
+
+@router.patch("/{entidade_id}/localizacao", response_model=EntidadeRead)
+def definir_localizacao(
+    entidade_id: uuid.UUID,
+    dados: LocalizacaoUpdate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Entidade:
+    """RF-011: define latitude/longitude manualmente — para quando a
+    geocodificação automática não encontra o endereço ou quando a
+    posição real difere do que o Nominatim resolveu."""
+
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO)
+    entidade = db.get(Entidade, entidade_id)
+    if entidade is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entidade não encontrada.")
+    entidade.latitude = dados.latitude
+    entidade.longitude = dados.longitude
+    db.commit()
+    db.refresh(entidade)
+    return entidade
+
+
 # --- Canais digitais e ofertas (RF-010) --------------------------------------
 
 
@@ -299,5 +357,31 @@ def listar_entidades_da_cpl(
     return (
         db.query(EntidadeCPL)
         .filter(EntidadeCPL.cpl_id == cpl_id, EntidadeCPL.ativo.is_(True))
+        .all()
+    )
+
+
+@cpl_router.get("/{cpl_id}/mapa", response_model=list[EntidadeMapaRead])
+def mapa_entidades_da_cpl(
+    cpl_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[Entidade]:
+    """RF-011: entidades geocodificadas da CPL, pra plotar no mapa de
+    concentração territorial — só quem já tem latitude/longitude
+    preenchidos (manual ou via geocodificação automática)."""
+
+    if db.get(CPL, cpl_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL não encontrada.")
+    verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_LEITURA, cpl_id=cpl_id)
+    return (
+        db.query(Entidade)
+        .join(EntidadeCPL, EntidadeCPL.entidade_id == Entidade.id)
+        .filter(
+            EntidadeCPL.cpl_id == cpl_id,
+            EntidadeCPL.ativo.is_(True),
+            Entidade.latitude.is_not(None),
+            Entidade.longitude.is_not(None),
+        )
         .all()
     )

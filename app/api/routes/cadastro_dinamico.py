@@ -18,7 +18,6 @@ from app.models.cpl import CPL
 from app.models.entidade import Entidade
 from app.models.enums import StatusLoteImportacao
 from app.models.usuario import Usuario
-from app.services.indicadores import registrar_snapshot_diagnostico
 from app.schemas.cadastro_dinamico import (
     CampanhaCadastralCreate,
     CampanhaCadastralRead,
@@ -38,6 +37,7 @@ from app.services.importacao_entidades import (
     gerar_xlsx_entidades,
     preparar_importacao,
 )
+from app.services.indicadores import registrar_snapshot_diagnostico
 
 router = APIRouter(prefix="/cadastro", tags=["Formulários e dados"])
 

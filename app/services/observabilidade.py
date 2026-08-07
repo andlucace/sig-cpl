@@ -14,7 +14,7 @@ import time
 import traceback
 import uuid
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from threading import Lock
 
 from sqlalchemy import text
@@ -91,7 +91,7 @@ def registrar_falha(
 
 
 def falhas_recentes(db: Session, minutos: int = 15, limite: int = 50) -> list[RegistroFalha]:
-    desde = datetime.now(timezone.utc) - timedelta(minutes=minutos)
+    desde = datetime.now(UTC) - timedelta(minutes=minutos)
     return (
         db.query(RegistroFalha)
         .filter(RegistroFalha.created_at >= desde)
@@ -116,7 +116,7 @@ def verificar_e_alertar(db: Session) -> int:
     if contagem < settings.observabilidade_alerta_limiar_falhas:
         return contagem
 
-    agora = datetime.now(timezone.utc)
+    agora = datetime.now(UTC)
     janela = timedelta(minutes=settings.observabilidade_alerta_janela_minutos)
     if _ULTIMO_ALERTA_EM is not None and agora - _ULTIMO_ALERTA_EM < janela:
         return contagem

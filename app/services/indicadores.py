@@ -4,7 +4,7 @@ exportação, ODS) — insumos para o painel/relatório de RF-045/048."""
 
 import uuid
 from collections import Counter
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy.orm import Session, joinedload
 
@@ -127,7 +127,7 @@ def _novos_empregos_diretos_periodo(
 
 
 def _novos_empregos_diretos(db: Session, entidade_ids: list[uuid.UUID], dias: int = 365) -> int:
-    agora = datetime.now(timezone.utc)
+    agora = datetime.now(UTC)
     return _novos_empregos_diretos_periodo(db, entidade_ids, agora - timedelta(days=dias), agora)
 
 
@@ -141,10 +141,10 @@ ciclo de atualização já usado como janela padrão em `_novos_empregos_diretos
 
 
 def diagnostico_desatualizado(diagnostico: DiagnosticoCadastral) -> bool:
-    limite = datetime.now(timezone.utc) - timedelta(days=VALIDADE_DIAGNOSTICO_DIAS)
+    limite = datetime.now(UTC) - timedelta(days=VALIDADE_DIAGNOSTICO_DIAS)
     atualizado_em = diagnostico.updated_at
     if atualizado_em.tzinfo is None:
-        atualizado_em = atualizado_em.replace(tzinfo=timezone.utc)
+        atualizado_em = atualizado_em.replace(tzinfo=UTC)
     return atualizado_em < limite
 
 
@@ -322,8 +322,8 @@ def resumo_anual(db: Session, cpl_id: uuid.UUID, ano: int) -> dict:
 
     inicio_data = date(ano, 1, 1)
     fim_data = date(ano, 12, 31)
-    inicio_dt = datetime(ano, 1, 1, tzinfo=timezone.utc)
-    fim_dt = datetime(ano, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+    inicio_dt = datetime(ano, 1, 1, tzinfo=UTC)
+    fim_dt = datetime(ano, 12, 31, 23, 59, 59, tzinfo=UTC)
 
     reunioes_no_ano = (
         db.query(Reuniao)

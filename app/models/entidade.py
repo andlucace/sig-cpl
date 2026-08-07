@@ -2,7 +2,7 @@ import uuid
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, Float, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,6 +32,16 @@ class Entidade(TimestampedBase):
     municipio: Mapped[str | None] = mapped_column(String(255))
     uf: Mapped[str | None] = mapped_column(String(2))
     endereco: Mapped[str | None] = mapped_column(String(500))
+
+    # RF-011: georreferenciamento — preenchido manualmente ou via
+    # geocodificação automática a partir de endereco/municipio/uf
+    # (app/services/geocodificacao.py, Nominatim/OpenStreetMap, pública e
+    # gratuita, mesmo raciocínio da consulta de CNPJ do RF-054). Nenhum dos
+    # dois é obrigatório — nem toda entidade tem endereço completo o
+    # bastante pra geocodificar bem, então o mapa (RF-011) só plota quem
+    # tem os dois preenchidos.
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
 
     situacao_cadastral: Mapped[str | None] = mapped_column(String(100))
     # RF-010: dict de canais conhecidos (site/instagram/facebook/linkedin/

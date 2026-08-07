@@ -9,12 +9,18 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user_optional
 from app.core.rbac import PAPEIS_GESTAO, PAPEIS_GOVERNANCA_LEITURA, cpl_ids_visiveis, verificar_papel
 from app.db.session import get_db
-from app.models.cadastro_dinamico import CampanhaCadastral, CampanhaConvite, DiagnosticoCadastral, ImportacaoLote
+from app.models.cadastro_dinamico import (
+    CampanhaCadastral,
+    CampanhaConvite,
+    DiagnosticoCadastral,
+    ImportacaoLote,
+)
 from app.models.cpl import CPL
 from app.models.entidade import Entidade, EntidadeCPL, OfertaEntidade
 from app.models.enums import StatusLoteImportacao, TipoOferta
 from app.models.usuario import Usuario
 from app.services.armazenamento import caminho_absoluto
+from app.services.geocodificacao import GeocodificacaoIndisponivel, geocodificar_endereco
 from app.services.importacao_entidades import (
     CAMPOS_CONHECIDOS,
     confirmar_importacao,
@@ -458,6 +464,103 @@ def aplicar_dados_publicos(
     entidade.uf = dados["uf"]
     db.commit()
     return RedirectResponse(f"/painel/cadastro/entidades/{entidade_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/entidades/{entidade_id}/geocodificar")
+def geocodificar_entidade_web(
+    entidade_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-011: geocodifica a partir de endereco/municipio/uf via
+    Nominatim/OpenStreetMap — endereço não encontrado só impede a
+    entidade de aparecer no mapa, não é erro que trava a tela."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    verificar_papel(db, usuario, PAPEIS_GESTAO)
+    entidade = _entidade_visivel_ou_none(db, usuario, entidade_id)
+    if entidade is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entidade não encontrada.")
+
+    try:
+        resultado = geocodificar_endereco(entidade.endereco, entidade.municipio, entidade.uf)
+    except (ValueError, GeocodificacaoIndisponivel):
+        pass
+    else:
+        entidade.latitude = resultado["latitude"]
+        entidade.longitude = resultado["longitude"]
+        db.commit()
+    return RedirectResponse(f"/painel/cadastro/entidades/{entidade_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/entidades/{entidade_id}/localizacao")
+def definir_localizacao_web(
+    entidade_id: uuid.UUID,
+    latitude: float = Form(...),
+    longitude: float = Form(...),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    verificar_papel(db, usuario, PAPEIS_GESTAO)
+    entidade = _entidade_visivel_ou_none(db, usuario, entidade_id)
+    if entidade is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entidade não encontrada.")
+    entidade.latitude = latitude
+    entidade.longitude = longitude
+    db.commit()
+    return RedirectResponse(f"/painel/cadastro/entidades/{entidade_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/cpls/{cpl_id}/mapa")
+def mapa_cpl(
+    request: Request,
+    cpl_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-011: mapa de concentração territorial da CPL — entidades
+    geocodificadas, coloridas por tipo (empresa, universidade, ICT,
+    prestador, ambiente de inovação) como proxy visual dos diferentes
+    elos da cadeia. Não desenha vínculo formal de elo entre entidades
+    (RF-009 `EntidadeElo` ainda não tem rota própria de API) — decisão
+    de escopo, não lacuna esquecida."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    cpl = db.get(CPL, cpl_id)
+    if cpl is None:
+        return RedirectResponse("/painel/cadastro", status_code=status.HTTP_303_SEE_OTHER)
+    verificar_papel(db, usuario, PAPEIS_GOVERNANCA_LEITURA, cpl_id=cpl_id)
+
+    entidades_geo = (
+        db.query(Entidade)
+        .join(EntidadeCPL, EntidadeCPL.entidade_id == Entidade.id)
+        .filter(
+            EntidadeCPL.cpl_id == cpl_id,
+            EntidadeCPL.ativo.is_(True),
+            Entidade.latitude.is_not(None),
+            Entidade.longitude.is_not(None),
+        )
+        .all()
+    )
+    total_vinculadas = (
+        db.query(EntidadeCPL).filter(EntidadeCPL.cpl_id == cpl_id, EntidadeCPL.ativo.is_(True)).count()
+    )
+    return templates.TemplateResponse(
+        request,
+        "restrito/cadastro/mapa.html",
+        {
+            "cpl": cpl,
+            "entidades_geo": entidades_geo,
+            "total_geocodificadas": len(entidades_geo),
+            "total_vinculadas": total_vinculadas,
+            "usuario": usuario,
+            "pagina_ativa": "cadastro",
+        },
+    )
 
 
 @router.post("/entidades/{entidade_id}/canais-digitais")

@@ -15,6 +15,8 @@ from app.core.rbac import (
 )
 from app.db.session import get_db
 from app.models.cpl import CPL
+from app.models.documento import Documento
+from app.models.enums import CategoriaDocumento, ConfidencialidadeDocumento
 from app.models.maturidade import (
     Avaliacao,
     AvaliacaoCriterio,
@@ -25,6 +27,8 @@ from app.models.maturidade import (
     RequisitoHabilitacaoEdital,
 )
 from app.models.usuario import Usuario
+from app.schemas.cpl import CPLRead
+from app.schemas.documento import DocumentoRead
 from app.schemas.maturidade import (
     AvaliacaoCreate,
     AvaliacaoCriterioRead,
@@ -46,10 +50,6 @@ from app.schemas.maturidade import (
     RequisitoHabilitacaoRead,
     SimulacaoAvaliacaoRead,
 )
-from app.models.documento import Documento
-from app.models.enums import CategoriaDocumento, ConfidencialidadeDocumento
-from app.schemas.cpl import CPLRead
-from app.schemas.documento import DocumentoRead
 from app.services.armazenamento import salvar_arquivo
 from app.services.geracao_documentos import gerar_pdf_pacote_submissao, gerar_pdf_relatorio_recadastramento
 from app.services.maturidade import (

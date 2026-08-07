@@ -11,7 +11,7 @@ acessado (ver `app/web/routes_notificacoes.py`), então a lista nunca fica
 muito desatualizada sem precisar de infraestrutura nova."""
 
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -74,7 +74,7 @@ def _usuario_de_pessoa(db: Session, pessoa_id: uuid.UUID | None) -> Usuario | No
 
 
 def _gerar_reunioes_proximas(db: Session, limite: datetime) -> int:
-    agora = datetime.now(timezone.utc)
+    agora = datetime.now(UTC)
     reunioes = (
         db.query(Reuniao)
         .filter(
@@ -241,7 +241,7 @@ def gerar_notificacoes(db: Session, janela_dias: int = JANELA_PADRAO_DIAS) -> in
     gerados. Devolve quantas notificações novas foram criadas."""
 
     limite_data = date.today() + timedelta(days=janela_dias)
-    limite_datahora = datetime.now(timezone.utc) + timedelta(days=janela_dias)
+    limite_datahora = datetime.now(UTC) + timedelta(days=janela_dias)
 
     total = 0
     total += _gerar_reunioes_proximas(db, limite_datahora)
@@ -266,12 +266,12 @@ def contar_nao_lidas(db: Session, usuario_id: uuid.UUID) -> int:
 
 def marcar_como_lida(db: Session, notificacao: Notificacao) -> None:
     notificacao.lida = True
-    notificacao.lida_em = datetime.now(timezone.utc)
+    notificacao.lida_em = datetime.now(UTC)
     db.commit()
 
 
 def marcar_todas_como_lidas(db: Session, usuario_id: uuid.UUID) -> int:
-    agora = datetime.now(timezone.utc)
+    agora = datetime.now(UTC)
     atualizadas = (
         db.query(Notificacao)
         .filter(Notificacao.usuario_id == usuario_id, Notificacao.lida.is_(False))

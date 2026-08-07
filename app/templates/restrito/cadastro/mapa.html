@@ -1,0 +1,100 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Mapa — {{ cpl.nome }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/cadastro/cpls/{{ cpl.id }}" class="link-secondary text-decoration-none">{{ cpl.nome }}</a>
+    <i class="bi bi-chevron-right small mx-1"></i>Mapa da cadeia
+{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>#mapa-cadeia { height: 560px; border-radius: 0.5rem; }</style>
+{% endblock %}
+{% block conteudo %}
+    <h1 class="h3 mb-1"><i class="bi bi-pin-map text-primary me-2"></i>Mapa da cadeia — {{ cpl.nome }}</h1>
+    <p class="text-body-secondary">
+        Concentração territorial e diversidade da cadeia (RF-011): {{ total_geocodificadas }} de
+        {{ total_vinculadas }} entidade(s) vinculada(s) já têm posição definida (geocodificada a partir do
+        endereço, via <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">OpenStreetMap</a>,
+        ou manual). Cor do marcador indica o tipo — proxy visual do elo que a entidade ocupa na cadeia.
+    </p>
+
+    {% if total_vinculadas > total_geocodificadas %}
+        <div class="alert alert-light border small" role="alert">
+            <i class="bi bi-info-circle me-1"></i>
+            {{ total_vinculadas - total_geocodificadas }} entidade(s) vinculada(s) ainda não aparece(m) aqui —
+            abra o cadastro de cada uma e geocodifique o endereço.
+        </div>
+    {% endif %}
+
+    <div id="mapa-cadeia"></div>
+
+    <div class="card mt-3">
+        <div class="card-header bg-transparent fw-semibold">Legenda</div>
+        <div class="card-body small d-flex flex-wrap gap-3">
+            <span><i class="bi bi-circle-fill" style="color:#0d6efd;"></i> Empresa</span>
+            <span><i class="bi bi-circle-fill" style="color:#6f42c1;"></i> Universidade</span>
+            <span><i class="bi bi-circle-fill" style="color:#20c997;"></i> ICT</span>
+            <span><i class="bi bi-circle-fill" style="color:#fd7e14;"></i> Prestador/fornecedor</span>
+            <span><i class="bi bi-circle-fill" style="color:#d63384;"></i> Ambiente de inovação</span>
+            <span><i class="bi bi-circle-fill" style="color:#6c757d;"></i> Órgão público / associação</span>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        (function () {
+            var cores = {
+                "empresa": "#0d6efd",
+                "universidade": "#6f42c1",
+                "ict": "#20c997",
+                "prestador": "#fd7e14",
+                "ambiente_inovacao": "#d63384",
+                "orgao_publico": "#6c757d",
+                "associacao": "#6c757d"
+            };
+            var pontos = [
+                {% for e in entidades_geo %}
+                {
+                    lat: {{ e.latitude }},
+                    lng: {{ e.longitude }},
+                    nome: {{ e.razao_social|tojson }},
+                    tipo: {{ e.tipo.value|tojson }},
+                    municipio: {{ (e.municipio or "")|tojson }},
+                    url: "/painel/cadastro/entidades/{{ e.id }}"
+                }{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ];
+
+            var centro = [-23.5, -46.6];
+            var zoom = 6;
+            if (pontos.length) {
+                var somaLat = 0, somaLng = 0;
+                pontos.forEach(function (p) { somaLat += p.lat; somaLng += p.lng; });
+                centro = [somaLat / pontos.length, somaLng / pontos.length];
+                zoom = 11;
+            }
+
+            var mapa = L.map("mapa-cadeia").setView(centro, zoom);
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                attribution: "&copy; colaboradores do OpenStreetMap",
+                maxZoom: 19
+            }).addTo(mapa);
+
+            pontos.forEach(function (p) {
+                var cor = cores[p.tipo] || "#6c757d";
+                L.circleMarker([p.lat, p.lng], {
+                    radius: 9,
+                    color: cor,
+                    fillColor: cor,
+                    fillOpacity: 0.85,
+                    weight: 2
+                })
+                    .addTo(mapa)
+                    .bindPopup(
+                        "<strong>" + p.nome + "</strong><br>" +
+                        p.tipo.replace(/_/g, " ") + (p.municipio ? " — " + p.municipio : "") +
+                        "<br><a href=\"" + p.url + "\">ver cadastro</a>"
+                    );
+            });
+        })();
+    </script>
+{% endblock %}

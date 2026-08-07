@@ -10,6 +10,7 @@ dist/
 build/
 .pytest_cache/
 .ruff_cache/
+.coverage
 *.db
 .vscode/
 .idea/

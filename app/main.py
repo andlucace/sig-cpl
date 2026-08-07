@@ -22,11 +22,13 @@ from app.api.routes import (
     inovacao,
     maturidade,
     notificacoes,
-    observabilidade as observabilidade_routes,
     pessoas,
     planejamento,
     projeto,
     usuario_papel,
+)
+from app.api.routes import (
+    observabilidade as observabilidade_routes,
 )
 from app.api.routes.stubs import stub_routers
 from app.core.audit_context import ip_atual, usuario_atual_id

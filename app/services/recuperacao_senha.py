@@ -5,7 +5,7 @@ proteção padrão contra enumeração de contas), então a rota que a chama
 sempre responde com a mesma mensagem genérica, exista o e-mail ou não."""
 
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -22,7 +22,7 @@ def solicitar_recuperacao_senha(db: Session, email: str) -> None:
 
     settings = get_settings()
     token = secrets.token_urlsafe(32)
-    expira_em = datetime.now(timezone.utc) + timedelta(
+    expira_em = datetime.now(UTC) + timedelta(
         minutes=settings.password_reset_token_expire_minutes
     )
     db.add(TokenRecuperacaoSenha(usuario_id=usuario.id, token=token, expira_em=expira_em))
@@ -44,7 +44,7 @@ def redefinir_senha(db: Session, token: str, nova_senha: str) -> bool:
     já usado tratados igual) se a redefinição não pôde ser feita."""
 
     registro = db.query(TokenRecuperacaoSenha).filter(TokenRecuperacaoSenha.token == token).first()
-    agora = datetime.now(timezone.utc)
+    agora = datetime.now(UTC)
     if registro is None or registro.usado_em is not None or registro.expira_em < agora:
         return False
 

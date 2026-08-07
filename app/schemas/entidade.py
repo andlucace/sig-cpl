@@ -30,12 +30,32 @@ class EntidadeRead(BaseModel):
     cpf: str | None
     municipio: str | None
     uf: str | None
+    endereco: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     ativo: bool
     canais_digitais: dict | None = None
 
 
 class CanaisDigitaisUpdate(BaseModel):
     canais_digitais: dict[str, str]
+
+
+class LocalizacaoUpdate(BaseModel):
+    latitude: float
+    longitude: float
+
+
+class EntidadeMapaRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    tipo: TipoEntidade
+    razao_social: str
+    municipio: str | None
+    uf: str | None
+    latitude: float
+    longitude: float
 
 
 class OfertaEntidadeCreate(BaseModel):

@@ -15,6 +15,8 @@ from app.core.rbac import (
 )
 from app.db.session import get_db
 from app.models.cpl import CPL
+from app.models.documento import Documento
+from app.models.enums import CategoriaDocumento, ConfidencialidadeDocumento
 from app.models.governanca import (
     DeclaracaoImpedimento,
     Deliberacao,
@@ -25,8 +27,6 @@ from app.models.governanca import (
     TarefaGovernanca,
     VotoRegistro,
 )
-from app.models.documento import Documento
-from app.models.enums import CategoriaDocumento, ConfidencialidadeDocumento
 from app.models.usuario import Usuario
 from app.schemas.documento import DocumentoRead
 from app.schemas.governanca import (

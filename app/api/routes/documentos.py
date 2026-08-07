@@ -6,7 +6,12 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
-from app.core.rbac import PAPEIS_GESTAO, PAPEIS_GOVERNANCA_LEITURA, PAPEIS_IMPEDIMENTO_LEITURA, verificar_papel
+from app.core.rbac import (
+    PAPEIS_GESTAO,
+    PAPEIS_GOVERNANCA_LEITURA,
+    PAPEIS_IMPEDIMENTO_LEITURA,
+    verificar_papel,
+)
 from app.db.session import get_db
 from app.models.cpl import CPL
 from app.models.documento import Documento

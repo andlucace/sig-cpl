@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 from jose import jwt
@@ -20,7 +20,7 @@ def create_access_token(
     subject: str, expires_delta: timedelta | None = None, extra_claims: dict | None = None
 ) -> str:
     settings = get_settings()
-    expire = datetime.now(timezone.utc) + (
+    expire = datetime.now(UTC) + (
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
     payload = {"sub": subject, "exp": expire}

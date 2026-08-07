@@ -1400,11 +1400,14 @@ de novo enquanto existir pelo menos um administrador.
 
 - Sem backup automático do volume `pgdata`/`uploads` configurado ainda
   (RNF-005 — pendente).
-- Sem CI/CD — reimplantação é manual (comandos acima).
-- O projeto tem repositório git local (sem remoto/GitHub ainda) — a
-  implantação não depende dele (é feita por cópia direta de arquivo,
-  replicando como o `rh-nepen` já funcionava). Nada impede de configurar um
-  remoto depois se for útil (ex.: para revisão de código ou CI/CD futuro).
+- CI (`.github/workflows/ci.yml`, ver RNF-011 abaixo) roda lint + testes a
+  cada push/PR, mas a implantação em produção continua manual — reimplantar
+  ainda é rodar `deploy.sh` (comandos acima); automatizar esse último passo
+  (CD de verdade) fica como próximo passo.
+- Repositório versionado no GitHub (`origin` → `andlucace/sig-cpl`) — a
+  implantação em si não depende dele (é feita por cópia direta de arquivo
+  pra VPS, replicando como o `rh-nepen` já funcionava); o remoto existe pra
+  histórico, CI e revisão de código.
 
 ## Eventos (RF-050)
 
@@ -1530,6 +1533,101 @@ pendência de SMTP em produção, RF-004):
   Clicksign, DocuSign, para a primeira; sistema institucional nenhum é
   nomeado no documento de requisitos, para a segunda) antes de
   qualquer código fazer sentido — ver "O que falta" no HANDOFF.md.
+
+## Georreferenciamento e mapa da cadeia (RF-011)
+
+- `Entidade.latitude`/`longitude` (`app/models/entidade.py`) — `Float`
+  opcionais, nunca obrigatórios: nem toda entidade tem endereço completo
+  o bastante pra geocodificar bem, e a ausência não deveria bloquear
+  cadastro.
+- `app/services/geocodificacao.py::geocodificar_endereco` — consulta a
+  API pública do [Nominatim/OpenStreetMap](https://nominatim.org)
+  (gratuita, sem credencial), mesmo raciocínio de "tecnicamente
+  disponível sem contrato" já usado na consulta de CNPJ do RF-054, e
+  reaproveitando o mesmo padrão de `urllib.request` da biblioteca
+  padrão. **Mesmo gotcha do RF-054**: o Nominatim também bloqueia o
+  User-Agent padrão do `urllib` com 403 (bloqueio anti-bot genérico) —
+  corrigido enviando um `User-Agent` identificável, confirmado por teste
+  direto com `curl` antes de fechar o design.
+- `POST /api/entidades/{id}/geocodificar` (`PAPEIS_GESTAO`) — geocodifica
+  a partir do `endereco`/`municipio`/`uf` já cadastrados; `PATCH
+  /api/entidades/{id}/localizacao` (`PAPEIS_GESTAO`) — define
+  latitude/longitude manualmente, pra quando a geocodificação automática
+  erra ou o endereço não é preciso o bastante. Botões equivalentes na
+  tela de detalhe da entidade (`/painel/cadastro/entidades/{id}`, card
+  "Localização").
+- `GET /api/cpls/{id}/mapa` (`PAPEIS_GOVERNANCA_LEITURA`) — feed das
+  entidades vinculadas à CPL e já geocodificadas (as duas condições:
+  vínculo ativo + lat/lng preenchidos). `/painel/cadastro/cpls/{id}/mapa`
+  renderiza isso num mapa [Leaflet](https://leafletjs.com) + tiles OSM
+  (via CDN unpkg — sem CSP/CORS restritivo no projeto que bloqueasse
+  isso, confirmado antes de adicionar), com marcador colorido por
+  `tipo_entidade` (empresa/universidade/ICT/prestador/ambiente de
+  inovação/órgão público) e legenda — a única exceção deliberada à regra
+  geral do projeto de "zero JavaScript além de formulário simples", já
+  que mapa é widget inerentemente visual/interativo. Acessível a partir
+  de um botão na tela de cadastro da CPL.
+- **Escopo deliberado**: o requisito também pede "relações da cadeia" no
+  mapa, mas `EntidadeElo` (RF-009) ainda não tem rota de CRUD própria —
+  construí-la agora seria escopo novo, não fechamento do RF-011. Em vez
+  disso, a diversidade da cadeia fica representada pela cor do marcador
+  por tipo de entidade; arestas de relação de verdade ficam para quando
+  `EntidadeElo` ganhar sua própria API.
+- `base.html` ganhou um bloco `{% block extra_head %}{% endblock %}`
+  (não existia antes) pra permitir CSS/JS por página sem tocar em todos
+  os outros templates — usado só pela página do mapa por enquanto.
+
+## Testes automatizados e integração contínua (RNF-011)
+
+Manutenibilidade era o único pilar do RNF-011 sem cobertura nenhuma até
+aqui — código já era versionado (Git/GitHub), modular (camadas
+`models`/`schemas`/`services`/`api`/`web`) e documentado (este README,
+`HANDOFF.md`, `docs/requisitos_macros.md`); faltava testes automatizados
+e um pipeline de CI/CD:
+
+- **`tests/`** (pytest) — 43 testes cobrindo autenticação (RF-001/002),
+  cadastro + RBAC (inclusive isolamento entre CPLs), geocodificação e
+  mapa (RF-011), governança (fluxo completo reunião → presença →
+  deliberação → voto → ata), maturidade (cálculo de pontuação/nível,
+  RN-016), matchmaking de inovação (RF-052, fluxo completo demanda →
+  match → conversão em projeto), observabilidade (RNF-012) e integração
+  pública de CNPJ (RF-054). 49% de cobertura de statements
+  (`--cov=app`, ver `pyproject.toml`) — não é 100%, mas cobre os fluxos
+  de negócio centrais de cada módulo, não só função pura isolada.
+- **Banco de teste isolado** — Postgres de verdade (não sqlite: o
+  projeto usa tipos específicos do Postgres, `UUID`/`JSONB`, em vários
+  models), banco `sigcpl_test` dedicado no mesmo container de dev.
+  `tests/conftest.py` isola cada teste com o padrão de SAVEPOINT
+  aninhado do próprio SQLAlchemy (`connection.begin_nested()` +
+  listener `after_transaction_end` que reabre o savepoint), necessário
+  porque o código de aplicação já chama `db.commit()` internamente em
+  toda rota — sem isso, testes vazariam estado uns pros outros mesmo com
+  rollback externo. Fixtures `client`/`admin_client`/`client_sem_papel`
+  passam pelo fluxo de login de verdade (`POST /api/auth/login`), não só
+  injetam um usuário — cobre hashing, JWT e RBAC de ponta a ponta, não
+  só contorna a autenticação.
+- **Lint (ruff)** — `pyproject.toml` configura `select = ["E", "F", "I",
+  "UP", "B"]`. Duas categorias de falso-positivo tratadas com
+  configuração, não com supressão cega: `B008` (782 ocorrências na
+  primeira rodada) é o idiom de injeção de dependência do FastAPI
+  (`Depends()`/`Query()`/etc.) sendo confundido com "mutável em
+  argumento padrão" — corrigido com
+  `[tool.ruff.lint.flake8-bugbear] extend-immutable-calls`, que
+  permanece detectando mutável de verdade em outro lugar; `F821` (47
+  ocorrências) é o padrão `Mapped["NomeDaClasse"]` do SQLAlchemy
+  (resolvido pelo mapper em tempo de execução, não pelo Python) sendo
+  lido como nome indefinido — ignorado globalmente com comentário
+  explicando o motivo, em vez de reescrever ~15 arquivos de model com
+  `TYPE_CHECKING` só pra satisfazer o linter sem ganho nenhum em tempo
+  de execução. `UP042` (str+Enum → StrEnum) também ignorado
+  deliberadamente — modernizar dezenas de enums existentes é refatoração
+  própria, não algo pra fazer de passagem aqui.
+- **CI** — `.github/workflows/ci.yml` (GitHub Actions): a cada push/PR
+  contra `master`, sobe um serviço Postgres efêmero, instala as
+  dependências (`pip install -e ".[dev]"`), roda `ruff check .` e depois
+  `pytest`. Não inclui CD (implantação em produção continua manual via
+  `deploy.sh`) — automatizar esse último passo é próximo passo, não
+  parte deste fechamento.
 
 ## Observabilidade (RNF-012)
 
@@ -1720,10 +1818,10 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
     `Presenca`/`MembroOrgao` (quem gere inscreve, não é autoatendimento).
     `RecursoBiblioteca` é conteúdo global (sem `cpl_id`), com
     armazenamento próprio em vez de reaproveitar `Documento` (que exige
-    uma CPL). Restam no documento de requisitos, ainda não iniciados:
-    RF-011 (georreferenciamento), RF-052 (matchmaking), RF-054
-    (integrações externas), RF-055 (portal público expandido) e RF-057
-    (assistência de IA, declaradamente fora do MVP) — ver
+    uma CPL). Restam no documento de requisitos, ainda não iniciados
+    nesta altura: RF-011 (georreferenciamento), RF-052 (matchmaking),
+    RF-054 (integrações externas), RF-055 (portal público expandido) e
+    RF-057 (assistência de IA, declaradamente fora do MVP) — ver
     `docs/requisitos_macros.md` para o levantamento completo.
 18. ~~RF-052: matchmaking de inovação~~ e ~~RF-054: integrações
     externas~~ — **feitos**: ver seções "Matchmaking de inovação
@@ -1736,6 +1834,18 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
     eletrônica e "sistemas institucionais" seguem pendentes até o
     programa escolher um provedor específico — não é algo que dê pra
     implementar sem essa decisão de negócio. Restam no documento de
-    requisitos, ainda não iniciados: RF-011 (georreferenciamento),
-    RF-055 (portal público expandido) e RF-057 (assistência de IA,
-    declaradamente fora do MVP).
+    requisitos, ainda não iniciados: RF-055 (portal público expandido)
+    e RF-057 (assistência de IA, declaradamente fora do MVP).
+19. ~~RF-011: georreferenciamento e mapa da cadeia~~ e ~~RNF-011:
+    testes automatizados + pipeline de CI~~ — **feitos**: ver seções
+    "Georreferenciamento e mapa da cadeia (RF-011)" e "Testes
+    automatizados e integração contínua (RNF-011)" abaixo.
+    `Entidade.latitude`/`longitude` opcionais, geocodificados via
+    Nominatim/OpenStreetMap (mesmo raciocínio de "API pública sem
+    contrato" do RF-054) ou definidos manualmente; mapa Leaflet por CPL
+    com marcador colorido por tipo de entidade. 43 testes automatizados
+    (pytest, banco Postgres de teste isolado) e lint (ruff) limpos,
+    rodando em CI (GitHub Actions) a cada push/PR. Restam no documento
+    de requisitos, ainda não iniciados: RF-055 (portal público
+    expandido) e RF-057 (assistência de IA, declaradamente fora do
+    MVP).

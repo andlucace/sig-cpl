@@ -35,8 +35,8 @@ from app.models.cadastro_dinamico import DiagnosticoCadastral, ImportacaoLinha, 
 from app.models.entidade import Entidade, EntidadeCPL
 from app.models.enums import StatusLinhaImportacao, StatusLoteImportacao, TipoEntidade
 from app.services.armazenamento import caminho_absoluto, salvar_arquivo
-from app.services.validadores import cnpj_valido, cpf_valido, normalizar_cnpj, normalizar_cpf, uf_valida
 from app.services.indicadores import registrar_snapshot_diagnostico
+from app.services.validadores import cnpj_valido, cpf_valido, normalizar_cnpj, normalizar_cpf, uf_valida
 
 _ALIASES_CAMPO: dict[str, list[str]] = {
     "razao_social": ["razao social", "nome", "nome da empresa", "empresa", "organizacao"],

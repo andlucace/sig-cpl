@@ -45,7 +45,7 @@ def painel_saude(
     except HTTPException:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "Painel de saúde restrito ao administrador da plataforma."
-        )
+        ) from None
 
     settings = get_settings()
     janela = settings.observabilidade_alerta_janela_minutos
