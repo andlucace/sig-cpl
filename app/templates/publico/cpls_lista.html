@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}SIG-CPL — Portal de transparência{% endblock %}
+{% block nav %}
+    <a href="/login" class="btn btn-primary btn-sm">
+        <i class="bi bi-box-arrow-in-right me-1"></i>Área restrita
+    </a>
+{% endblock %}
+{% block content %}
+    <div class="mb-4">
+        <h1 class="h3 mb-1"><i class="bi bi-diagram-3-fill text-primary me-2"></i>Portal de transparência</h1>
+        <p class="text-body-secondary col-lg-8">
+            Cadeias Produtivas Locais reconhecidas pelo Programa SP Produz. Cada uma tem uma
+            página com governança, agenda, resultados agregados e projetos autorizados —
+            sem exposição de dados pessoais ou sigilosos.
+        </p>
+    </div>
+
+    {% if not cpls %}
+        <div class="alert alert-light border" role="alert">Nenhuma CPL ativa cadastrada no momento.</div>
+    {% else %}
+        <div class="row row-cols-1 row-cols-md-2 g-3">
+            {% for cpl in cpls %}
+                <div class="col">
+                    <a href="/cpls/{{ cpl.id }}" class="card h-100 text-decoration-none text-body">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start gap-2">
+                                <h2 class="h5 mb-1">{{ cpl.nome }}</h2>
+                                <span class="badge text-bg-secondary">{{ cpl.sigla }}</span>
+                            </div>
+                            <p class="text-body-secondary small mb-2">
+                                {{ cpl.setor or "Setor não informado" }}
+                                {% if cpl.municipio %} — {{ cpl.municipio }}{% if cpl.uf %}/{{ cpl.uf }}{% endif %}{% endif %}
+                            </p>
+                            <span class="badge text-bg-light border">
+                                <i class="bi bi-award me-1"></i>{{ cpl.nivel_maturidade.value.replace('_', ' ') if cpl.nivel_maturidade else "nível ainda não reconhecido" }}
+                            </span>
+                        </div>
+                    </a>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+{% endblock %}

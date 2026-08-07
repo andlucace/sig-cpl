@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}SIG-CPL — {{ cpl.nome }}{% endblock %}
+{% block nav %}
+    <a href="/login" class="btn btn-primary btn-sm">
+        <i class="bi bi-box-arrow-in-right me-1"></i>Área restrita
+    </a>
+{% endblock %}
+{% block content %}
+    <nav class="mb-3 small">
+        <a href="/cpls" class="link-secondary text-decoration-none">Portal de transparência</a>
+        <i class="bi bi-chevron-right small mx-1"></i>{{ cpl.nome }}
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
+        <div>
+            <h1 class="h3 mb-1">{{ cpl.nome }}</h1>
+            <p class="text-body-secondary mb-0">
+                {{ cpl.sigla }}
+                {% if cpl.setor %} — {{ cpl.setor }}{% endif %}
+                {% if cpl.municipio %} — {{ cpl.municipio }}{% if cpl.uf %}/{{ cpl.uf }}{% endif %}{% endif %}
+            </p>
+        </div>
+        <span class="badge text-bg-light border fs-6">
+            <i class="bi bi-award me-1"></i>{{ cpl.nivel_maturidade.value.replace('_', ' ') if cpl.nivel_maturidade else "nível ainda não reconhecido" }}
+        </span>
+    </div>
+
+    <div class="row row-cols-2 row-cols-md-4 g-3 mb-4">
+        <div class="col">
+            <div class="card kpi-card h-100">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <div class="kpi-icon bg-primary-subtle text-primary"><i class="bi bi-building"></i></div>
+                    <div>
+                        <div class="kpi-valor">{{ resultados.total_empresas }}</div>
+                        <div class="text-body-secondary small">Empresas na cadeia</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card kpi-card h-100">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <div class="kpi-icon bg-success-subtle text-success"><i class="bi bi-people-fill"></i></div>
+                    <div>
+                        <div class="kpi-valor">{{ resultados.soma_empregos_diretos }}</div>
+                        <div class="text-body-secondary small">Empregos diretos</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card kpi-card h-100">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <div class="kpi-icon bg-info-subtle text-info"><i class="bi bi-diagram-3"></i></div>
+                    <div>
+                        <div class="kpi-valor">{{ governanca.total_orgaos }}</div>
+                        <div class="text-body-secondary small">Órgãos de governança</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="card kpi-card h-100">
+                <div class="card-body d-flex align-items-center gap-3">
+                    <div class="kpi-icon bg-warning-subtle text-warning"><i class="bi bi-kanban"></i></div>
+                    <div>
+                        <div class="kpi-valor">{{ projetos|length }}</div>
+                        <div class="text-body-secondary small">Projetos autorizados</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-transparent">
+                    <i class="bi bi-people me-1"></i>Governança
+                </div>
+                <div class="card-body">
+                    <p class="text-body-secondary small">
+                        {{ governanca.reunioes_realizadas }} reunião(ões) realizada(s) e
+                        {{ governanca.deliberacoes_aprovadas }} deliberação(ões) aprovada(s) até o momento.
+                    </p>
+                    {% if not orgaos %}
+                        <p class="text-body-secondary small mb-0">Nenhum órgão de governança ativo.</p>
+                    {% else %}
+                        <ul class="list-group list-group-flush">
+                            {% for orgao in orgaos %}
+                                <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="fw-semibold">{{ orgao.nome }}</div>
+                                        <div class="text-body-secondary small">
+                                            {{ orgao.tipo.value.replace('_', ' ') }}
+                                            {% if orgao.periodicidade %} — {{ orgao.periodicidade }}{% endif %}
+                                        </div>
+                                    </div>
+                                    <span class="badge text-bg-light border">{{ orgao.total_membros_ativos }} membro(s)</span>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-transparent">
+                    <i class="bi bi-calendar-event me-1"></i>Agenda
+                </div>
+                <div class="card-body">
+                    {% if not agenda %}
+                        <p class="text-body-secondary small mb-0">Nenhum compromisso futuro divulgado.</p>
+                    {% else %}
+                        <ul class="list-group list-group-flush">
+                            {% for item in agenda %}
+                                <li class="list-group-item px-0">
+                                    <div class="d-flex justify-content-between align-items-start gap-2">
+                                        <div>
+                                            <div class="fw-semibold">{{ item.titulo }}</div>
+                                            <div class="text-body-secondary small">
+                                                {{ item.origem }}{% if item.local %} — {{ item.local }}{% endif %}
+                                            </div>
+                                        </div>
+                                        <span class="badge {{ 'text-bg-info' if item.tipo == 'evento' else 'text-bg-secondary' }}">
+                                            {{ item.data.strftime('%d/%m/%Y %H:%M') }}
+                                        </span>
+                                    </div>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-transparent">
+                    <i class="bi bi-kanban me-1"></i>Projetos autorizados
+                </div>
+                <div class="card-body">
+                    {% if not projetos %}
+                        <p class="text-body-secondary small mb-0">Nenhum projeto autorizado divulgado ainda.</p>
+                    {% else %}
+                        <div class="row row-cols-1 row-cols-md-2 g-3">
+                            {% for projeto in projetos %}
+                                <div class="col">
+                                    <div class="border rounded p-3 h-100">
+                                        <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+                                            <span class="fw-semibold">{{ projeto.titulo }}</span>
+                                            <span class="badge text-bg-light border">{{ projeto.estagio.value.replace('_', ' ') }}</span>
+                                        </div>
+                                        {% if projeto.eixo_sp_produz %}
+                                            <div class="text-body-secondary small mb-1">{{ projeto.eixo_sp_produz }}</div>
+                                        {% endif %}
+                                        {% if projeto.descricao %}
+                                            <p class="small mb-0">{{ projeto.descricao }}</p>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

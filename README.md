@@ -1629,6 +1629,50 @@ e um pipeline de CI/CD:
   `deploy.sh`) — automatizar esse último passo é próximo passo, não
   parte deste fechamento.
 
+## Portal de transparência (RF-055)
+
+O portal público (`app/web/routes_publico.py`) até aqui só tinha uma página
+institucional estática. RF-055 pede pra publicar governança, agenda,
+resultados e projetos autorizados "sem exposição de dados pessoais ou
+sigilosos" — a restrição de privacidade moldou cada decisão abaixo:
+
+- **`GET /cpls`** — lista de todas as CPLs ativas do programa (nome,
+  sigla, setor, município/UF, nível de maturidade), sem autenticação.
+  **`GET /cpls/{id}`** — página de uma CPL, também sem autenticação.
+- **Governança**: reaproveita `resumo_governanca()` (RF-045, já um dict
+  agregado — total de órgãos, reuniões realizadas, deliberações
+  aprovadas) e uma função nova, `estrutura_governanca_publica()`
+  (`app/services/indicadores.py`), que lista os órgãos ativos por
+  nome/tipo/periodicidade e a **quantidade** de membros ativos — nunca o
+  nome de quem os compõe. Testado explicitamente (`assert "<nome da
+  pessoa>" not in resposta.text`) pra não confiar só em "não escrevi o
+  campo no template", e sim confirmar que o dado nem chega na resposta.
+- **Agenda**: `agenda_publica()` combina reuniões de governança futuras
+  (`Reuniao.status == AGENDADA`, só data/título/local — a pauta fica de
+  fora, pode tratar de assunto ainda não deliberado) com eventos abertos
+  (RF-050, capacitações/mentorias/missões técnicas, globais da
+  plataforma ou locais da CPL), ordenados juntos por data.
+- **Resultados**: reaproveita `resumo_cadastral()` (RF-046/047) — já é
+  um agregado sem dado individual (percentuais, somas, distribuições),
+  então não precisou de tratamento adicional pra ir ao público.
+- **Projetos autorizados**: `projetos_autorizados()`
+  (`app/services/projeto.py`) filtra só os estágios
+  `aprovado`/`em_execucao`/`concluido` — `demanda`/`em_elaboracao`/
+  `submetido` ficam de fora porque ainda não são um resultado decidido
+  (podem revelar estratégia de uma empresa demandante antes de ser
+  pública) e `rejeitado`/`cancelado` não é resultado a divulgar. Só
+  título, descrição e eixo do Programa SP Produz aparecem — nunca
+  `responsavel_id` nem valores financeiros (RF-041/045 já cobrem esses
+  detalhes para quem está autenticado; não é o propósito deste portal).
+- **Fora de escopo desta fatia**: o mapa da cadeia (RF-011) continua
+  restrito à área logada — RF-055 não pede georreferenciamento, e
+  publicar CNPJ/localização de empresa sem que RF-011 tenha sido pensado
+  para isso seria escopo novo, não fechamento do RF-055. "Notícia"/
+  "aviso" como conteúdo editorial (texto livre, não vinculado a um
+  evento ou reunião existente) também não ganhou modelo — o requisito
+  não define esse conceito separado de "agenda"/"resultados", que já
+  estão cobertos.
+
 ## Observabilidade (RNF-012)
 
 Sem infraestrutura externa nova (Prometheus/Grafana/Sentry) — falhas
@@ -1845,7 +1889,13 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
     contrato" do RF-054) ou definidos manualmente; mapa Leaflet por CPL
     com marcador colorido por tipo de entidade. 43 testes automatizados
     (pytest, banco Postgres de teste isolado) e lint (ruff) limpos,
-    rodando em CI (GitHub Actions) a cada push/PR. Restam no documento
-    de requisitos, ainda não iniciados: RF-055 (portal público
-    expandido) e RF-057 (assistência de IA, declaradamente fora do
-    MVP).
+    rodando em CI (GitHub Actions) a cada push/PR. Restou no documento
+    de requisitos, ainda não iniciado nesta altura: RF-055 (portal
+    público expandido) — RF-057 (assistência de IA) segue
+    declaradamente fora do MVP.
+20. ~~RF-055: portal público de transparência~~ — **feito**: ver seção
+    "Portal de transparência (RF-055)" abaixo. `/cpls` (lista de CPLs
+    ativas) e `/cpls/{id}` (governança, agenda, resultados e projetos
+    autorizados de uma CPL), sem autenticação nenhuma. Com isso, **do
+    documento de requisitos original só resta RF-057** (assistência de
+    IA), declaradamente fora do MVP.

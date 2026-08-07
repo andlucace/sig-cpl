@@ -6,13 +6,15 @@ import uuid
 from collections import Counter
 from datetime import UTC, date, datetime, timedelta
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.cadastro_dinamico import DiagnosticoCadastral, DiagnosticoCadastralHistorico
 from app.models.cpl import CPL
 from app.models.documento import Documento
 from app.models.entidade import EntidadeCPL
-from app.models.enums import ResultadoDeliberacao, StatusReuniao, StatusTarefa
+from app.models.enums import ResultadoDeliberacao, StatusEvento, StatusReuniao, StatusTarefa
+from app.models.evento import Evento
 from app.models.governanca import Deliberacao, MembroOrgao, OrgaoGovernanca, Reuniao, TarefaGovernanca
 from app.models.planejamento import (
     IndicadorEstrategico,
@@ -440,3 +442,79 @@ def feed_bi_cpls(db: Session, cpl_ids: list[uuid.UUID] | None = None) -> list[di
             }
         )
     return linhas
+
+
+def estrutura_governanca_publica(db: Session, cpl_id: uuid.UUID) -> list[dict]:
+    """RF-055: composição da governança para o portal público — só
+    estrutura (nome do órgão, tipo, periodicidade e quantidade de
+    membros ativos), nunca os nomes das pessoas que os compõem. RF-055
+    exige "sem exposição de dados pessoais"; `resumo_governanca` acima já
+    cobre as contagens agregadas (reuniões realizadas, deliberações
+    aprovadas etc.) que também entram no portal."""
+
+    orgaos = (
+        db.query(OrgaoGovernanca)
+        .filter(OrgaoGovernanca.cpl_id == cpl_id, OrgaoGovernanca.ativo.is_(True))
+        .order_by(OrgaoGovernanca.nome)
+        .all()
+    )
+    return [
+        {
+            "nome": orgao.nome,
+            "tipo": orgao.tipo,
+            "periodicidade": orgao.periodicidade,
+            "total_membros_ativos": db.query(MembroOrgao)
+            .filter(MembroOrgao.orgao_id == orgao.id, MembroOrgao.ativo.is_(True))
+            .count(),
+        }
+        for orgao in orgaos
+    ]
+
+
+def agenda_publica(db: Session, cpl_id: uuid.UUID) -> list[dict]:
+    """RF-055: próximos compromissos públicos de uma CPL — reuniões de
+    governança futuras (só data/título/local; a pauta fica de fora, pode
+    tratar de assunto ainda não deliberado) e eventos abertos (RF-050,
+    capacitações/mentorias/missões técnicas — globais da plataforma ou
+    locais desta CPL), combinados numa lista só, ordenada por data."""
+
+    agora = datetime.now(UTC)
+    reunioes = (
+        db.query(Reuniao)
+        .join(OrgaoGovernanca, Reuniao.orgao_id == OrgaoGovernanca.id)
+        .filter(
+            OrgaoGovernanca.cpl_id == cpl_id,
+            Reuniao.status == StatusReuniao.AGENDADA,
+            Reuniao.data_hora >= agora,
+        )
+        .all()
+    )
+    eventos = (
+        db.query(Evento)
+        .filter(
+            or_(Evento.cpl_id == cpl_id, Evento.cpl_id.is_(None)),
+            Evento.status == StatusEvento.AGENDADO,
+            Evento.data_inicio >= agora,
+        )
+        .all()
+    )
+    itens = [
+        {
+            "tipo": "reuniao",
+            "titulo": reuniao.titulo,
+            "data": reuniao.data_hora,
+            "local": reuniao.local,
+            "origem": reuniao.orgao.nome,
+        }
+        for reuniao in reunioes
+    ] + [
+        {
+            "tipo": "evento",
+            "titulo": evento.titulo,
+            "data": evento.data_inicio,
+            "local": evento.local,
+            "origem": evento.tipo.value.replace("_", " "),
+        }
+        for evento in eventos
+    ]
+    return sorted(itens, key=lambda item: item["data"])

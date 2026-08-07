@@ -1806,6 +1806,59 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     `ruff check .` (limpo) — nenhum erro real de servidor/500/traceback
     no log em nenhuma das duas verificações.
 
+41. **RF-055: portal público de transparência** — usuário perguntou
+    "qual próxima etapa de implementação?" depois do fechamento do
+    RF-011/RNF-011; categorizei o que restava do documento de requisitos
+    (não iniciado / decisão de negócio / config pendente / escopo
+    deliberado / RNF de maturidade organizacional) e recomendei RF-055
+    por ser o único RF de alto valor genuinamente não iniciado sem
+    bloqueio externo; usuário pediu "Implementar RF-055" em seguida.
+    Nenhuma tabela nova, nenhuma migração — é composição de dado que já
+    existe, só numa rota sem autenticação. `GET /cpls` (lista de CPLs
+    ativas) e `GET /cpls/{id}` (página por CPL) em
+    `app/web/routes_publico.py`. A restrição "sem exposição de dados
+    pessoais ou sigilosos" do próprio requisito moldou cada decisão:
+    - **Governança**: reaproveitou `resumo_governanca()` (RF-045, já
+      agregado) direto; função nova `estrutura_governanca_publica()`
+      (`app/services/indicadores.py`) lista órgãos por
+      nome/tipo/periodicidade + **contagem** de membros ativos, nunca
+      nome de pessoa. Testado com `assert "<nome>" not in
+      resposta.text` — confirmando que o dado não chega na resposta, não
+      só que o template não o imprime.
+    - **Agenda**: função nova `agenda_publica()` combina `Reuniao`
+      futuras (status `agendada`, só data/título/local — pauta fica de
+      fora, pode tratar de algo ainda não deliberado) com `Evento`
+      abertos (RF-050, globais ou da CPL), ordenados juntos por data.
+    - **Resultados**: reaproveitou `resumo_cadastral()` (RF-046/047) sem
+      nenhuma alteração — já era um agregado sem dado individual.
+    - **Projetos autorizados**: função nova `projetos_autorizados()`
+      (`app/services/projeto.py`) filtra só estágio
+      `aprovado`/`em_execucao`/`concluido` — critério pra "autorizado"
+      não estava explícito no requisito, então mapeei pro subconjunto de
+      `EstagioProjeto` que já passou por decisão formal (`demanda`/
+      `em_elaboracao`/`submetido` ainda não são resultado decidido, pode
+      vazar estratégia da empresa demandante antes de ser pública;
+      `rejeitado`/`cancelado` não é resultado a divulgar). Só campos
+      textuais (título/descrição/eixo) — sem `responsavel_id` nem
+      qualquer valor financeiro, que `resumo_projetos_cpl` (RF-045)
+      inclui mas não é apropriado pro portal público.
+    - **Escopo deliberado, não esquecido**: mapa da cadeia (RF-011)
+      continua restrito à área logada — RF-055 não pede
+      georreferenciamento, publicar localização/CNPJ de empresa sem
+      RF-011 ter sido desenhado pra isso seria escopo novo. "Notícia"/
+      "aviso" como conteúdo editorial próprio também não ganhou modelo —
+      o requisito não distingue esse conceito de "agenda"/"resultados",
+      já cobertos pelo que existe.
+    Sem migração (zero tabela/coluna nova). Testado: local via curl
+    (lista pública, detalhe de uma CPL real do banco de dev, 404 pra CPL
+    inexistente) e um teste manual direto no banco confirmando que o
+    nome de uma pessoa membro de órgão de governança **não** aparece no
+    HTML renderizado; Playwright (`rf055_shot.js`, zero erro de console,
+    screenshot confirmando layout); 4 testes automatizados novos
+    (`tests/test_portal_publico.py`) cobrindo autenticação zero, ausência
+    de nome de pessoa, 404 de CPL inexistente e filtro correto de
+    estágio de projeto — suíte completa em 47 (43 + 4), ruff limpo.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for
@@ -2331,6 +2384,20 @@ ordem recomendada para o que vem depois:
     assistiva, fora do MVP por definição) — os dois únicos restantes.
     CD (implantação automática em produção) não entrou neste
     fechamento — reimplantação segue manual via `deploy.sh`.
+21. ~~RF-055: portal público de transparência~~ — **feito**: ver item 41
+    da seção "Ordem em que este projeto foi construído". `/cpls`
+    (lista) e `/cpls/{id}` (detalhe: governança, agenda, resultados e
+    projetos autorizados), sem autenticação — cada seção reaproveita
+    agregação já existente (`resumo_governanca`/`resumo_cadastral`) ou
+    filtra pra excluir dado pessoal/ainda-não-decidido
+    (`estrutura_governanca_publica`, `agenda_publica`,
+    `projetos_autorizados`, todas novas). **Pendência real, não de
+    código**: nenhuma nova — SMTP em produção (item 14) segue sendo a
+    única pendência de configuração aberta. **Do documento de
+    requisitos original, só resta RF-057** (assistência de IA),
+    declaradamente fora do MVP — é o único requisito funcional que
+    ainda não foi endereçado de alguma forma (implementado, parcial por
+    decisão de negócio, ou escopo deliberadamente adiado).
 
 ## Deploy em produção
 

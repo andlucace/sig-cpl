@@ -17,7 +17,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.enums import StatusRecurso, StatusRisco, StatusTarefa
+from app.models.enums import EstagioProjeto, StatusRecurso, StatusRisco, StatusTarefa
 from app.models.projeto import (
     AlteracaoPlanoProjeto,
     AquisicaoProjeto,
@@ -227,3 +227,26 @@ def resumo_projetos_cpl(db: Session, cpl_id: uuid.UUID) -> dict:
         "total_metas": len(metas),
         "metas_concluidas": sum(1 for m in metas if m.status == StatusTarefa.CONCLUIDA),
     }
+
+
+_ESTAGIOS_AUTORIZADOS = (EstagioProjeto.APROVADO, EstagioProjeto.EM_EXECUCAO, EstagioProjeto.CONCLUIDO)
+
+
+def projetos_autorizados(db: Session, cpl_id: uuid.UUID) -> list[Projeto]:
+    """RF-055: projetos autorizados de uma CPL para o portal público — só
+    os estágios em que o projeto já passou por aprovação formal
+    (aprovado/em execução/concluído). `demanda`/`em_elaboracao`/
+    `submetido` ficam de fora porque ainda não são um resultado decidido
+    (podem tratar de estratégia da empresa demandante que ainda não é
+    pública); `rejeitado`/`cancelado` não é resultado a divulgar. O
+    objeto `Projeto` inteiro é retornado, mas o template só usa campos
+    textuais (título, descrição, eixo, estágio) — nunca `responsavel_id`
+    nem valores financeiros, que não são o propósito deste portal (RF-055
+    exige "sem exposição de dados pessoais ou sigilosos")."""
+
+    return (
+        db.query(Projeto)
+        .filter(Projeto.cpl_id == cpl_id, Projeto.estagio.in_(_ESTAGIOS_AUTORIZADOS))
+        .order_by(Projeto.titulo)
+        .all()
+    )
