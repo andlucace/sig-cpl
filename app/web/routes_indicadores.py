@@ -25,6 +25,7 @@ from app.services.geracao_documentos import (
     gerar_pdf_relatorio_executivo,
     gerar_pdf_relatorio_impacto,
 )
+from app.services.ia_assistente import IAIndisponivel, gerar_assistente_ia, ia_disponivel
 from app.services.indicadores import (
     catalogo_indicadores,
     registrar_valor_indicador,
@@ -68,6 +69,16 @@ def selecionar_cpl(
     )
 
 
+def _dados_dashboard(db: Session, cpl_id: uuid.UUID) -> dict:
+    return {
+        "cadastral": resumo_cadastral(db, cpl_id),
+        "governanca": resumo_governanca(db, cpl_id),
+        "planejamento": resumo_planejamento(db, cpl_id),
+        "projetos_resumo": resumo_projetos_cpl(db, cpl_id),
+        "maturidade": resumo_recadastramento(db, cpl_id),
+    }
+
+
 @router.get("/cpls/{cpl_id}")
 def dashboard(
     request: Request,
@@ -88,14 +99,63 @@ def dashboard(
         {
             "cpl": cpl,
             "indicadores": catalogo_indicadores(db, cpl_id),
-            "cadastral": resumo_cadastral(db, cpl_id),
-            "governanca": resumo_governanca(db, cpl_id),
-            "planejamento": resumo_planejamento(db, cpl_id),
-            "projetos_resumo": resumo_projetos_cpl(db, cpl_id),
-            "maturidade": resumo_recadastramento(db, cpl_id),
+            **_dados_dashboard(db, cpl_id),
             "ano_atual": date.today().year,
             "usuario": usuario,
             "pagina_ativa": "indicadores",
+            "ia_disponivel": ia_disponivel(),
+        },
+    )
+
+
+@router.post("/cpls/{cpl_id}/assistente-ia")
+def assistente_ia(
+    request: Request,
+    cpl_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-057: gera uma sugestão de síntese, verificação de consistência
+    e lacunas via IA sobre os indicadores já visíveis no dashboard —
+    nunca persiste nada, só reapresenta a mesma tela com o resultado.
+    Revisão humana obrigatória (o texto é só uma sugestão, quem decide
+    o que fazer com ele é sempre uma pessoa)."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    cpl = db.get(CPL, cpl_id)
+    if cpl is None:
+        return RedirectResponse("/painel/indicadores", status_code=status.HTTP_303_SEE_OTHER)
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=cpl_id)
+
+    dados = _dados_dashboard(db, cpl_id)
+    assistente_ia_resultado = None
+    assistente_ia_erro = None
+    try:
+        assistente_ia_resultado = gerar_assistente_ia(
+            cpl,
+            dados["cadastral"],
+            dados["governanca"],
+            dados["planejamento"],
+            dados["projetos_resumo"],
+            dados["maturidade"],
+        )
+    except IAIndisponivel as exc:
+        assistente_ia_erro = str(exc)
+
+    return templates.TemplateResponse(
+        request,
+        "restrito/indicadores/cpl_dashboard.html",
+        {
+            "cpl": cpl,
+            "indicadores": catalogo_indicadores(db, cpl_id),
+            **dados,
+            "ano_atual": date.today().year,
+            "usuario": usuario,
+            "pagina_ativa": "indicadores",
+            "ia_disponivel": ia_disponivel(),
+            "assistente_ia_resultado": assistente_ia_resultado,
+            "assistente_ia_erro": assistente_ia_erro,
         },
     )
 

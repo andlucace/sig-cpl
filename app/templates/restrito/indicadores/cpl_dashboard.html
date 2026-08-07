@@ -24,8 +24,58 @@
                     <i class="bi bi-file-earmark-pdf me-1"></i>Gerar relatório executivo em PDF
                 </button>
             </form>
+            <form method="post" action="/painel/indicadores/cpls/{{ cpl.id }}/assistente-ia">
+                <button type="submit" class="btn btn-outline-secondary" {{ "disabled" if not ia_disponivel }}>
+                    <i class="bi bi-stars me-1"></i>Assistente de IA (RF-057)
+                </button>
+            </form>
         </div>
     </div>
+
+    {% if not ia_disponivel %}
+        <div class="alert alert-light border small d-flex gap-2 mb-4" role="alert">
+            <i class="bi bi-info-circle"></i>
+            <div>Assistente de IA ainda não configurado nesta implantação (falta a credencial da Anthropic).</div>
+        </div>
+    {% endif %}
+
+    {% if assistente_ia_erro %}
+        <div class="alert alert-warning small" role="alert">{{ assistente_ia_erro }}</div>
+    {% endif %}
+
+    {% if assistente_ia_resultado %}
+        <div class="card mb-4 border-primary-subtle">
+            <div class="card-header bg-primary-subtle bg-opacity-25 d-flex align-items-center gap-2">
+                <i class="bi bi-stars text-primary"></i>
+                <span class="fw-semibold">Sugestão do assistente de IA</span>
+                <span class="badge text-bg-light border ms-auto">Revisão humana obrigatória</span>
+            </div>
+            <div class="card-body small">
+                <p class="text-body-secondary fst-italic mb-3">
+                    Rascunho gerado por IA a partir dos indicadores acima — não é uma decisão automática.
+                    Confira os números antes de usar este texto em qualquer relatório ou decisão.
+                </p>
+                <p class="fw-semibold mb-1">Síntese</p>
+                <p>{{ assistente_ia_resultado.sintese }}</p>
+                {% if assistente_ia_resultado.verificacao_consistencia %}
+                    <p class="fw-semibold mb-1 mt-3">Pontos de atenção</p>
+                    <ul class="mb-0">
+                        {% for item in assistente_ia_resultado.verificacao_consistencia %}
+                            <li>{{ item }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+                {% if assistente_ia_resultado.lacunas_sugeridas %}
+                    <p class="fw-semibold mb-1 mt-3">Lacunas sugeridas</p>
+                    <ul class="mb-0">
+                        {% for item in assistente_ia_resultado.lacunas_sugeridas %}
+                            <li>{{ item }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
 
     <div class="row row-cols-2 row-cols-md-6 g-3 mb-4">
         <div class="col">

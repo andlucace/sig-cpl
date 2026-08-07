@@ -1328,6 +1328,12 @@ VPS Hostinger:
   definido (usado para montar o link absoluto do e-mail) — sem ele, o
   padrão de dev (`http://127.0.0.1:8000`) vazaria pro e-mail em
   produção.
+- **`ANTHROPIC_API_KEY` (RF-057, assistente de IA)**: ausente em
+  `.env.prod` até alguém preencher uma chave real da Anthropic; até lá,
+  o botão "Assistente de IA" do dashboard de indicadores fica
+  desabilitado (degradação graciosa, não erro) — ver seção "Assistente
+  de IA (RF-057)" acima. `ANTHROPIC_MODEL` é opcional (padrão
+  `claude-sonnet-5`).
 
 ### Como reimplantar depois de mudar código
 
@@ -1673,6 +1679,52 @@ sigilosos" — a restrição de privacidade moldou cada decisão abaixo:
   não define esse conceito separado de "agenda"/"resultados", que já
   estão cobertos.
 
+## Assistente de IA (RF-057)
+
+O requisito original marcava isto como "evolução futura", fora do MVP —
+foi deliberadamente deixado pendente em toda a documentação até o usuário
+pedir explicitamente pra implementar. Depende de duas decisões que só ele
+podia tomar (qual provedor de IA, e se já havia credencial disponível),
+resolvidas via `AskUserQuestion`: provedor **Anthropic (Claude)**,
+construído com degradação graciosa (mesmo padrão do SMTP, RF-004) até
+uma `ANTHROPIC_API_KEY` real existir em produção.
+
+- **Onde aparece**: botão "Assistente de IA (RF-057)" no dashboard de
+  indicadores de uma CPL (`/painel/indicadores/cpls/{id}`,
+  `PAPEIS_GESTAO` — mesma restrição já usada pra gerar relatório em PDF,
+  já que também é uma "ação", não só leitura). Desabilitado quando a
+  função não está configurada, com um aviso explicando o motivo.
+- **O que faz**: `app/services/ia_assistente.py::gerar_assistente_ia`
+  envia ao Claude uma curadoria manual dos mesmos agregados já
+  mostrados no próprio dashboard (`resumo_cadastral`, `resumo_governanca`,
+  `resumo_planejamento`, `resumo_projetos_cpl`, `resumo_recadastramento`
+  — nunca a lista de objetos ou dado de pessoa, mesmo cuidado de
+  anonimização do portal público, RF-055) e pede de volta um JSON
+  estruturado com três seções: **síntese** (parágrafo em linguagem
+  clara), **verificação de consistência** (contradições/sinais de
+  atenção nos números) e **lacunas sugeridas** (o que os dados não
+  cobrem, complementando — sem repetir — as lacunas já calculadas por
+  regra em `lacunas_avaliacao_vigente`, RF-024).
+- **"Revisão humana obrigatória"**: o resultado nunca é persistido no
+  banco nem aplicado a nada automaticamente — é só reapresentado na
+  mesma tela do dashboard, com o rótulo "revisão humana obrigatória"
+  visível, pra quem já tem papel de gestão ler e decidir o que fazer com
+  ele (copiar pra um relatório, ignorar, investigar um ponto de
+  atenção). Recarregar a página descarta o resultado.
+- **Degradação graciosa**: sem `ANTHROPIC_API_KEY`, `ia_disponivel()`
+  retorna `False` (botão desabilitado) e `gerar_assistente_ia()` levanta
+  `IAIndisponivel` direto, sem tentar rede — mesmo raciocínio de
+  `smtp_host` ausente (RF-004). Qualquer falha da API (rede, autenticação,
+  resposta em formato inesperado) também vira `IAIndisponivel`, capturada
+  na rota e mostrada como aviso — nunca um 500. Testado tanto mockado
+  (`tests/test_ia_assistente.py`, sem chamada de rede real) quanto contra
+  o endpoint real da Anthropic com uma chave inválida, confirmando que o
+  caminho de erro de fato funciona fim a fim, não só no mock.
+- **Sem dependência nova de infraestrutura**: usa o SDK oficial
+  (`anthropic`, adicionado às dependências do projeto), chamado de forma
+  síncrona nas rotas síncronas de sempre (mesmo padrão de toda chamada
+  bloqueante já existente — psycopg, SMTP, geocodificação).
+
 ## Observabilidade (RNF-012)
 
 Sem infraestrutura externa nova (Prometheus/Grafana/Sentry) — falhas
@@ -1899,3 +1951,17 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
     autorizados de uma CPL), sem autenticação nenhuma. Com isso, **do
     documento de requisitos original só resta RF-057** (assistência de
     IA), declaradamente fora do MVP.
+21. ~~RF-057: assistência de IA~~ — **feito**: ver seção "Assistente de
+    IA (RF-057)" abaixo. Botão no dashboard de indicadores de uma CPL,
+    usando a API da Anthropic sobre os mesmos agregados já mostrados no
+    painel; devolve síntese, verificação de consistência e lacunas
+    sugeridas, sempre rotulado "revisão humana obrigatória", nunca
+    persistido nem aplicado a nada automaticamente. Sem
+    `ANTHROPIC_API_KEY`, degrada graciosamente (mesmo padrão do SMTP,
+    RF-004) — pendência de credencial em produção, não de código. **Com
+    isso, todo requisito funcional do documento original foi endereçado**
+    de alguma forma (implementado, parcial por decisão de negócio
+    documentada, ou config pendente) — o que resta no projeto agora são
+    só os RNFs de maturidade organizacional (privacidade formal,
+    retenção, qualidade de dados, continuidade) e o fluxo F01 de
+    autoatendimento, nenhum dos dois um RF numerado do documento.

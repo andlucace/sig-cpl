@@ -20,6 +20,7 @@ dependencies = [
     "fpdf2>=2.7",
     "pyotp>=2.9",
     "qrcode[pil]>=7.4",
+    "anthropic>=0.40",
 ]
 
 [project.optional-dependencies]

@@ -1859,6 +1859,73 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     de nome de pessoa, 404 de CPL inexistente e filtro correto de
     estágio de projeto — suíte completa em 47 (43 + 4), ruff limpo.
 
+42. **RF-057: assistente de IA** — usuário pediu "Implementar a RF-057"
+    logo depois do fechamento do RF-055. Diferente de todo RF anterior
+    desta sessão, este dependia de duas decisões que só o usuário podia
+    tomar (qual provedor de IA; se já havia credencial) — perguntei via
+    `AskUserQuestion` em vez de decidir sozinho, mesma classe de situação
+    do RF-054 (assinatura eletrônica/sistemas institucionais, que ficaram
+    pendentes por essa mesma razão). Respostas: **Anthropic (Claude)**,
+    construir com **degradação graciosa** (sem chave ainda) — mesmo
+    padrão já usado pro SMTP (RF-004).
+    - Adicionada dependência `anthropic` (SDK oficial) ao `pyproject.toml`
+      e `anthropic_api_key`/`anthropic_model` (padrão `claude-sonnet-5`)
+      a `app/core/config.py` — `anthropic_api_key` ausente é o sinal de
+      "não configurado", mesmo raciocínio de `smtp_host`.
+    - `app/services/ia_assistente.py` (novo) — `ia_disponivel()` checa
+      se a chave existe; `gerar_assistente_ia(cpl, cadastral, governanca,
+      planejamento, projetos_resumo, maturidade)` monta um contexto
+      JSON curado manualmente a partir dos mesmos agregados já usados no
+      dashboard de indicadores (RF-045) — nunca a lista de objetos
+      (`avaliacoes`, `projetos`) nem dado de pessoa, mesmo cuidado do
+      portal público (RF-055) — envia ao Claude pedindo um JSON
+      estruturado de volta (`sintese`, `verificacao_consistencia`,
+      `lacunas_sugeridas`) e devolve um dict. `IAIndisponivel` levantada
+      sem chave, em qualquer `anthropic.APIError` (rede/autenticação/
+      limite) ou resposta em formato inesperado (JSON malformado) — nunca
+      um 500 pro usuário final.
+    - **Bug pego durante o desenvolvimento, antes de qualquer teste
+      rodar**: `lacunas_avaliacao_vigente` (de `resumo_recadastramento`,
+      RF-048) é uma lista de objetos ORM `AvaliacaoCriterio`, não
+      serializável em JSON — meu primeiro rascunho passava a lista
+      direto pro `json.dumps()`, que teria quebrado na primeira chamada
+      de verdade. Corrigido extraindo o mesmo texto que o dashboard já
+      renderiza (`f"{nota.criterio.nome}: nota {nota.nota} (corte:
+      {nota.criterio.nota_corte})"`) antes de montar o contexto.
+    - `app/web/routes_indicadores.py` — refatorei a construção do
+      contexto do dashboard pra uma função `_dados_dashboard()`
+      compartilhada entre o `GET` (exibição) e o novo
+      `POST /painel/indicadores/cpls/{id}/assistente-ia`
+      (`PAPEIS_GESTAO`, mesma restrição da geração de relatório em PDF —
+      é uma "ação", não só leitura). O `POST` nunca persiste nada: só
+      reapresenta a mesma página do dashboard com o resultado (ou o erro
+      amigável) — "revisão humana obrigatória" do requisito veio daí:
+      recarregar a página descarta a sugestão, ela nunca vira uma
+      decisão automática de nada.
+    - Template `cpl_dashboard.html` — botão "Assistente de IA (RF-057)"
+      (desabilitado quando `ia_disponivel` é falso, com aviso explicando
+      o motivo) e um card novo mostrando síntese/pontos de
+      atenção/lacunas sugeridas quando há resultado, rotulado "Revisão
+      humana obrigatória" de forma bem visível.
+    - Testado: 8 testes automatizados novos (`tests/test_ia_assistente.py`)
+      — sem chave (levanta `IAIndisponivel`), sucesso mockado, JSON
+      malformado mockado, erro de API mockado (`anthropic.APIConnectionError`),
+      RBAC (papel sem `PAPEIS_GESTAO` recebe 403), rota degradando sem
+      chave configurada. **Também testado contra o endpoint real da
+      Anthropic com uma chave inválida** (não só mock) — confirmado que
+      o erro 401 de verdade vira a mensagem amigável "Assistente de IA
+      indisponível no momento." em vez de vazar o corpo bruto da
+      resposta (ajustado depois de ver o texto completo do erro exposto
+      na tela na primeira tentativa — mensagem curta de propósito,
+      mesmo padrão de `GeocodificacaoIndisponivel`/
+      `ConsultaCNPJIndisponivel`). Playwright confirmando botão
+      desabilitado sem chave e degradação graciosa com chave inválida,
+      zero erro de console. Suíte completa em 55 (47 + 8), ruff limpo.
+      **Com isso, todo RF do documento de requisitos original foi
+      endereçado de alguma forma** — resta só RNF de maturidade
+      organizacional (privacidade formal, retenção, qualidade de dados,
+      continuidade) e o fluxo F01 de autoatendimento, nenhum RF numerado.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for
@@ -2398,6 +2465,21 @@ ordem recomendada para o que vem depois:
     declaradamente fora do MVP — é o único requisito funcional que
     ainda não foi endereçado de alguma forma (implementado, parcial por
     decisão de negócio, ou escopo deliberadamente adiado).
+22. ~~RF-057: assistente de IA~~ — **feito**: ver item 42 da seção
+    "Ordem em que este projeto foi construído". Provedor Anthropic
+    (Claude), decisão do usuário via `AskUserQuestion`; botão no
+    dashboard de indicadores de uma CPL (`PAPEIS_GESTAO`) gerando
+    síntese/verificação de consistência/lacunas sugeridas sobre os
+    agregados já existentes, sempre rotulado "revisão humana
+    obrigatória", nunca persistido. **Pendência real, não de código**:
+    `ANTHROPIC_API_KEY` ainda não existe em produção — mesma natureza da
+    pendência de SMTP (item 14); até lá, o botão fica desabilitado, sem
+    quebrar nada. **Com isso, todo requisito funcional (RF) do documento
+    de requisitos original foi endereçado de alguma forma.** O que resta
+    no projeto agora são só RNFs de maturidade organizacional (RNF-002
+    privacidade formal, RNF-005 continuidade/backup, RNF-013 qualidade
+    de dados, RNF-015 retenção) e o fluxo F01 (adesão de membro por
+    autoatendimento) — nenhum dos dois um RF numerado.
 
 ## Deploy em produção
 

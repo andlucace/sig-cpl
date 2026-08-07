@@ -41,6 +41,15 @@ class Settings(BaseSettings):
 
     password_reset_token_expire_minutes: int = 60
 
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-sonnet-5"
+    """RF-057: apoio de IA (síntese, verificação de consistência,
+    sugestão de lacunas) sobre os indicadores de uma CPL — provedor
+    Anthropic (Claude), decisão de negócio do usuário (ver
+    `app/services/ia_assistente.py`). `anthropic_api_key` ausente é o
+    sinal de "IA não configurada ainda", mesmo raciocínio de
+    `smtp_host` ausente (RF-004)."""
+
     observabilidade_alerta_limiar_falhas: int = 5
     observabilidade_alerta_janela_minutos: int = 15
     """RNF-012: se `registros_falha` acumular pelo menos `_limiar_falhas`
