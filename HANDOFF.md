@@ -51,7 +51,7 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   `http://127.0.0.1:8010`** — confira com `netstat -ano | grep 8010` antes
   de subir outro, e mate o processo antigo antes de reiniciar (o servidor
   não usa `--reload`, então mudanças de código exigem restart manual).
-- **Migrações Alembic aplicadas:** 28 revisões, todas no banco atual:
+- **Migrações Alembic aplicadas:** 29 revisões, todas no banco atual:
   1. `18541dca0a36` — modelos base (CPL, Entidade, Pessoa, Usuário)
   2. `0ba4d1a10f9d` — módulo Governança
   3. `5dd913b79202` — módulo Planejamento Estratégico
@@ -142,6 +142,17 @@ usado ad-hoc para testes visuais, ver seção de gotchas).
   28. `970f9469baaa` — colunas `entidades.latitude`/`longitude` (RF-011) —
       sem gotcha nenhum dos dois de sempre (colunas `Float` nulas, nenhum
       enum envolvido)
+  29. `92eefc2fd38f` — tabela `solicitacoes_adesao` (F01) — **gotcha real
+      dos dois de sempre, pego antes de aplicar**: a tabela reaproveita
+      os enums `tipoentidade` (`Entidade.tipo`) e `elo` (`EntidadeElo.elo`)
+      pros campos `tipo`/`elo_pretendido`, ambos criados em migrações
+      anteriores — o arquivo autogerado usava `sa.Enum(...)` puro nos
+      dois, que teria tentado `CREATE TYPE` de novo e quebrado com
+      `DuplicateObject`. Corrigido trocando os dois por
+      `postgresql.ENUM(..., create_type=False)`, mesmo padrão já
+      documentado várias vezes nesta lista — `statussolicitacaoadesao`
+      (novo, campo `status`) ficou com `sa.Enum` normal, sem ajuste,
+      porque esse tipo é criado pela primeira vez nesta migração.
   - (a visão global + paginação da auditoria, feita antes da nº 10,
     **não** precisou de migração — é só query/rota/template novos;
     mesma coisa para RF-041/045/053/017, feitas depois da nº 20)
@@ -1926,6 +1937,76 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
       organizacional (privacidade formal, retenção, qualidade de dados,
       continuidade) e o fluxo F01 de autoatendimento, nenhum RF numerado.
 
+43. **F01: fluxo de autoatendimento (adesão de membro)** — usuário pediu
+    "Vamos implementar o fluxo F01" logo depois do fechamento do RF-057
+    (quando ficou claro que era o único item do modelo conceitual ainda
+    sem cobertura nenhuma). Antes de escrever qualquer código, rodei uma
+    pesquisa (agente Explore) pra mapear o que já existia — descobriu
+    duas lacunas importantes: `EntidadeElo` (RF-009) nunca teve rota de
+    CRUD em lugar nenhum (só leitura, usado no mapa do RF-011), e
+    `PessoaVinculo` nunca foi escrita por nenhum fluxo do sistema em
+    toda a história do projeto (só lida, usada na resolução de
+    visibilidade do RBAC) — ambas viraram parte natural do "vínculo à
+    CPL"/"classificação de elo"/"cadastro" deste fluxo.
+    - **Modelo novo** `SolicitacaoAdesao`
+      (`app/models/adesao.py`) — cadastro básico da entidade + elo
+      pretendido + contato + consentimento LGPD (`consentimento_lgpd`/
+      `consentimento_em`, congelado no momento da submissão) + campos de
+      validação (`status`/`parecer`/`analisado_por_id`/`data_analise`,
+      mesmo padrão de `ItemHabilitacaoJuridica`, RF-027) +
+      `entidade_id` (preenchido só na aprovação). Enum novo
+      `StatusSolicitacaoAdesao` (pendente/aprovada/rejeitada).
+    - **Serviço** `app/services/adesao.py` — `criar_solicitacao` valida
+      consentimento (obrigatório) e formato de CNPJ/CPF/UF (reaproveita
+      `app/services/validadores.py`, RF-014, mesmo padrão dos outros
+      pontos de escrita — este é o quarto). `aprovar_solicitacao` é o
+      coração do fluxo: busca `Entidade` existente por CNPJ/CPF antes de
+      criar (RN-003 — mesma organização pode pedir adesão a uma segunda
+      CPL sem duplicar cadastro), cria/reaproveita `EntidadeCPL` e
+      `EntidadeElo` (idempotente — checa existência antes de inserir, não
+      confia em `try/except IntegrityError`) e registra o contato como
+      `PessoaVinculo` (papel `EMPRESA_MEMBRO`, sem criar `Usuario`/login —
+      isso continua sendo uma ação separada de quem administra).
+      `rejeitar_solicitacao` só muda status/parecer, não cria nada.
+      Reanalisar uma solicitação já decidida levanta `SolicitacaoInvalida`
+      (400) — decisão é definitiva, mesmo raciocínio de "nunca sobrescrever
+      uma decisão humana silenciosamente" já usado em outros lugares.
+    - **Rotas**: API pública `POST /api/cpls/{id}/solicitacoes-adesao`
+      (sem `Depends(get_current_user)` — é a porta de entrada de quem
+      ainda não tem vínculo nenhum) + `GET`/`aprovar`/`rejeitar`
+      (`PAPEIS_GESTAO`, escopado à CPL da solicitação). Web: formulário
+      público em `app/web/routes_publico.py` (`GET`/`POST
+      /cpls/{id}/solicitar-adesao`, linkado a partir da página pública da
+      CPL, RF-055) e tela de gestão em `app/web/routes_cadastro.py`
+      (`/painel/cadastro/cpls/{id}/solicitacoes-adesao`, listar + aprovar
+      + rejeitar, linkada a partir de `cpl_cadastro.html`).
+    - **Migração** `92eefc2fd38f` — gotcha real dos dois de sempre (enum
+      reaproveitado), ver item 29 da lista de migrações acima.
+    - **Escopo deliberado**: "convite" (a outra metade de "Convite/
+      solicitação" do requisito) não ganhou token/e-mail dedicado — a
+      gestão só compartilha a URL pública do formulário, é o mesmo
+      formulário da "solicitação". Criar `Usuario`/login pro contato
+      também ficou de fora — self-service de conta de acesso é uma
+      feature bem mais sensível (segurança) que o requisito não pede
+      explicitamente, e a válvula de bootstrap do primeiro admin já
+      estabelece que criação de conta é deliberadamente controlada por
+      quem administra, não auto-serviço.
+    Testado: local via curl (fluxo completo API — solicitar sem
+    consentimento rejeitado, CNPJ inválido rejeitado, aprovar cria
+    Entidade/EntidadeCPL/EntidadeElo/PessoaVinculo, **aprovar uma segunda
+    solicitação com o mesmo CNPJ pra CPL diferente reaproveita a mesma
+    Entidade em vez de duplicar** — confirmado consultando o banco
+    direto) e Playwright (`f01_shot.js` — formulário público → erro de
+    CNPJ inválido → reenvio válido → página de obrigado → login →
+    tela de gestão → aprovar → aparece no histórico, zero erro de
+    console) mais rerun de `cadastro.js`/`rbac_403_shot.js`/
+    `maturidade_shot.js`/`rf050_051_shot.js` (todos limpos;
+    `cpl_edit_shot.js` falhou por não-idempotência própria do script —
+    sigla fixa colidindo com execução anterior, não relacionado a esta
+    fatia). 11 testes automatizados novos (`tests/test_adesao.py`,
+    inclusive o teste de dedup de entidade por CNPJ entre CPLs
+    diferentes) — suíte completa em 66 (55 + 11), ruff limpo.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for
@@ -2480,6 +2561,24 @@ ordem recomendada para o que vem depois:
     privacidade formal, RNF-005 continuidade/backup, RNF-013 qualidade
     de dados, RNF-015 retenção) e o fluxo F01 (adesão de membro por
     autoatendimento) — nenhum dos dois um RF numerado.
+23. ~~F01: fluxo de autoatendimento (adesão de membro)~~ — **feito**: ver
+    item 43 da seção "Ordem em que este projeto foi construído".
+    Formulário público de solicitação (cadastro + consentimento LGPD) →
+    tela de gestão pra validar → aprovar cria/reaproveita `Entidade`
+    (por CNPJ/CPF, RN-003), vincula à CPL e classifica o elo
+    (`EntidadeElo`, RF-009, ganhou rota de escrita pela primeira vez) —
+    "convite" ficou sem token dedicado, é a mesma URL pública
+    compartilhada por quem convida. **Pendência real, não de código**:
+    nenhuma nova — `ANTHROPIC_API_KEY` (item 22) segue sendo a única
+    pendência de configuração aberta. **Com isso, tanto todo RF quanto o
+    único fluxo de autoatendimento do modelo conceitual (F01) estão
+    endereçados.** O que resta no projeto são só RNFs de maturidade
+    organizacional — RNF-002 (privacidade formal/LGPD como mecanismo
+    genérico, não só no fluxo de adesão), RNF-005 (backup automático),
+    RNF-013 (dicionário de dados/deduplicação/qualidade) e RNF-015
+    (retenção) — nenhum é um requisito funcional numerado, todos são
+    trabalho transversal de maturidade organizacional, não uma feature
+    isolada de implementar.
 
 ## Deploy em produção
 

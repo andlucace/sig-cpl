@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}SIG-CPL — Solicitação enviada{% endblock %}
+{% block nav %}{% endblock %}
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-6">
+            <div class="card text-center">
+                <div class="card-body py-5">
+                    <i class="bi bi-check-circle-fill text-success display-4"></i>
+                    <h1 class="h4 mt-3">Solicitação enviada!</h1>
+                    <p class="text-body-secondary">
+                        Seu pedido de adesão a <strong>{{ cpl.nome }}</strong> foi registrado e será
+                        analisado pela gestão da CPL. Você será contatado pelo e-mail informado assim
+                        que houver uma decisão.
+                    </p>
+                    <a href="/cpls/{{ cpl.id }}" class="btn btn-outline-primary btn-sm mt-2">
+                        Voltar para {{ cpl.nome }}
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

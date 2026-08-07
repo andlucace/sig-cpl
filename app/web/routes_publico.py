@@ -1,10 +1,14 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.cpl import CPL
+from app.models.enums import Elo, TipoEntidade
+from app.schemas.adesao import SolicitacaoAdesaoCreate
+from app.services.adesao import SolicitacaoInvalida, criar_solicitacao
 from app.services.indicadores import (
     agenda_publica,
     estrutura_governanca_publica,
@@ -62,4 +66,100 @@ def detalhe_cpl_publica(cpl_id: uuid.UUID, request: Request, db: Session = Depen
             "agenda": agenda_publica(db, cpl_id),
             "projetos": projetos_autorizados(db, cpl_id),
         },
+    )
+
+
+def _cpl_ativa_ou_404(db: Session, cpl_id: uuid.UUID) -> CPL:
+    cpl = db.query(CPL).filter(CPL.id == cpl_id, CPL.ativo.is_(True)).first()
+    if cpl is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL não encontrada.")
+    return cpl
+
+
+@router.get("/cpls/{cpl_id}/solicitar-adesao")
+def solicitar_adesao_form(cpl_id: uuid.UUID, request: Request, db: Session = Depends(get_db)):
+    """F01: formulário público de solicitação de adesão — nenhum vínculo
+    é criado aqui, só o pedido (ver `criar_solicitacao`); "cadastro" e
+    "consentimento" do fluxo acontecem nesta tela, "validação" fica para
+    quem tem papel de gestão analisar depois."""
+
+    cpl = _cpl_ativa_ou_404(db, cpl_id)
+    return templates.TemplateResponse(
+        request,
+        "publico/solicitar_adesao.html",
+        {"cpl": cpl, "tipos": list(TipoEntidade), "elos": list(Elo), "erro": None, "dados": {}},
+    )
+
+
+@router.post("/cpls/{cpl_id}/solicitar-adesao")
+def solicitar_adesao_submit(
+    cpl_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    tipo: TipoEntidade = Form(...),
+    razao_social: str = Form(...),
+    cnpj: str = Form(""),
+    cpf: str = Form(""),
+    municipio: str = Form(""),
+    uf: str = Form(""),
+    elo_pretendido: Elo = Form(...),
+    mensagem: str = Form(""),
+    contato_nome: str = Form(...),
+    contato_email: str = Form(...),
+    contato_telefone: str = Form(""),
+    consentimento_lgpd: bool = Form(False),
+):
+    cpl = _cpl_ativa_ou_404(db, cpl_id)
+    dados_form = {
+        "tipo": tipo.value,
+        "razao_social": razao_social,
+        "cnpj": cnpj,
+        "cpf": cpf,
+        "municipio": municipio,
+        "uf": uf,
+        "elo_pretendido": elo_pretendido.value,
+        "mensagem": mensagem,
+        "contato_nome": contato_nome,
+        "contato_email": contato_email,
+        "contato_telefone": contato_telefone,
+    }
+    try:
+        payload = SolicitacaoAdesaoCreate(
+            tipo=tipo,
+            razao_social=razao_social,
+            cnpj=cnpj or None,
+            cpf=cpf or None,
+            municipio=municipio or None,
+            uf=uf or None,
+            elo_pretendido=elo_pretendido,
+            mensagem=mensagem or None,
+            contato_nome=contato_nome,
+            contato_email=contato_email,
+            contato_telefone=contato_telefone or None,
+            consentimento_lgpd=consentimento_lgpd,
+        )
+        criar_solicitacao(db, cpl_id, payload)
+    except ValidationError:
+        erro = "E-mail de contato inválido."
+    except SolicitacaoInvalida as exc:
+        erro = str(exc)
+    else:
+        erro = None
+
+    if erro is not None:
+        return templates.TemplateResponse(
+            request,
+            "publico/solicitar_adesao.html",
+            {
+                "cpl": cpl,
+                "tipos": list(TipoEntidade),
+                "elos": list(Elo),
+                "erro": erro,
+                "dados": dados_form,
+            },
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return templates.TemplateResponse(
+        request, "publico/solicitacao_adesao_obrigado.html", {"cpl": cpl}
     )

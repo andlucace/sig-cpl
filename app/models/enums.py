@@ -365,6 +365,17 @@ class TipoRecursoBiblioteca(str, enum.Enum):
     CONTEUDO_TECNICO = "conteudo_tecnico"
 
 
+class StatusSolicitacaoAdesao(str, enum.Enum):
+    """F01: ciclo de vida de um pedido de adesão de membro — pendente até
+    alguém com papel de gestão validar (RN-016, decisão sempre humana);
+    aprovada é o que efetivamente cria/reaproveita a `Entidade` e os
+    vínculos (RF-009/RN-003), rejeitada não cria nada."""
+
+    PENDENTE = "pendente"
+    APROVADA = "aprovada"
+    REJEITADA = "rejeitada"
+
+
 class StatusMatchInovacao(str, enum.Enum):
     """RF-052: ciclo de vida da curadoria humana de um pareamento entre
     demanda e competência — nunca decidido só por algoritmo (RN-016)."""

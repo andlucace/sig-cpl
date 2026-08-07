@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}SIG-CPL — Solicitar adesão — {{ cpl.nome }}{% endblock %}
+{% block nav %}
+    <a href="/login" class="btn btn-primary btn-sm">
+        <i class="bi bi-box-arrow-in-right me-1"></i>Área restrita
+    </a>
+{% endblock %}
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-8">
+            <nav class="mb-3 small">
+                <a href="/cpls" class="link-secondary text-decoration-none">Portal de transparência</a>
+                <i class="bi bi-chevron-right small mx-1"></i>
+                <a href="/cpls/{{ cpl.id }}" class="link-secondary text-decoration-none">{{ cpl.nome }}</a>
+                <i class="bi bi-chevron-right small mx-1"></i>Solicitar adesão
+            </nav>
+
+            <div class="mb-4">
+                <h1 class="h4 mb-1"><i class="bi bi-person-plus text-primary me-2"></i>Solicitar adesão a {{ cpl.nome }}</h1>
+                <p class="text-body-secondary small">
+                    Não é necessário login. Sua entidade não é cadastrada automaticamente — a
+                    solicitação passa pela análise de quem gere esta CPL antes de ser efetivada.
+                </p>
+            </div>
+
+            {% if erro %}
+                <div class="alert alert-danger" role="alert">{{ erro }}</div>
+            {% endif %}
+
+            <form method="post" action="/cpls/{{ cpl.id }}/solicitar-adesao" class="card">
+                <div class="card-body">
+                    <h2 class="h6 text-body-secondary text-uppercase">Dados da entidade</h2>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label">Tipo</label>
+                            <select class="form-select" name="tipo" required>
+                                {% for tipo in tipos %}
+                                    <option value="{{ tipo.value }}" {% if dados.get('tipo') == tipo.value %}selected{% endif %}>{{ tipo.value.replace('_', ' ') }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Razão social</label>
+                            <input type="text" class="form-control" name="razao_social" value="{{ dados.get('razao_social', '') }}" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">CNPJ</label>
+                            <input type="text" class="form-control" name="cnpj" value="{{ dados.get('cnpj', '') }}" placeholder="Só se pessoa jurídica">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">CPF</label>
+                            <input type="text" class="form-control" name="cpf" value="{{ dados.get('cpf', '') }}" placeholder="Só se pessoa física">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Elo pretendido na cadeia</label>
+                            <select class="form-select" name="elo_pretendido" required>
+                                {% for elo in elos %}
+                                    <option value="{{ elo.value }}" {% if dados.get('elo_pretendido') == elo.value %}selected{% endif %}>{{ elo.value.replace('_', ' ') }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Município</label>
+                            <input type="text" class="form-control" name="municipio" value="{{ dados.get('municipio', '') }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">UF</label>
+                            <input type="text" class="form-control" name="uf" maxlength="2" value="{{ dados.get('uf', '') }}">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Mensagem (opcional)</label>
+                            <textarea class="form-control" name="mensagem" rows="2">{{ dados.get('mensagem', '') }}</textarea>
+                        </div>
+                    </div>
+
+                    <h2 class="h6 text-body-secondary text-uppercase">Contato do responsável pela solicitação</h2>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-5">
+                            <label class="form-label">Nome</label>
+                            <input type="text" class="form-control" name="contato_nome" value="{{ dados.get('contato_nome', '') }}" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">E-mail</label>
+                            <input type="email" class="form-control" name="contato_email" value="{{ dados.get('contato_email', '') }}" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Telefone</label>
+                            <input type="text" class="form-control" name="contato_telefone" value="{{ dados.get('contato_telefone', '') }}">
+                        </div>
+                    </div>
+
+                    <div class="form-check mb-4">
+                        <input class="form-check-input" type="checkbox" name="consentimento_lgpd" value="true" id="consentimento" required>
+                        <label class="form-check-label small" for="consentimento">
+                            Autorizo o tratamento dos dados fornecidos neste formulário pela gestão de
+                            <strong>{{ cpl.nome }}</strong>, exclusivamente para análise e, se aprovado,
+                            registro deste pedido de adesão à cadeia produtiva local, nos termos da Lei
+                            Geral de Proteção de Dados (LGPD).
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-send me-1"></i>Enviar solicitação
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock %}

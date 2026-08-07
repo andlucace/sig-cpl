@@ -1725,6 +1725,58 @@ uma `ANTHROPIC_API_KEY` real existir em produção.
   síncrona nas rotas síncronas de sempre (mesmo padrão de toda chamada
   bloqueante já existente — psycopg, SMTP, geocodificação).
 
+## Adesão de membro — autoatendimento (F01)
+
+Único fluxo do modelo conceitual (seção 11 do documento de requisitos)
+que ainda dependia inteiramente de alguém com papel de gestão: "Convite/
+solicitação → cadastro → consentimento → validação → vínculo à CPL →
+classificação de elo → ativação". Até aqui, toda `Entidade` era
+cadastrada e vinculada direto por quem já tinha acesso — sem porta de
+entrada pra quem está de fora.
+
+- **Solicitação (pública, sem login)** — `GET/POST
+  /cpls/{cpl_id}/solicitar-adesao`, linkado a partir da própria página
+  pública da CPL (portal de transparência, RF-055). Cobre "cadastro"
+  (dados básicos da entidade + elo pretendido + contato de quem está
+  solicitando) e "consentimento" (checkbox de LGPD obrigatório —
+  submissão sem ele é rejeitada, nunca silenciosamente ignorada).
+  `app/services/adesao.py::criar_solicitacao` valida CNPJ/CPF/UF
+  (reaproveita `app/services/validadores.py`, RF-014, mesmo padrão dos
+  outros pontos de escrita) e grava um `SolicitacaoAdesao` com
+  `status=PENDENTE` — **nunca cria `Entidade`/vínculo nenhum na hora da
+  submissão**, só o pedido.
+- **Validação (restrita, `PAPEIS_GESTAO`)** — `/painel/cadastro/cpls/{cpl_id}/solicitacoes-adesao`
+  lista pendentes e histórico. Aprovar
+  (`aprovar_solicitacao`) é o que efetivamente:
+  1. **cria ou reaproveita a `Entidade`** — busca por CNPJ/CPF já
+     existente antes de criar, pra não duplicar cadastro quando a mesma
+     organização pede adesão a uma segunda CPL (RN-003);
+  2. **cria o vínculo à CPL** (`EntidadeCPL`, idempotente — não duplica
+     se já existir);
+  3. **classifica o elo** (`EntidadeElo`, RF-009) — **primeira vez que
+     esse modelo ganha uma rota de escrita**; até aqui existia só como
+     leitura (usado no mapa do RF-011), sem nenhum jeito de criar uma
+     classificação nova;
+  4. **registra o contato como `PessoaVinculo`** (papel
+     `EMPRESA_MEMBRO`) — **primeira vez que esse modelo é escrito por
+     qualquer fluxo do sistema** (existia só pra leitura, usado na
+     resolução de visibilidade do RBAC). Não cria `Usuario`/login — isso
+     continua sendo uma ação separada de quem administra.
+  Rejeitar (`rejeitar_solicitacao`) só muda o status e grava o parecer —
+  não cria nada. Reanalisar uma solicitação já decidida é rejeitado
+  (400) — cada pedido só pode ser decidido uma vez.
+- **"Ativação"** é o estado resultante da aprovação: `EntidadeCPL.ativo`
+  e a solicitação em `status=APROVADA` — não é uma etapa separada com
+  tela própria.
+- **Decisão deliberada — sem "convite" com token dedicado**: o requisito
+  fala "Convite/solicitação", mas construir um sistema de convite
+  próprio (token, e-mail, expiração — como o de `CampanhaConvite`,
+  RF-012) só faria sentido pra rastrear quem foi convidado
+  especificamente, o que não foi pedido aqui. Na prática, "convite" é a
+  gestão da CPL compartilhar a URL pública do formulário com quem quiser
+  — é o mesmo formulário da "solicitação", só descoberto por um canal
+  diferente.
+
 ## Observabilidade (RNF-012)
 
 Sem infraestrutura externa nova (Prometheus/Grafana/Sentry) — falhas
@@ -1961,7 +2013,21 @@ e a **Fase 2 foi iniciada** (Maturidade/Reconhecimento). O que resta:
     RF-004) — pendência de credencial em produção, não de código. **Com
     isso, todo requisito funcional do documento original foi endereçado**
     de alguma forma (implementado, parcial por decisão de negócio
-    documentada, ou config pendente) — o que resta no projeto agora são
-    só os RNFs de maturidade organizacional (privacidade formal,
-    retenção, qualidade de dados, continuidade) e o fluxo F01 de
+    documentada, ou config pendente) — o que restava no projeto era
+    só os RNFs de maturidade organizacional e o fluxo F01 de
     autoatendimento, nenhum dos dois um RF numerado do documento.
+22. ~~F01: fluxo de autoatendimento (adesão de membro)~~ — **feito**: ver
+    seção "Adesão de membro — autoatendimento (F01)" abaixo. Formulário
+    público (`/cpls/{id}/solicitar-adesao`, linkado do portal de
+    transparência RF-055) cobre cadastro + consentimento LGPD; validação
+    é uma tela de gestão (`PAPEIS_GESTAO`) que aprova (cria/reaproveita
+    `Entidade`, vincula à CPL, classifica o elo — `EntidadeElo`, RF-009,
+    ganhou rota de escrita pela primeira vez) ou rejeita (não cria
+    nada). "Convite" não ganhou infraestrutura própria — a gestão só
+    compartilha o link público, decisão documentada. Com isso, o único
+    fluxo de autoatendimento do modelo conceitual que faltava está
+    fechado; o que resta no projeto são só RNFs de maturidade
+    organizacional (RNF-002 privacidade formal, RNF-005
+    continuidade/backup, RNF-013 qualidade de dados, RNF-015 retenção)
+    e RF-057 continua sendo o único RF que dependia de config de
+    produção (`ANTHROPIC_API_KEY`) pra funcionar de fato.

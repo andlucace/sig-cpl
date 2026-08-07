@@ -1,0 +1,101 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — Solicitações de adesão — {{ cpl.nome }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/cadastro/cpls/{{ cpl.id }}" class="link-secondary text-decoration-none">{{ cpl.nome }}</a>
+    <i class="bi bi-chevron-right small mx-1"></i>Solicitações de adesão
+{% endblock %}
+{% block conteudo %}
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h1 class="h3 mb-0">Solicitações de adesão (F01) — {{ cpl.nome }}</h1>
+        <a href="/cpls/{{ cpl.id }}/solicitar-adesao" target="_blank" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-box-arrow-up-right me-1"></i>Ver formulário público
+        </a>
+    </div>
+    <p class="text-body-secondary small">
+        Aprovar cria (ou reaproveita, se o CNPJ/CPF já existir) a entidade, vincula à CPL
+        e classifica o elo pretendido. Nenhuma dessas ações é automática — sempre exige análise
+        de quem tem papel de gestão.
+    </p>
+
+    <div class="card mb-4">
+        <div class="card-header bg-transparent fw-semibold">
+            <i class="bi bi-hourglass-split me-2"></i>Pendentes
+            <span class="badge text-bg-warning ms-1">{{ pendentes|length }}</span>
+        </div>
+        <div class="list-group list-group-flush">
+            {% for s in pendentes %}
+                <div class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                        <div>
+                            <div class="fw-semibold">
+                                {{ s.razao_social }}
+                                <span class="badge text-bg-light border">{{ s.tipo.value.replace('_', ' ') }}</span>
+                                <span class="badge text-bg-light border">{{ s.elo_pretendido.value.replace('_', ' ') }}</span>
+                            </div>
+                            <div class="text-body-secondary small">
+                                {% if s.cnpj %}CNPJ {{ s.cnpj }}{% elif s.cpf %}CPF {{ s.cpf }}{% else %}Sem CNPJ/CPF informado{% endif %}
+                                {% if s.municipio %} — {{ s.municipio }}{% if s.uf %}/{{ s.uf }}{% endif %}{% endif %}
+                            </div>
+                            <div class="text-body-secondary small">
+                                Contato: {{ s.contato_nome }} — {{ s.contato_email }}{% if s.contato_telefone %} — {{ s.contato_telefone }}{% endif %}
+                            </div>
+                            {% if s.mensagem %}
+                                <div class="small fst-italic mt-1">"{{ s.mensagem }}"</div>
+                            {% endif %}
+                            <div class="text-body-secondary small mt-1">
+                                Consentimento LGPD registrado em {{ s.consentimento_em.strftime('%d/%m/%Y %H:%M') }}
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 flex-shrink-0">
+                            <form method="post" action="/painel/cadastro/solicitacoes-adesao/{{ s.id }}/aprovar" class="d-flex gap-2">
+                                <input type="text" class="form-control form-control-sm" name="parecer" placeholder="Parecer (opcional)">
+                                <button type="submit" class="btn btn-success btn-sm text-nowrap">
+                                    <i class="bi bi-check-lg me-1"></i>Aprovar
+                                </button>
+                            </form>
+                            <form method="post" action="/painel/cadastro/solicitacoes-adesao/{{ s.id }}/rejeitar" class="d-flex gap-2">
+                                <input type="text" class="form-control form-control-sm" name="parecer" placeholder="Motivo (opcional)">
+                                <button type="submit" class="btn btn-outline-danger btn-sm text-nowrap">
+                                    <i class="bi bi-x-lg me-1"></i>Rejeitar
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <div class="list-group-item text-body-secondary">Nenhuma solicitação pendente.</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-transparent fw-semibold">
+            <i class="bi bi-clock-history me-2"></i>Histórico
+        </div>
+        <div class="list-group list-group-flush">
+            {% for s in analisadas %}
+                <div class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                        <div>
+                            <span class="fw-semibold">{{ s.razao_social }}</span>
+                            <span class="badge {{ 'text-bg-success' if s.status.value == 'aprovada' else 'text-bg-danger' }}">
+                                {{ s.status.value }}
+                            </span>
+                            <div class="text-body-secondary small">
+                                Analisada em {{ s.data_analise.strftime('%d/%m/%Y') if s.data_analise else '—' }}
+                                {% if s.parecer %} — {{ s.parecer }}{% endif %}
+                            </div>
+                        </div>
+                        {% if s.entidade_id %}
+                            <a href="/painel/cadastro/entidades/{{ s.entidade_id }}" class="btn btn-outline-secondary btn-sm">
+                                Ver entidade &rarr;
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                <div class="list-group-item text-body-secondary">Nenhuma solicitação analisada ainda.</div>
+            {% endfor %}
+        </div>
+    </div>
+{% endblock %}

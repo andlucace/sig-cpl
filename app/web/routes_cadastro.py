@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user_optional
 from app.core.rbac import PAPEIS_GESTAO, PAPEIS_GOVERNANCA_LEITURA, cpl_ids_visiveis, verificar_papel
 from app.db.session import get_db
+from app.models.adesao import SolicitacaoAdesao
 from app.models.cadastro_dinamico import (
     CampanhaCadastral,
     CampanhaConvite,
@@ -17,8 +18,9 @@ from app.models.cadastro_dinamico import (
 )
 from app.models.cpl import CPL
 from app.models.entidade import Entidade, EntidadeCPL, OfertaEntidade
-from app.models.enums import StatusLoteImportacao, TipoOferta
+from app.models.enums import StatusLoteImportacao, StatusSolicitacaoAdesao, TipoOferta
 from app.models.usuario import Usuario
+from app.services.adesao import SolicitacaoInvalida, aprovar_solicitacao, rejeitar_solicitacao
 from app.services.armazenamento import caminho_absoluto
 from app.services.geocodificacao import GeocodificacaoIndisponivel, geocodificar_endereco
 from app.services.importacao_entidades import (
@@ -640,4 +642,84 @@ def desativar_oferta(
     db.commit()
     return RedirectResponse(
         f"/painel/cadastro/entidades/{oferta.entidade_id}", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.get("/cpls/{cpl_id}/solicitacoes-adesao")
+def solicitacoes_adesao_cpl(
+    cpl_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """F01: tela de "validação" do fluxo de autoatendimento — pendentes
+    primeiro, histórico (aprovadas/rejeitadas) depois."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    cpl = db.get(CPL, cpl_id)
+    if cpl is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=cpl_id)
+
+    solicitacoes = (
+        db.query(SolicitacaoAdesao)
+        .filter(SolicitacaoAdesao.cpl_id == cpl_id)
+        .order_by(SolicitacaoAdesao.created_at.desc())
+        .all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "restrito/cadastro/solicitacoes_adesao.html",
+        {
+            "cpl": cpl,
+            "pendentes": [s for s in solicitacoes if s.status == StatusSolicitacaoAdesao.PENDENTE],
+            "analisadas": [s for s in solicitacoes if s.status != StatusSolicitacaoAdesao.PENDENTE],
+        },
+    )
+
+
+def _solicitacao_do_gestor_ou_404(db: Session, usuario: Usuario, solicitacao_id: uuid.UUID) -> SolicitacaoAdesao:
+    solicitacao = db.get(SolicitacaoAdesao, solicitacao_id)
+    if solicitacao is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Solicitação de adesão não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=solicitacao.cpl_id)
+    return solicitacao
+
+
+@router.post("/solicitacoes-adesao/{solicitacao_id}/aprovar")
+def aprovar_solicitacao_adesao_web(
+    solicitacao_id: uuid.UUID,
+    parecer: str = Form(""),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    solicitacao = _solicitacao_do_gestor_ou_404(db, usuario, solicitacao_id)
+    try:
+        aprovar_solicitacao(db, solicitacao, usuario.id, parecer or None)
+    except SolicitacaoInvalida as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return RedirectResponse(
+        f"/painel/cadastro/cpls/{solicitacao.cpl_id}/solicitacoes-adesao", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post("/solicitacoes-adesao/{solicitacao_id}/rejeitar")
+def rejeitar_solicitacao_adesao_web(
+    solicitacao_id: uuid.UUID,
+    parecer: str = Form(""),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    solicitacao = _solicitacao_do_gestor_ou_404(db, usuario, solicitacao_id)
+    try:
+        rejeitar_solicitacao(db, solicitacao, usuario.id, parecer or None)
+    except SolicitacaoInvalida as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return RedirectResponse(
+        f"/painel/cadastro/cpls/{solicitacao.cpl_id}/solicitacoes-adesao", status_code=status.HTTP_303_SEE_OTHER
     )

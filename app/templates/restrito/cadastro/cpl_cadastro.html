@@ -7,9 +7,14 @@
 {% block conteudo %}
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h1 class="h3 mb-0">Cadastro e dados — {{ cpl.nome }}</h1>
-        <a href="/painel/cadastro/cpls/{{ cpl.id }}/mapa" class="btn btn-outline-primary btn-sm">
-            <i class="bi bi-pin-map me-1"></i>Ver mapa da cadeia (RF-011)
-        </a>
+        <div class="d-flex gap-2">
+            <a href="/painel/cadastro/cpls/{{ cpl.id }}/solicitacoes-adesao" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-person-plus me-1"></i>Solicitações de adesão (F01)
+            </a>
+            <a href="/painel/cadastro/cpls/{{ cpl.id }}/mapa" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-pin-map me-1"></i>Ver mapa da cadeia (RF-011)
+            </a>
+        </div>
     </div>
 
     <div class="row g-4 mb-2">

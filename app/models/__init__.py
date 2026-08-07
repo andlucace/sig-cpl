@@ -1,3 +1,4 @@
+from app.models.adesao import SolicitacaoAdesao
 from app.models.auditoria import RegistroAuditoria
 from app.models.biblioteca import RecursoBiblioteca
 from app.models.cadastro_dinamico import (
@@ -65,6 +66,7 @@ from app.models.usuario import TokenRecuperacaoSenha, Usuario, UsuarioPapel
 
 __all__ = [
     "CPL",
+    "SolicitacaoAdesao",
     "Entidade",
     "EntidadeCPL",
     "EntidadeElo",

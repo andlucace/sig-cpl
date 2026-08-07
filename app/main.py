@@ -9,6 +9,7 @@ from jose import JWTError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.routes import (
+    adesao,
     auditoria,
     auth,
     biblioteca,
@@ -190,6 +191,8 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(cpl.router, prefix="/api")
 app.include_router(entidades.router, prefix="/api")
 app.include_router(entidades.cpl_router, prefix="/api")
+app.include_router(adesao.router, prefix="/api")
+app.include_router(adesao.cpl_router, prefix="/api")
 app.include_router(pessoas.router, prefix="/api")
 app.include_router(usuario_papel.router, prefix="/api")
 app.include_router(governanca.router, prefix="/api")
