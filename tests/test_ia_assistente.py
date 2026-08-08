@@ -47,8 +47,13 @@ def _dados_fake():
 
 
 def _client_falso(texto_resposta: str) -> MagicMock:
+    # `type="text"` de propósito — o código real filtra os blocos de
+    # `content` por tipo, pra não confundir um `ThinkingBlock` (extended
+    # thinking) com o bloco de texto de verdade.
+    bloco_pensamento = MagicMock(type="thinking")
+    bloco_texto = MagicMock(type="text", text=texto_resposta)
     resposta_falsa = MagicMock()
-    resposta_falsa.content = [MagicMock(text=texto_resposta)]
+    resposta_falsa.content = [bloco_pensamento, bloco_texto]
     cliente_falso = MagicMock()
     cliente_falso.messages.create.return_value = resposta_falsa
     return cliente_falso
@@ -89,6 +94,27 @@ def test_gerar_assistente_sucesso(monkeypatch):
     assert resultado["sintese"] == "CPL em bom desenvolvimento."
     assert resultado["verificacao_consistencia"] == ["Nível alto mas poucos órgãos ativos."]
     assert resultado["lacunas_sugeridas"] == ["Registrar mais reuniões."]
+
+
+def test_gerar_assistente_so_com_bloco_de_pensamento_levanta_indisponivel(monkeypatch):
+    """Regressão: resposta real da Anthropic com extended thinking pode
+    trazer só `ThinkingBlock` (sem `TextBlock`) se o modelo não terminar
+    de gerar texto — `resposta.content[0].text` quebraria com
+    `AttributeError` em produção antes desta proteção."""
+
+    monkeypatch.setattr(
+        ia_assistente,
+        "get_settings",
+        lambda: SimpleNamespace(anthropic_api_key="fake-key", anthropic_model="claude-sonnet-5"),
+    )
+    resposta_falsa = MagicMock()
+    resposta_falsa.content = [MagicMock(type="thinking")]
+    cliente_falso = MagicMock()
+    cliente_falso.messages.create.return_value = resposta_falsa
+    monkeypatch.setattr(ia_assistente.anthropic, "Anthropic", lambda **kwargs: cliente_falso)
+
+    with pytest.raises(IAIndisponivel):
+        gerar_assistente_ia(_cpl_fake(), *_dados_fake())
 
 
 def test_gerar_assistente_resposta_json_invalida_levanta_indisponivel(monkeypatch):

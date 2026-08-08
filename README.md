@@ -1728,6 +1728,24 @@ uma `ANTHROPIC_API_KEY` real existir em produção.
   (`anthropic`, adicionado às dependências do projeto), chamado de forma
   síncrona nas rotas síncronas de sempre (mesmo padrão de toda chamada
   bloqueante já existente — psycopg, SMTP, geocodificação).
+- **Configurado e testado em produção** — `ANTHROPIC_API_KEY` real em
+  `.env.prod`. A primeira chamada de verdade (não mockada) contra a API
+  quebrou com um 500 real, pego pelo log estruturado: o modelo às vezes
+  responde com um `ThinkingBlock` (extended thinking) antes do
+  `TextBlock` — `resposta.content[0].text` presumia posição fixa e
+  quebrou com `AttributeError`. Duas correções, não uma só: (1)
+  `thinking={"type": "disabled"}` explícito na chamada — a causa raiz de
+  verdade era o orçamento de `max_tokens` sendo consumido inteiro
+  "pensando" em vez de gerar a resposta, então a extended thinking nem
+  fazia sentido pra uma tarefa de síntese/JSON estruturado; (2) seleção
+  do bloco de conteúdo por `.type == "text"` em vez de índice fixo,
+  defensivo contra qualquer ordem futura de blocos. Depois desse ajuste,
+  a resposta real ainda veio envolvida em cerca de código markdown
+  (```` ```json ... ``` ````) apesar da instrução explícita pra não
+  fazer isso — `_sem_cerca_markdown()` remove antes do `json.loads`, sem
+  depender do modelo acertar o formato toda vez. Reproduzido, corrigido
+  e confirmado com uma chamada real de ponta a ponta (não só mock) antes
+  do redeploy — ver item 45 do HANDOFF.md.
 
 ## Adesão de membro — autoatendimento (F01)
 

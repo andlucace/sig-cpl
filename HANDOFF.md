@@ -2049,6 +2049,66 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
       try/except foi o que tornou o teste conclusivo sem precisar
       inspecionar a caixa de e-mail de destino.
 
+45. **Configuração de `ANTHROPIC_API_KEY` em produção (RF-057) + bug real
+    pego na primeira chamada de verdade** — usuário pediu "Configurar a
+    AI" logo depois do SMTP; mesmo fluxo (`AskUserQuestion` sobre já ter
+    chave e como passá-la, usuário colou a chave direto no chat).
+    - Adicionei `ANTHROPIC_API_KEY` ao `.env.prod` do mesmo jeito que o
+      SMTP (heredoc com delimitador entre aspas simples `| ssh ... "cat
+      >> .env.prod"`, nunca imprimindo o valor), redeploy, confirmei
+      `ia_disponivel() == True` dentro do container.
+    - **Primeiro teste real (não mockado) contra produção quebrou com
+      500** — log estruturado mostrou `AttributeError: 'ThinkingBlock'
+      object has no attribute 'text'` em
+      `resposta.content[0].text` (`app/services/ia_assistente.py:139`
+      antes do ajuste). Causa: o modelo, com extended thinking ativo por
+      padrão, devolveu um `ThinkingBlock` como primeiro item de
+      `content` — `content[0]` não é garantidamente o bloco de texto.
+      Reproduzi isolado (fora da aplicação, script direto contra a API
+      real com a chave de produção) antes de mexer no código, confirmando
+      a causa antes de "consertar às cegas".
+    - **Duas correções, não uma só**: (1) `thinking={"type": "disabled"}`
+      explícito na chamada — a causa raiz de verdade não era só "pegar o
+      bloco errado", era o orçamento de `max_tokens=1500` sendo
+      consumido inteiro em "pensar" e sobrando zero pra resposta; extended
+      thinking não faz sentido nenhum pra uma tarefa de síntese/JSON
+      estruturado, então desliguei em vez de só aumentar o orçamento; (2)
+      seleção do bloco de conteúdo por `next(b for b in content if
+      b.type == "text")` em vez de índice fixo, defensivo contra
+      qualquer ordem futura de blocos (mesmo com thinking desligado).
+    - **Segundo problema, achado no mesmo teste real**: com o bug acima
+      corrigido, a resposta ainda veio como ` ```json\n{...}\n``` ` —
+      cerca de código markdown ao redor do JSON, apesar do
+      `_PROMPT_SISTEMA` instruir explicitamente "responda ESTRITAMENTE
+      em JSON, sem nenhum texto fora do JSON". Comportamento comum de
+      modelo (obedece a maior parte da instrução, mas mantém o hábito de
+      formatar código em markdown) — não vale insistir só no prompt.
+      Corrigido com `_sem_cerca_markdown()` (novo, remove ` ```json `/
+      ` ``` ` das pontas antes do `json.loads`), não com mais uma volta
+      de ajuste de prompt.
+    - Teste de regressão novo
+      (`test_gerar_assistente_so_com_bloco_de_pensamento_levanta_indisponivel`)
+      cobrindo especificamente "resposta só com `ThinkingBlock`, sem
+      `TextBlock` nenhum" — cenário real que já aconteceu, não hipotético.
+      Mock de `_client_falso` ajustado pra setar `type="text"`
+      explicitamente (antes um `MagicMock()` sem `.type` setado passava
+      despercebido pelos testes, porque `MagicMock().type == "text"` é
+      `False`, mas o filtro antigo por índice não checava tipo nenhum —
+      os testes só pegavam essa lacuna depois do bug já existir em
+      produção, não antes).
+    - Confirmei o fix chamando `gerar_assistente_ia` de verdade (não
+      mock) com a chave de produção antes do redeploy — resposta com
+      síntese/pontos de atenção/lacunas coerentes e específicas dos
+      dados de teste (ex.: notou 11 projetos sem nenhum dado financeiro
+      preenchido). Suíte completa em 67 (66 + 1), ruff limpo, commit +
+      push + redeploy.
+    **Lição pra próxima vez que integrar com um modelo de IA por API**:
+    testar contra o endpoint real (não só mock) antes de considerar a
+    feature pronta — os dois bugs desta entrada só apareceram com uma
+    chamada de verdade, nenhum teste mockado (nem os que eu mesmo
+    escrevi) os pegaria, porque o mock reflete a suposição de quem
+    escreveu o código, não o comportamento real da API.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for
@@ -2628,9 +2688,22 @@ ordem recomendada para o que vem depois:
     `POST /api/auth/esqueci-senha` real contra produção (200, sem
     traceback). Essa era a única pendência de configuração citada desde
     o item 14 — daqui pra frente, "pendência de SMTP" nos itens
-    anteriores desta lista é histórico, não estado atual. **Pendência
-    real, não de código, que ainda resta**: só `ANTHROPIC_API_KEY`
-    (RF-057, item 22).
+    anteriores desta lista é histórico, não estado atual.
+25. ~~`ANTHROPIC_API_KEY` em produção (RF-057)~~ — **feito**: ver item 45
+    da seção "Ordem em que este projeto foi construído". Configurar a
+    chave em si foi rápido (mesmo padrão do SMTP), mas a primeira
+    chamada real contra a API achou dois bugs de verdade que nenhum
+    teste mockado pegaria — `ThinkingBlock` sem `.text` (corrigido
+    desligando extended thinking + selecionando bloco por tipo) e
+    resposta envolvida em cerca de código markdown (corrigido removendo
+    a cerca antes do `json.loads`, não insistindo só no prompt).
+    Confirmado com chamada real de ponta a ponta antes do redeploy final.
+    **Com isso, não resta nenhuma pendência de configuração conhecida em
+    produção** — todo RF, o fluxo F01 e as duas credenciais que
+    dependiam de decisão externa (SMTP, IA) estão resolvidos. O que
+    resta no projeto são só os RNFs de maturidade organizacional
+    (RNF-002, RNF-005, RNF-013, RNF-015), que não são pendência de
+    configuração nem feature isolada — são trabalho transversal.
 
 ## Deploy em produção
 

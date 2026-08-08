@@ -120,6 +120,19 @@ Nunca invente números que não estejam nos dados fornecidos. Suas sugestões s�
 rascunho para revisão humana — nunca uma decisão automática."""
 
 
+def _sem_cerca_markdown(texto: str) -> str:
+    """Modelos frequentemente envolvem JSON em cerca de código markdown
+    (```json ... ```) mesmo quando instruídos a não fazer isso — remove
+    a cerca se presente, sem exigir que o modelo acerte o formato exato
+    toda vez."""
+
+    texto = texto.strip()
+    if texto.startswith("```"):
+        texto = texto.removeprefix("```json").removeprefix("```").strip()
+        texto = texto.removesuffix("```").strip()
+    return texto
+
+
 def gerar_assistente_ia(
     cpl, cadastral: dict, governanca: dict, planejamento: dict, projetos_resumo: dict, maturidade: dict
 ) -> dict:
@@ -135,8 +148,19 @@ def gerar_assistente_ia(
             max_tokens=1500,
             system=_PROMPT_SISTEMA,
             messages=[{"role": "user", "content": json.dumps(contexto, ensure_ascii=False)}],
+            # Síntese/JSON estruturado não precisa de raciocínio estendido —
+            # desligar evita que o modelo gaste o orçamento de tokens todo
+            # "pensando" e não sobre nada pro texto de resposta em si
+            # (foi exatamente isso que quebrou em produção antes deste ajuste).
+            thinking={"type": "disabled"},
         )
-        texto = resposta.content[0].text
+        # `resposta.content[0]` nem sempre é o bloco de texto — modelos com
+        # extended thinking habilitado antepõem um `ThinkingBlock` (sem
+        # atributo `.text`) antes do `TextBlock` de verdade.
+        bloco_texto = next((bloco for bloco in resposta.content if bloco.type == "text"), None)
+        if bloco_texto is None:
+            raise IAIndisponivel("Assistente de IA não retornou texto.")
+        texto = bloco_texto.text
     except anthropic.APIError as exc:
         # Mensagem curta de propósito — `str(exc)` inclui o corpo bruto da
         # resposta da API (pode conter detalhe técnico irrelevante pra quem
@@ -144,7 +168,7 @@ def gerar_assistente_ia(
         raise IAIndisponivel("Assistente de IA indisponível no momento.") from exc
 
     try:
-        resultado = json.loads(texto)
+        resultado = json.loads(_sem_cerca_markdown(texto))
     except json.JSONDecodeError as exc:
         raise IAIndisponivel("Assistente de IA retornou uma resposta em formato inesperado.") from exc
 
