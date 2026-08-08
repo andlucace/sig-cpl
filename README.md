@@ -1175,6 +1175,7 @@ Implementado em `app/core/rbac.py`:
 |---|---|---|
 | `PAPEIS_GESTAO` | Administrador, Entidade gestora, Dirigente | Criar CPL/órgão, convocar reunião, registrar presença, encerrar com ata, concluir deliberação, cadastrar Entidade/Pessoa |
 | `PAPEIS_GOVERNANCA_LEITURA` | Gestão + Conselho/Comitê, Comissão temática, Auditoria | Ler órgãos/reuniões/deliberações/votos/tarefas — **não** inclui Empresa membro nem Instituição de ensino |
+| `PAPEIS_LEITURA_MEMBRO` | `PAPEIS_GOVERNANCA_LEITURA` + Empresa membro | Dashboard de indicadores da própria CPL e eventos da própria CPL — **não** reabre governança em si (grupo separado de propósito) |
 | `PAPEIS_GOVERNANCA_PARTICIPACAO` | Gestão + Conselho/Comitê | Registrar deliberação, votar, criar tarefa, declarar impedimento |
 | `PAPEIS_TAREFA_EXECUCAO` | Gestão + Comissão temática, Gestor de projeto | Atualizar status de tarefa (+ o responsável pessoal da tarefa, sempre, via `Usuario.pessoa_id`) |
 | `PAPEIS_IMPEDIMENTO_LEITURA` | Gestão + Auditoria | Ler declarações de impedimento (RN-014, dado sensível — mais restrito que o resto da governança) |
@@ -1223,6 +1224,56 @@ revisar com a governança real da CPL.
 - **RF-005 também cita escopo por "projeto"** — módulo de projetos ainda não
   existe (roadmap Fase 2/3), então esse eixo do RBAC não tem onde se
   pendurar ainda.
+- ~~`EMPRESA_MEMBRO` não acessava nenhuma funcionalidade~~ — **resolvido**.
+  Achado ao investigar um usuário de demonstração (`juliana.prado`) sem
+  acesso a nada: o papel existia no enum desde o início do projeto, mas
+  nunca tinha sido incluído em nenhum grupo `PAPEIS_*` — não era um bug de
+  dado dela, era o papel inteiro sem nenhuma permissão de verdade anexada.
+  Desenhado com o usuário (ver "Membro de empresa" abaixo) e corrigido:
+  `PAPEIS_LEITURA_MEMBRO` (dashboard de indicadores + eventos) e
+  `entidade_e_da_pessoa()` (própria entidade, via `PessoaVinculo`).
+
+## Membro de empresa (EMPRESA_MEMBRO)
+
+Escopo desenhado com o usuário depois de descobrir que este papel não
+tinha nenhuma permissão de verdade anexada (ver "Limitações conhecidas"
+acima). Princípio: leitura do que já é essencialmente agregado/público
+(o dashboard de indicadores mostra a mesma categoria de dado que já é
+público sem login no portal de transparência, RF-055), mais autonomia
+prática (ver e se inscrever em evento, ver a própria entidade) — sem
+tocar em governança, documentos internos, maturidade ou gestão de
+projetos, que continuam sem caso de uso definido pra esse papel.
+
+- **Dashboard de indicadores** (`/painel/indicadores/cpls/{id}`) — leitura
+  liberada via `PAPEIS_LEITURA_MEMBRO`. O seletor de CPL
+  (`GET /painel/indicadores`) também passou a incluir as CPLs onde o
+  usuário tem `EMPRESA_MEMBRO` (`cpl_ids_membro()`), não só as de
+  `cpl_ids_visiveis()` — sem isso, ela só conseguiria chegar na própria
+  CPL digitando a URL direto, sem aparecer na lista.
+- **Própria entidade** (`/painel/cadastro/entidades/{id}`) —
+  `entidade_e_da_pessoa(db, usuario, entidade_id)` (novo,
+  `app/core/rbac.py`) verifica se a entidade é a mesma que o
+  `PessoaVinculo` do usuário aponta, como alternativa à checagem por CPL
+  visível já existente. Ações de escrita nessa página (canais digitais,
+  ofertas, geocodificação) continuam gated por `PAPEIS_GESTAO`, sem
+  mudança — a pessoa vê os próprios dados, mas editar continua sendo
+  ação de quem administra a CPL. Ficou como próximo passo, não pedido
+  nesta fatia.
+- **Eventos** — ver evento da própria CPL liberado (mesmo grupo
+  `PAPEIS_LEITURA_MEMBRO`); **autoinscrição** nova
+  (`POST /painel/eventos/{id}/inscrever-me`, deriva `pessoa_id`/`cpl_id`
+  do próprio usuário logado, não aceita por formulário — evita que
+  alguém inscreva outra pessoa por essa rota) — diferente da inscrição
+  por quem tem papel de gestão (`POST .../inscricoes`, continua existindo
+  sem mudança, pra inscrever qualquer pessoa). Bloqueada se o evento não
+  estiver `agendado`, se já estiver inscrita, se não houver vaga, ou se o
+  usuário não tiver `Usuario.pessoa_id` vinculado.
+- **Notificações e Biblioteca** — já funcionavam pra qualquer usuário
+  logado, sem mudança nenhuma (só exigiam login, nunca papel específico).
+- **Deliberadamente fora desta fatia**: Governança (já era exclusão
+  proposital, mantida), Documentos, Maturidade, Planejamento, Projetos
+  (gestão) e Auditoria — sem caso de uso claro definido ainda pra um
+  membro de empresa.
 
 ## Decisões pendentes (seção 20 do documento de requisitos)
 

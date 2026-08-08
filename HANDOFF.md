@@ -2109,6 +2109,83 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     escrevi) os pegaria, porque o mock reflete a suposição de quem
     escreveu o código, não o comportamento real da API.
 
+46. **`EMPRESA_MEMBRO` sem permissão nenhuma anexada — lacuna de RBAC real,
+    não pendência de configuração** — usuário reportou que
+    `juliana.prado` (usuária de demonstração) "não está acessando nenhuma
+    funcionalidade". Investigando: `Usuario.pessoa_id` dela era `None`
+    (sem `Pessoa` vinculada), mas o problema de verdade era mais fundo —
+    `grep -rn "EMPRESA_MEMBRO" app/` confirmou que esse papel **nunca
+    apareceu em nenhum grupo `PAPEIS_*`** usado por `verificar_papel()`/
+    `cpl_ids_visiveis()` em lugar nenhum do código, só existia no enum e
+    (desde o F01) como valor default de `PessoaVinculo.papel`. Ou seja:
+    mesmo com `Pessoa`/`PessoaVinculo` perfeitamente configurados, ela
+    continuaria sem enxergar nada — não era um problema de dado dela, era
+    o papel inteiro sem permissão de verdade.
+    - Reportei o achado ao usuário com clareza (não tentei só "consertar
+      o dado da Juliana" e seguir em frente) e pedi pra ele desenhar o
+      escopo, já que "o que um empresa_membro deveria ver" é decisão de
+      produto que nunca tinha sido tomada — ele pediu de volta "preciso
+      que você desenhe esse processo". Levantei o RBAC de cada módulo
+      (Indicadores, Cadastro/entidade, Eventos, Biblioteca, Notificações)
+      antes de propor, then usei `AskUserQuestion` só no ponto genuinamente
+      em aberto (implementar autoinscrição em eventos ou só leitura).
+    - **`app/core/rbac.py`**: `PAPEIS_LEITURA_MEMBRO = PAPEIS_GOVERNANCA_
+      LEITURA | {EMPRESA_MEMBRO}` — grupo novo e separado, não alterei
+      `PAPEIS_GOVERNANCA_LEITURA` em si (continua excluindo EMPRESA_MEMBRO
+      dos endpoints de órgão/reunião/deliberação, exclusão que já era
+      proposital). `cpl_ids_membro()` (CPLs onde tem papel EMPRESA_MEMBRO)
+      e `entidade_e_da_pessoa()` (via `PessoaVinculo`) — **decidi não**
+      alargar `cpl_ids_visiveis()` em si, que é consumida por praticamente
+      todo módulo (`grep -rl` achou uso em Documentos/Maturidade/
+      Planejamento/Projetos/Auditoria também) — alargar ali abriria muito
+      mais que o escopo combinado; cada tela soma `cpl_ids_membro()` só
+      onde decidi abrir.
+    - **Indicadores**: `dashboard()` trocou `PAPEIS_GOVERNANCA_LEITURA` por
+      `PAPEIS_LEITURA_MEMBRO`; `selecionar_cpl()` (o seletor) passou a
+      somar `cpl_ids_membro()`, senão ela só chegaria no dashboard
+      digitando a URL direto, sem aparecer na lista.
+    - **Cadastro**: `_entidade_visivel_ou_none()` ganhou um `if
+      entidade_e_da_pessoa(...): return entidade` antes da checagem por
+      CPL visível; `detalhe_entidade()` trocou a checagem inicial pra
+      `PAPEIS_LEITURA_MEMBRO` (com `cpl_id=None` — checagem grosseira só
+      pra provar que ela é *algum* membro de empresa; a checagem fina de
+      "esta entidade específica" é a função acima).
+    - **Eventos**: `detalhe()` mesma troca de grupo; `listar()` soma
+      `cpl_ids_membro()` no filtro; rota nova `POST
+      /{evento_id}/inscrever-me` — deriva `pessoa_id`/`cpl_id` do próprio
+      usuário logado (nunca aceita por formulário, pra ninguém conseguir
+      inscrever outra pessoa por essa rota), bloqueia se evento não
+      `agendado`, já inscrita, sem vaga, ou sem `pessoa_id` vinculado.
+      Template ganhou um card "Sua inscrição" separado do card de gestão
+      "Inscrever pessoa" (que continua intacto, só pra quem tem
+      `PAPEIS_GESTAO`).
+    - **Dado da `juliana.prado` em produção**: já existia uma `Pessoa`
+      "Juliana Prado" pré-cadastrada (órfã, sem `PessoaVinculo` nenhum) —
+      linkei `Usuario.pessoa_id` a ela e criei o `PessoaVinculo` pra
+      "Bragantina Autopeças Ltda" (primeira empresa do tipo certo na CPL
+      de demonstração), direto via `docker exec` (mesmo padrão de sempre,
+      sem migração — é dado, não schema).
+    - Testado: 10 testes automatizados novos
+      (`tests/test_empresa_membro.py`) — `cpl_ids_membro`/
+      `entidade_e_da_pessoa` isolados, dashboard da própria CPL (200) vs.
+      de outra (403), própria entidade (200) vs. de outra empresa
+      (redirect 303), ver+autoinscrever em evento da própria CPL,
+      autoinscrição dupla rejeitada (400), autoinscrição em evento de
+      outra CPL rejeitada (403), usuário sem `pessoa_id` não autoinscreve
+      (400). Local via Playwright (`empresa_membro_shot.js`) com um
+      usuário de teste espelhando o cenário real — dashboard, entidade
+      própria e autoinscrição em evento, tudo renderizando e funcionando,
+      zero erro de console. Suíte completa em 77 (67 + 10), ruff limpo.
+    **Achado não corrigido, deixado como observação**: a barra lateral
+    mostra todos os módulos do menu pra qualquer papel, mesmo os que vão
+    dar 403 ao clicar (Governança, Documentos, Maturidade, Projetos,
+    Auditoria continuam aparecendo pra EMPRESA_MEMBRO) — não é regressão
+    desta fatia, já acontecia antes pra outros papéis sub-providos; fica
+    como próximo passo de polimento de UI, não pedido aqui. Mesma coisa
+    pros botões de ação na própria página de entidade (canais digitais,
+    ofertas, geocodificação) — aparecem mas dão 403 ao usar, porque só a
+    leitura foi liberada nesta fatia, não a escrita.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for

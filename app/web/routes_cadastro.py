@@ -7,7 +7,14 @@ from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user_optional
-from app.core.rbac import PAPEIS_GESTAO, PAPEIS_GOVERNANCA_LEITURA, cpl_ids_visiveis, verificar_papel
+from app.core.rbac import (
+    PAPEIS_GESTAO,
+    PAPEIS_GOVERNANCA_LEITURA,
+    PAPEIS_LEITURA_MEMBRO,
+    cpl_ids_visiveis,
+    entidade_e_da_pessoa,
+    verificar_papel,
+)
 from app.db.session import get_db
 from app.models.adesao import SolicitacaoAdesao
 from app.models.cadastro_dinamico import (
@@ -366,6 +373,8 @@ def _entidade_visivel_ou_none(db: Session, usuario: Usuario, entidade_id: uuid.U
     entidade = db.get(Entidade, entidade_id)
     if entidade is None:
         return None
+    if entidade_e_da_pessoa(db, usuario, entidade_id):
+        return entidade
     ids_visiveis = cpl_ids_visiveis(db, usuario)
     if ids_visiveis is not None:
         vinculada = (
@@ -388,7 +397,11 @@ def detalhe_entidade(
 ):
     if redir := _exigir_login(usuario):
         return redir
-    verificar_papel(db, usuario, PAPEIS_GOVERNANCA_LEITURA)
+    # cpl_id=None: qualquer papel do grupo conta, independente da CPL — a
+    # checagem fina de "esta entidade específica" é o papel de
+    # `_entidade_visivel_ou_none` logo abaixo (via CPL visível ou vínculo
+    # direto da própria pessoa com a entidade).
+    verificar_papel(db, usuario, PAPEIS_LEITURA_MEMBRO, cpl_id=None)
     entidade = _entidade_visivel_ou_none(db, usuario, entidade_id)
     if entidade is None:
         return RedirectResponse("/painel/cadastro", status_code=status.HTTP_303_SEE_OTHER)

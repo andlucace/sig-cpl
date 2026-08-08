@@ -85,6 +85,26 @@
         </div>
 
         <div class="col-lg-4">
+            {% if pode_autoinscrever or ja_autoinscrita %}
+                <div class="card mb-4">
+                    <div class="card-header bg-transparent fw-semibold">
+                        <i class="bi bi-person-check me-2"></i>Sua inscrição
+                    </div>
+                    <div class="card-body">
+                        {% if ja_autoinscrita %}
+                            <div class="text-success small">
+                                <i class="bi bi-check-circle-fill me-1"></i>Você já está inscrito(a) neste evento.
+                            </div>
+                        {% else %}
+                            <form method="post" action="/painel/eventos/{{ evento.id }}/inscrever-me">
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="bi bi-plus-lg me-1"></i>Inscrever-me
+                                </button>
+                            </form>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
             <div class="card">
                 <div class="card-header bg-transparent fw-semibold">
                     <i class="bi bi-person-plus me-2"></i>Inscrever pessoa

@@ -9,7 +9,9 @@ from app.core.deps import get_current_user_optional
 from app.core.rbac import (
     PAPEIS_GESTAO,
     PAPEIS_GOVERNANCA_LEITURA,
+    PAPEIS_LEITURA_MEMBRO,
     PAPEIS_TAREFA_EXECUCAO,
+    cpl_ids_membro,
     cpl_ids_visiveis,
     verificar_papel,
 )
@@ -60,10 +62,9 @@ def selecionar_cpl(
     ids = cpl_ids_visiveis(db, usuario)
     if ids is None:
         cpls = db.query(CPL).order_by(CPL.nome).all()
-    elif ids:
-        cpls = db.query(CPL).filter(CPL.id.in_(ids)).order_by(CPL.nome).all()
     else:
-        cpls = []
+        ids = ids | cpl_ids_membro(db, usuario)
+        cpls = db.query(CPL).filter(CPL.id.in_(ids)).order_by(CPL.nome).all() if ids else []
     return templates.TemplateResponse(
         request, "restrito/indicadores/cpls.html", {"cpls": cpls, "usuario": usuario, "pagina_ativa": "indicadores"}
     )
@@ -91,7 +92,7 @@ def dashboard(
     cpl = db.get(CPL, cpl_id)
     if cpl is None:
         return RedirectResponse("/painel/indicadores", status_code=status.HTTP_303_SEE_OTHER)
-    verificar_papel(db, usuario, PAPEIS_GOVERNANCA_LEITURA, cpl_id=cpl_id)
+    verificar_papel(db, usuario, PAPEIS_LEITURA_MEMBRO, cpl_id=cpl_id)
 
     return templates.TemplateResponse(
         request,

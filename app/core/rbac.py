@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.enums import Papel
 from app.models.governanca import MembroOrgao
+from app.models.pessoa import PessoaVinculo
 from app.models.usuario import Usuario, UsuarioPapel
 
 # RF-005: controle de acesso por papéis, escopado a CPL/entidade. Os grupos
@@ -29,6 +30,16 @@ PAPEIS_GOVERNANCA_LEITURA = PAPEIS_GESTAO | {
 """Quem pode ler órgãos/reuniões/deliberações/votos/tarefas de uma CPL.
 Deliberadamente não inclui EMPRESA_MEMBRO nem INSTITUICAO_ENSINO_ICT_SPAI —
 governança fica visível só a quem participa dela ou audita."""
+
+PAPEIS_LEITURA_MEMBRO = PAPEIS_GOVERNANCA_LEITURA | {Papel.EMPRESA_MEMBRO}
+"""Telas que um membro de empresa (EMPRESA_MEMBRO) pode ler, além de quem
+já lê governança — dashboard de indicadores (mesmo agregado que já é
+público sem login no portal de transparência, RF-055) e eventos da
+própria CPL. Deliberadamente **não** usado pra reabrir governança em si
+(`PAPEIS_GOVERNANCA_LEITURA` continua excluindo EMPRESA_MEMBRO nos
+endpoints de órgão/reunião/deliberação) nem pra Documentos/Maturidade/
+Planejamento/Projetos/Auditoria, que continuam sem caso de uso definido
+pra um membro de empresa — revisar se isso mudar."""
 
 PAPEIS_GOVERNANCA_PARTICIPACAO = PAPEIS_GESTAO | {Papel.CONSELHO_COMITE}
 """Quem pode deliberar e votar (além de quem organiza/administra)."""
@@ -92,6 +103,33 @@ def cpl_ids_visiveis(db: Session, usuario: Usuario) -> set[uuid.UUID] | None:
     if any(v.papel == Papel.ADMINISTRADOR_PLATAFORMA for v in vinculos):
         return None
     return {v.cpl_id for v in vinculos if v.papel in PAPEIS_GOVERNANCA_LEITURA and v.cpl_id is not None}
+
+
+def cpl_ids_membro(db: Session, usuario: Usuario) -> set[uuid.UUID]:
+    """CPLs onde o usuário tem papel `EMPRESA_MEMBRO` — deliberadamente
+    **não** somado a `cpl_ids_visiveis()` (que é a base de módulos que
+    devem continuar fechados pra membro de empresa, como Documentos/
+    Maturidade/Projetos/Auditoria); quem consome isto decide onde somar,
+    tela por tela (hoje: seletor de CPL de Indicadores e listagem de
+    Eventos)."""
+
+    vinculos = papeis_do_usuario(db, usuario)
+    return {v.cpl_id for v in vinculos if v.papel == Papel.EMPRESA_MEMBRO and v.cpl_id is not None}
+
+
+def entidade_e_da_pessoa(db: Session, usuario: Usuario, entidade_id: uuid.UUID) -> bool:
+    """A entidade é a mesma que a `Pessoa` vinculada ao usuário representa
+    (`PessoaVinculo.entidade_id`) — dá acesso à própria entidade mesmo sem
+    nenhum papel de leitura de governança."""
+
+    if usuario.pessoa_id is None:
+        return False
+    return (
+        db.query(PessoaVinculo)
+        .filter(PessoaVinculo.pessoa_id == usuario.pessoa_id, PessoaVinculo.entidade_id == entidade_id)
+        .first()
+        is not None
+    )
 
 
 def verificar_papel(

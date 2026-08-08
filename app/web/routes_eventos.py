@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user_optional
 from app.core.rbac import (
     PAPEIS_GESTAO,
-    PAPEIS_GOVERNANCA_LEITURA,
+    PAPEIS_LEITURA_MEMBRO,
     Papel,
+    cpl_ids_membro,
     cpl_ids_visiveis,
     papeis_do_usuario,
     verificar_papel,
@@ -61,6 +62,7 @@ def listar(
     ids = cpl_ids_visiveis(db, usuario)
     eventos = db.query(Evento).order_by(Evento.data_inicio.desc()).all()
     if ids is not None:
+        ids = ids | cpl_ids_membro(db, usuario)
         eventos = [e for e in eventos if e.cpl_id is None or e.cpl_id in ids]
 
     cpls_gestao = _cpls_gestao(db, usuario)
@@ -128,7 +130,7 @@ def detalhe(
     if evento is None:
         return RedirectResponse("/painel/eventos", status_code=status.HTTP_303_SEE_OTHER)
     if evento.cpl_id is not None:
-        verificar_papel(db, usuario, PAPEIS_GOVERNANCA_LEITURA, cpl_id=evento.cpl_id)
+        verificar_papel(db, usuario, PAPEIS_LEITURA_MEMBRO, cpl_id=evento.cpl_id)
 
     cpls_gestao = _cpls_gestao(db, usuario)
     if cpls_gestao is None:
@@ -152,6 +154,23 @@ def detalhe(
         inscricoes = [i for i in inscricoes if i.cpl_id in ids_gestao]
 
     pessoas = db.query(Pessoa).order_by(Pessoa.nome).all()
+
+    # Autoinscrição (EMPRESA_MEMBRO): diferente de `pode_inscrever` acima
+    # (inscrever QUALQUER pessoa, só quem tem papel de gestão) — aqui é a
+    # pessoa se inscrever a si mesma, sem depender da gestão da CPL.
+    ja_autoinscrita = usuario.pessoa_id is not None and any(
+        i.pessoa_id == usuario.pessoa_id for i in inscricoes
+    )
+    vagas_esgotadas = evento.vagas is not None and len(inscricoes) >= evento.vagas
+    membro_cpl_ids = cpl_ids_membro(db, usuario)
+    pode_autoinscrever = (
+        usuario.pessoa_id is not None
+        and evento.status == StatusEvento.AGENDADO
+        and not ja_autoinscrita
+        and not vagas_esgotadas
+        and (evento.cpl_id is None or evento.cpl_id in membro_cpl_ids)
+    )
+
     return templates.TemplateResponse(
         request,
         "restrito/eventos/detalhe.html",
@@ -161,6 +180,8 @@ def detalhe(
             "pessoas": pessoas,
             "cpls_inscricao": cpls_inscricao,
             "pode_inscrever": pode_inscrever,
+            "pode_autoinscrever": pode_autoinscrever,
+            "ja_autoinscrita": ja_autoinscrita,
             "pode_gerir_evento": cpls_gestao is None
             or (evento.cpl_id is not None and evento.cpl_id in {c.id for c in cpls_gestao}),
             "status_opcoes": list(StatusEvento),
@@ -221,6 +242,55 @@ def inscrever(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Não há mais vagas disponíveis neste evento.")
 
     db.add(InscricaoEvento(evento_id=evento_id, pessoa_id=pessoa_id, cpl_id=cpl_id))
+    db.commit()
+    return RedirectResponse(f"/painel/eventos/{evento_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{evento_id}/inscrever-me")
+def inscrever_me(
+    evento_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """Autoinscrição — a própria pessoa se inscreve, sem depender de quem
+    tem papel de gestão (diferente de `inscrever` acima, que continua
+    sendo o caminho de gestão pra inscrever QUALQUER pessoa). Deriva
+    `pessoa_id`/`cpl_id` do próprio usuário logado, em vez de aceitar por
+    formulário — evita que alguém inscreva outra pessoa por essa rota."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    if usuario.pessoa_id is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Seu usuário não está vinculado a um cadastro de pessoa — peça pra gestão da CPL vincular.",
+        )
+    evento = db.get(Evento, evento_id)
+    if evento is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Evento não encontrado.")
+    if evento.status != StatusEvento.AGENDADO:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Este evento não está mais aceitando inscrições.")
+
+    if evento.cpl_id is not None:
+        verificar_papel(db, usuario, {Papel.EMPRESA_MEMBRO}, cpl_id=evento.cpl_id)
+        cpl_id = evento.cpl_id
+    else:
+        ids_membro = cpl_ids_membro(db, usuario)
+        cpl_id = next(iter(ids_membro), None)
+
+    ja_inscrita = (
+        db.query(InscricaoEvento)
+        .filter(InscricaoEvento.evento_id == evento_id, InscricaoEvento.pessoa_id == usuario.pessoa_id)
+        .first()
+    )
+    if ja_inscrita is not None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Você já está inscrito(a) neste evento.")
+    if evento.vagas is not None:
+        total = db.query(InscricaoEvento).filter(InscricaoEvento.evento_id == evento_id).count()
+        if total >= evento.vagas:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Não há mais vagas disponíveis neste evento.")
+
+    db.add(InscricaoEvento(evento_id=evento_id, pessoa_id=usuario.pessoa_id, cpl_id=cpl_id))
     db.commit()
     return RedirectResponse(f"/painel/eventos/{evento_id}", status_code=status.HTTP_303_SEE_OTHER)
 
