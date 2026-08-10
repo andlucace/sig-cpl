@@ -1232,6 +1232,18 @@ revisar com a governança real da CPL.
   Desenhado com o usuário (ver "Membro de empresa" abaixo) e corrigido:
   `PAPEIS_LEITURA_MEMBRO` (dashboard de indicadores + eventos) e
   `entidade_e_da_pessoa()` (própria entidade, via `PessoaVinculo`).
+- ~~`POST /api/auth/registrar` sem restrição nenhuma~~ — **resolvido**.
+  Achado como efeito colateral de construir o cadastro de "usuário
+  responsável pela entidade gestora" (ver seção "Cadastro e dados"
+  abaixo): o próprio endpoint já tinha um comentário dizendo "em
+  produção deve ser restrito", mas nunca foi restrito de fato — qualquer
+  um, sem login nenhum, conseguia criar conta em produção. Reportei o
+  achado ao usuário antes de mexer (mudança de comportamento de
+  autenticação, não pedida explicitamente) e ele confirmou. Corrigido
+  com a mesma válvula de bootstrap já usada em `POST /api/usuarios/{id}/
+  papeis`: sem restrição só enquanto não existe nenhum
+  `administrador_plataforma` no sistema — depois disso, exige um
+  administrador autenticado.
 
 ## Membro de empresa (EMPRESA_MEMBRO)
 

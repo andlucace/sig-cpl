@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, Form, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_current_user_optional
+from app.core.rbac import existe_administrador, verificar_papel
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
-from app.models.enums import AcaoAuditoria
+from app.models.enums import AcaoAuditoria, Papel
 from app.models.usuario import Usuario
 from app.schemas.usuario import (
     EsqueciSenhaCreate,
@@ -33,10 +34,25 @@ router = APIRouter(prefix="/auth", tags=["Identidade e acesso"])
 
 
 @router.post("/registrar", response_model=UsuarioRead, status_code=status.HTTP_201_CREATED)
-def registrar_usuario(dados: UsuarioCreate, db: Session = Depends(get_db)) -> Usuario:
-    """RF-004: cria uma conta de acesso. Em produção este endpoint deve ser
-    restrito a administradores/entidade gestora — aberto aqui apenas para
-    viabilizar o bootstrap do ambiente de desenvolvimento."""
+def registrar_usuario(
+    dados: UsuarioCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario | None = Depends(get_current_user_optional),
+) -> Usuario:
+    """RF-004: cria uma conta de acesso. Mesma válvula de bootstrap já
+    usada em `POST /api/usuarios/{id}/papeis` (`app/api/routes/
+    usuario_papel.py`): enquanto não existir nenhum `ADMINISTRADOR_
+    PLATAFORMA` no sistema, qualquer um pode chamar sem autenticação —
+    é assim que se sai do zero. Assim que o primeiro admin existir, essa
+    exceção deixa de valer e passa a exigir um administrador autenticado
+    (achado ao construir o cadastro de "usuário responsável pela entidade
+    gestora": esta rota não tinha restrição nenhuma, mesmo em produção,
+    apesar do próprio código já sinalizar isso como pendência)."""
+
+    if existe_administrador(db):
+        if usuario_atual is None:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Autenticação necessária.")
+        verificar_papel(db, usuario_atual, {Papel.ADMINISTRADOR_PLATAFORMA})
 
     if db.query(Usuario).filter(Usuario.email == dados.email).first():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "E-mail já cadastrado.")

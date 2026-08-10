@@ -2,6 +2,8 @@
 administrador (RF-005) — cobre a espinha dorsal de autenticação que
 todo o resto do sistema depende."""
 
+from conftest import criar_usuario_com_papel, login_como
+
 from app.models.enums import Papel
 from app.models.usuario import UsuarioPapel
 
@@ -52,15 +54,20 @@ def test_me_com_token_retorna_usuario_correto(admin_client, admin_usuario):
     assert resposta.json()["email"] == admin_usuario.email
 
 
-def test_valvula_bootstrap_fecha_apos_primeiro_admin(client, db_session, admin_usuario):
+def test_valvula_bootstrap_fecha_apos_primeiro_admin(client, db_session, admin_usuario, admin_client):
     """RF-005: enquanto não existe nenhum administrador, qualquer usuário
     autenticado pode se autoconceder o papel — mas essa exceção deixa de
-    valer assim que o primeiro admin existe."""
+    valer assim que o primeiro admin existe. Como já existe um admin
+    (fixture `admin_usuario`), registrar o usuário de teste também já
+    exige autenticação como admin agora (mesma válvula, ver testes de
+    `POST /api/auth/registrar` abaixo)."""
 
-    resposta_login = client.post(
+    resposta_registro = admin_client.post(
         "/api/auth/registrar", json={"email": "tentativa@teste.com", "password": "SenhaForte123!"}
     )
-    usuario_id = resposta_login.json()["id"]
+    assert resposta_registro.status_code == 201
+    usuario_id = resposta_registro.json()["id"]
+
     login = client.post(
         "/api/auth/login", data={"username": "tentativa@teste.com", "password": "SenhaForte123!"}
     )
@@ -75,3 +82,27 @@ def test_valvula_bootstrap_fecha_apos_primeiro_admin(client, db_session, admin_u
         db_session.query(UsuarioPapel).filter(UsuarioPapel.usuario_id == usuario_id).count()
     )
     assert ainda_sem_papel == 0
+
+
+def test_registrar_sem_autenticacao_bloqueado_quando_ja_existe_admin(client, admin_usuario):
+    resposta = client.post(
+        "/api/auth/registrar", json={"email": "sem-auth@teste.com", "password": "SenhaForte123!"}
+    )
+    assert resposta.status_code == 401
+
+
+def test_registrar_permitido_para_administrador_autenticado(admin_client, admin_usuario):
+    resposta = admin_client.post(
+        "/api/auth/registrar", json={"email": "criado-pelo-admin@teste.com", "password": "SenhaForte123!"}
+    )
+    assert resposta.status_code == 201
+
+
+def test_registrar_bloqueado_para_usuario_autenticado_nao_admin(client, db_session, admin_usuario):
+    nao_admin = criar_usuario_com_papel(db_session, Papel.CONSELHO_COMITE)
+    client_nao_admin = login_como(client, nao_admin)
+
+    resposta = client_nao_admin.post(
+        "/api/auth/registrar", json={"email": "via-nao-admin@teste.com", "password": "SenhaForte123!"}
+    )
+    assert resposta.status_code == 403

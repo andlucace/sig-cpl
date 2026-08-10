@@ -2248,6 +2248,39 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     automatizados novos (`tests/test_cadastro_gestora.py`) — suíte
     completa em 89 (77 + 12), ruff limpo.
 
+48. **Fecha `POST /api/auth/registrar` sem restrição nenhuma** — achado
+    do item 47 (construindo o cadastro de "usuário responsável"), não
+    corrigido na hora porque é mudança de comportamento de autenticação
+    em produção, não pedida explicitamente — reportei ao usuário
+    ("Quer que eu feche essa brecha também?"), ele respondeu "Sim".
+    - `app/api/routes/auth.py::registrar_usuario` ganhou
+      `usuario_atual: Usuario | None = Depends(get_current_user_optional)`
+      e a mesma válvula já usada em `POST /api/usuarios/{id}/papeis`
+      (`app/api/routes/usuario_papel.py`): `if existe_administrador(db):`
+      exige `usuario_atual` autenticado com `ADMINISTRADOR_PLATAFORMA`
+      (401 se `None`, 403 se autenticado mas sem o papel); enquanto não
+      existir nenhum admin, continua aberto — é assim que se sai do
+      zero, comportamento de bootstrap preservado.
+    - **Quebrou um teste existente**: `test_valvula_bootstrap_fecha_apos_
+      primeiro_admin` usava a fixture `admin_usuario` (cria um admin no
+      banco) e depois chamava `client.post("/api/auth/registrar", ...)`
+      sem autenticação, esperando 201 — com a válvula fechada, isso
+      agora 401. Corrigido trocando pra `admin_client.post(...)` (a
+      fixture `admin_usuario` já garantia que havia um admin; só faltava
+      autenticar como ele pra registrar o usuário de teste) — o resto do
+      teste (usuário recém-criado tentando se autoconceder admin, 403)
+      continua igual. Lição: uma mudança de RBAC pode quebrar
+      pressupostos de teste que não são sobre o endpoint mudado
+      diretamente — rodar a suíte inteira depois, não confiar só no
+      arquivo óbvio.
+    - Produção já tem admin (`admin@sigcpl.dedev.cloud`, criado na sessão
+      de deploy) — o deploy deste item já nasce com a válvula fechada
+      de vez, sem passar por uma janela de bootstrap aberta em produção.
+    - Testado: 3 testes automatizados novos em `tests/test_auth.py`
+      (sem autenticação com admin já existente → 401; admin autenticado
+      → 201; autenticado mas não-admin → 403), suíte completa depois do
+      ajuste do teste quebrado, ruff limpo.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for
