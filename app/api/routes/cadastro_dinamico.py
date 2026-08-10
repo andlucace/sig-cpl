@@ -261,6 +261,28 @@ def obter_importacao(
     return lote
 
 
+@router.get("/modelo-planilha")
+def modelo_planilha(
+    formato: str = "xlsx",
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Response:
+    """Planilha-modelo (cabeçalho de `CAMPOS_CONHECIDOS`, sem linha de
+    dado nenhuma) pra ajudar quem vai importar — não escopada por CPL,
+    o cabeçalho é sempre o mesmo."""
+
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=None)
+    if formato not in _MEDIA_TYPES_EXPORTACAO:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Formato precisa ser 'xlsx' ou 'csv'.")
+
+    conteudo = gerar_xlsx_entidades([]) if formato == "xlsx" else gerar_csv_entidades([])
+    return Response(
+        content=conteudo,
+        media_type=_MEDIA_TYPES_EXPORTACAO[formato],
+        headers={"Content-Disposition": f'attachment; filename="modelo-entidades.{formato}"'},
+    )
+
+
 # --- Exportação de entidades (RF-053) ----------------------------------------
 
 

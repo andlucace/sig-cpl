@@ -1690,6 +1690,50 @@ e um pipeline de CI/CD:
   `deploy.sh`) — automatizar esse último passo é próximo passo, não
   parte deste fechamento.
 
+## Cadastro e dados — entidade gestora, modelo de planilha, cadastro de entidade (RF-001/RF-006/RF-013)
+
+Três pedidos pontuais do módulo Cadastro e dados, todos endereçando
+lacunas reais entre o que a API já suportava e o que a área restrita
+efetivamente expunha:
+
+- **Entidade gestora + usuário responsável** (`/painel/cpls/{id}`,
+  administrador) — `CPL.entidade_gestora_id` já existia e era editável
+  (um `<select>` de entidades já cadastradas), mas (a) não tinha jeito de
+  cadastrar a entidade gestora *na hora*, só escolher entre as já
+  existentes, e (b) não existia nenhum conceito de "usuário responsável"
+  em lugar nenhum do sistema — criar um `Usuario` só existia via
+  `POST /api/auth/registrar` cru, sem escopo de CPL/entidade, seguido de
+  `POST /api/usuarios/{id}/papeis` à parte, nenhum dos dois exposto na
+  área restrita. Dois formulários novos, ambos administrador-only (mesma
+  restrição que já existia pra editar dados cadastrais da CPL):
+  - **"Cadastrar nova entidade gestora"** — cria a `Entidade` e já define
+    `cpl.entidade_gestora_id` num passo só.
+  - **"Usuário responsável pela entidade gestora"** — exige que a CPL já
+    tenha entidade gestora definida; cria `Usuario`+`Pessoa`+
+    `PessoaVinculo`+`UsuarioPapel` (papel `entidade_gestora` ou
+    `dirigente_entidade_gestora`, escolhido no formulário — os dois
+    papéis que fazem sentido como "responsável"), tudo escopado à CPL e
+    à entidade gestora. Reaproveita o mesmo padrão de identidade completa
+    (não só a conta de acesso) já usado na aprovação de adesão (F01).
+- **Modelo de planilha** (`/painel/cadastro/modelo-planilha?formato=xlsx|csv`,
+  também espelhado em `GET /api/cadastro/modelo-planilha`) — pedido
+  explícito pra ajudar quem vai importar. Reaproveita
+  `gerar_xlsx_entidades`/`gerar_csv_entidades` (RF-053, exportação) com
+  uma lista vazia — mesmo cabeçalho de `CAMPOS_CONHECIDOS`, zero linha de
+  dado, nenhuma mudança nessas duas funções foi necessária. Não é
+  escopado por CPL (o cabeçalho é sempre o mesmo); link colocado direto
+  no card "Importar planilha" de `/painel/cadastro/cpls/{id}`.
+- **Cadastrar entidade nova pela área restrita** (`POST
+  /painel/cadastro/cpls/{id}/entidades`) — `POST /api/entidades` já
+  usava exatamente o RBAC pedido (`PAPEIS_GESTAO` = administrador +
+  entidade gestora + dirigente, sem nenhum papel a mais nem a menos),
+  mas só existia via API — o card "Vincular entidade existente" chegava
+  a apontar pro Swagger como alternativa quando não havia nenhuma
+  entidade disponível pra vincular. Cadastra e já vincula à CPL num
+  passo só, escopado por `cpl_id` (mais estrito que a API, que
+  deliberadamente não tem escopo de CPL porque cadastrar não implica
+  vínculo imediato — aqui implica, então escopar faz sentido).
+
 ## Portal de transparência (RF-055)
 
 O portal público (`app/web/routes_publico.py`) até aqui só tinha uma página

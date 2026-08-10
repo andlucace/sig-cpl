@@ -2186,6 +2186,68 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
     ofertas, geocodificação) — aparecem mas dão 403 ao usar, porque só a
     leitura foi liberada nesta fatia, não a escrita.
 
+47. **Três pedidos pontuais do módulo Cadastro e dados** — usuário pediu,
+    numerados (a) entidade gestora + usuário responsável, (b) modelo de
+    planilha, (c) RBAC de quem cadastra entidade pra CPL. Antes de tocar
+    em código, rodei uma pesquisa (agente Explore) pra mapear exatamente
+    o que já existia em cada um dos três — valeu a pena: o achado
+    principal foi que (c) **já estava certo tecnicamente**
+    (`POST /api/entidades` já usava `PAPEIS_GESTAO`, o conjunto exato de
+    três papéis pedido) — a lacuna real era a área restrita não ter
+    formulário nenhum pra isso, só API crua.
+    - **(a) Entidade gestora + usuário responsável** — `CPL.
+      entidade_gestora_id` já existia e era editável, mas só via
+      `<select>` de entidades já cadastradas (sem "criar na hora") e sem
+      nenhum conceito de "usuário responsável" em lugar nenhum do
+      sistema. `app/web/routes_cpl.py` ganhou duas rotas novas,
+      administrador-only (mesma restrição que a edição de dados
+      cadastrais da CPL já tinha, não ampliei pra `PAPEIS_GESTAO` porque
+      o pedido foi especificamente "o administrador"):
+      `POST /{cpl_id}/entidade-gestora` (cria `Entidade` + define
+      `cpl.entidade_gestora_id` num passo) e
+      `POST /{cpl_id}/usuario-responsavel` (exige entidade gestora já
+      definida; cria `Usuario`+`Pessoa`+`PessoaVinculo`+`UsuarioPapel`,
+      papel escolhido entre `entidade_gestora`/`dirigente_entidade_gestora`
+      — reaproveitei o mesmo padrão de identidade completa já usado na
+      aprovação de adesão do F01, não só a conta de acesso).
+      Validação de e-mail duplicado e de papel fora do conjunto
+      permitido, ambos 400.
+    - **(b) Modelo de planilha** — `GET /painel/cadastro/modelo-planilha`
+      (+ espelho em `/api/cadastro/modelo-planilha`), `formato=xlsx|csv`.
+      Reaproveitou `gerar_xlsx_entidades`/`gerar_csv_entidades` (RF-053)
+      passando lista vazia — **zero linha de código nova nessas duas
+      funções**, só a rota que as chama diferente (sem `exportar_entidades`
+      antes). Não escopado por CPL (o cabeçalho é sempre o mesmo,
+      `CAMPOS_CONHECIDOS`).
+    - **(c) Cadastrar entidade pela área restrita** —
+      `POST /painel/cadastro/cpls/{id}/entidades`, cria e já vincula à
+      CPL num passo só. Escopado por `cpl_id` via `PAPEIS_GESTAO` — mais
+      estrito que `POST /api/entidades` (que deliberadamente não tem
+      escopo de CPL, documentado desde que foi construído: cadastrar não
+      implica vínculo imediato), mas aqui faz sentido porque o vínculo É
+      imediato. O card "vincular entidade existente" tinha um link
+      apontando literalmente pro Swagger (`/docs#/Cadastro%20e%20cadeia`)
+      como alternativa quando não havia entidade disponível — removido,
+      substituído pelo formulário de verdade.
+    - **Achado de segurança adjacente, não corrigido nesta fatia**:
+      `POST /api/auth/registrar` não tem RBAC nenhum — o próprio
+      docstring do endpoint já dizia "em produção deve ser restrito a
+      administradores... aberto aqui apenas para viabilizar o bootstrap".
+      Construir uma forma sancionada e escopada de criar `Usuario`
+      (`usuario-responsavel` acima) bem ao lado de um endpoint que
+      qualquer um pode chamar sem autenticação nenhuma é uma
+      inconsistência real — mas fechar isso é mudança de comportamento
+      de autenticação em produção, não pedida explicitamente, então
+      reportei ao usuário em vez de decidir sozinho.
+    Testado: local via curl (cadeia completa checada direto no banco —
+    `CPL.entidade_gestora_id`, `Usuario.pessoa_id`, `UsuarioPapel.
+    entidade_id`, `PessoaVinculo` — e o usuário recém-criado de fato
+    logando e exercendo `PAPEIS_GESTAO`) e Playwright
+    (`cadastro_gestora_shot.js`, zero erro de console, screenshots
+    confirmando os três formulários renderizando certo). 12 testes
+    automatizados novos (`tests/test_cadastro_gestora.py`) — suíte
+    completa em 89 (77 + 12), ruff limpo.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for

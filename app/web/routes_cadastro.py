@@ -25,7 +25,7 @@ from app.models.cadastro_dinamico import (
 )
 from app.models.cpl import CPL
 from app.models.entidade import Entidade, EntidadeCPL, OfertaEntidade
-from app.models.enums import StatusLoteImportacao, StatusSolicitacaoAdesao, TipoOferta
+from app.models.enums import StatusLoteImportacao, StatusSolicitacaoAdesao, TipoEntidade, TipoOferta
 from app.models.usuario import Usuario
 from app.services.adesao import SolicitacaoInvalida, aprovar_solicitacao, rejeitar_solicitacao
 from app.services.armazenamento import caminho_absoluto
@@ -42,6 +42,7 @@ from app.services.importacao_entidades import (
 )
 from app.services.indicadores import diagnostico_desatualizado
 from app.services.integracao_publica import ConsultaCNPJIndisponivel, consultar_cnpj_publico
+from app.services.validadores import cnpj_valido, cpf_valido, normalizar_cnpj, normalizar_cpf, uf_valida
 from app.web.templates import templates
 
 _MEDIA_TYPES_EXPORTACAO = {
@@ -73,6 +74,35 @@ def selecionar_cpl(
         cpls = []
     return templates.TemplateResponse(
         request, "restrito/cadastro/cpls.html", {"cpls": cpls, "usuario": usuario, "pagina_ativa": "cadastro"}
+    )
+
+
+@router.get("/modelo-planilha")
+def modelo_planilha(
+    formato: str = "xlsx",
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """Planilha-modelo pra ajudar quem vai importar (pedido explícito dos
+    gestores) — mesmo cabeçalho de `CAMPOS_CONHECIDOS` que a importação
+    reconhece, sem nenhuma linha de dado (`gerar_xlsx_entidades`/
+    `gerar_csv_entidades` já aceitam lista vazia, mesma função usada na
+    exportação real, RF-053 — não precisou de código novo ali). Não é
+    escopado por CPL: o cabeçalho é sempre o mesmo, então `cpl_id=None`
+    em `verificar_papel` já basta (qualquer papel de gestão em qualquer
+    CPL serve)."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=None)
+    if formato not in _MEDIA_TYPES_EXPORTACAO:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Formato precisa ser 'xlsx' ou 'csv'.")
+
+    conteudo = gerar_xlsx_entidades([]) if formato == "xlsx" else gerar_csv_entidades([])
+    return Response(
+        content=conteudo,
+        media_type=_MEDIA_TYPES_EXPORTACAO[formato],
+        headers={"Content-Disposition": f'attachment; filename="modelo-entidades.{formato}"'},
     )
 
 
@@ -110,6 +140,7 @@ def detalhe_cpl(
             "cpl": cpl,
             "vinculos": vinculos,
             "entidades_disponiveis": entidades_disponiveis,
+            "tipos_entidade": list(TipoEntidade),
             "campanhas": campanhas,
             "importacoes": importacoes,
             "usuario": usuario,
@@ -135,6 +166,66 @@ def vincular_entidade(
     ).first():
         db.add(EntidadeCPL(cpl_id=cpl_id, entidade_id=entidade_id, data_vinculo=date.today()))
         db.commit()
+    return RedirectResponse(f"/painel/cadastro/cpls/{cpl_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+def _validar_mascaras(cnpj: str | None, cpf: str | None, uf: str | None) -> None:
+    """RF-014: mesma validação de formato (dígito verificador de CNPJ/CPF,
+    UF pela lista fechada) já usada em `app/api/routes/entidades.py` —
+    reaproveitada aqui pra não ficar divergente entre API e web."""
+
+    if cnpj and not cnpj_valido(cnpj):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "CNPJ inválido.")
+    if cpf and not cpf_valido(cpf):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "CPF inválido.")
+    if uf and not uf_valida(uf):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "UF inválida.")
+
+
+@router.post("/cpls/{cpl_id}/entidades")
+def criar_entidade_para_cpl(
+    cpl_id: uuid.UUID,
+    tipo: TipoEntidade = Form(...),
+    razao_social: str = Form(...),
+    nome_fantasia: str | None = Form(None),
+    cnpj: str | None = Form(None),
+    cpf: str | None = Form(None),
+    municipio: str | None = Form(None),
+    uf: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """Cadastra uma `Entidade` nova e já vincula direto a esta CPL, num
+    passo só — diferente de `vincular_entidade` acima, que só linka uma
+    entidade já existente. Antes disso só existia via API crua
+    (`POST /api/entidades` + `POST .../vinculo` em duas chamadas), sem
+    formulário nenhum na área restrita — o rodapé do card de "vincular
+    entidade existente" chegava a apontar pro Swagger como alternativa.
+    Escopado por `cpl_id` (`PAPEIS_GESTAO`) — mais estrito que
+    `POST /api/entidades`, que não tem escopo de CPL porque cadastra sem
+    necessariamente vincular a nenhuma; aqui o vínculo é imediato, então
+    escopar pela CPL de destino é o comportamento certo."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    if db.get(CPL, cpl_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=cpl_id)
+    _validar_mascaras(cnpj, cpf, uf)
+
+    entidade = Entidade(
+        tipo=tipo,
+        razao_social=razao_social,
+        nome_fantasia=nome_fantasia or None,
+        cnpj=normalizar_cnpj(cnpj) if cnpj else None,
+        cpf=normalizar_cpf(cpf) if cpf else None,
+        municipio=municipio or None,
+        uf=uf.strip().upper() if uf else None,
+    )
+    db.add(entidade)
+    db.flush()
+    db.add(EntidadeCPL(cpl_id=cpl_id, entidade_id=entidade.id, data_vinculo=date.today()))
+    db.commit()
     return RedirectResponse(f"/painel/cadastro/cpls/{cpl_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
