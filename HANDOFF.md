@@ -2281,6 +2281,80 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
       → 201; autenticado mas não-admin → 403), suíte completa depois do
       ajuste do teste quebrado, ruff limpo.
 
+49. **Setor/Município/UF viram listbox no cadastro de CPL** — pedido
+    explícito: Setor restrito aos valores já cadastrados, Município e
+    Estado também em listbox, Estado antes de Município, escolher o
+    Estado filtra o Município, buscando a lista completa de estados e
+    municípios do Brasil numa API gratuita, sem ocupar espaço de banco.
+    - Fonte escolhida: API pública de Localidades do IBGE
+      (`servicodados.ibge.gov.br/api/v1/localidades`, gratuita, sem
+      credencial) — mesmo raciocínio já usado pra CNPJ (BrasilAPI,
+      RF-054) e geocodificação (Nominatim, RF-011): testar a chamada
+      real via `curl` e via `urllib` puro (não só `curl`) antes de
+      escrever qualquer código, porque cada serviço público falha de um
+      jeito diferente.
+    - **Armadilha nova, diferente da de User-Agent já vista em
+      BrasilAPI/Nominatim**: o IBGE sempre devolve `Content-Encoding:
+      gzip`, mesmo sem o cliente pedir — `urllib.request` não
+      descomprime sozinho (só `requests`/navegador fazem isso), então
+      ler a resposta crua quebrava com `UnicodeDecodeError` (byte
+      inicial `\x8b`, a assinatura gzip). Corrigido checando o header e
+      chamando `gzip.decompress()` antes do `json.loads()`.
+    - `app/services/localidades.py` (novo): `estados()` e
+      `municipios_do_estado(uf)`, ambos `@lru_cache` (cache só em
+      memória do processo, `maxsize=1` e `maxsize=27` respectivamente —
+      as 27 UFs são o teto de combinações possíveis). Zero tabela nova,
+      zero linha gravada além do que `CPL.municipio`/`CPL.uf` já
+      guardavam — decisão explícita pra atender "não ocupar muito
+      espaço de banco de dados". O IBGE manda `Cache-Control:
+      max-age=2592000` (30 dias) nas próprias respostas, então cache
+      pela vida do processo é bem mais conservador que isso.
+      `estados()` cai pra uma lista de reserva fixa das 27 UFs se o
+      IBGE cair (nunca mudam, vale embutir); `municipios_do_estado()`
+      não tem reserva (~5.570 nomes, não vale embutir) — se falhar, só
+      aquele estado fica sem opção de município, sem quebrar o resto do
+      formulário.
+    - `app/web/routes_cpl.py`: `_setores_cadastrados()` (`DISTINCT
+      CPL.setor`) e `_setor_final(setor, setor_outro)` — Setor virou
+      `<select>` restrito aos valores já usados, com um `<input
+      name="setor_outro">` ao lado que tem precedência se preenchido
+      (minha decisão, não pedida explicitamente, mas necessária: sem
+      isso a primeira CPL de um setor novo — ou o sistema recém-
+      instalado sem nenhuma CPL — ficaria num beco sem saída, sem
+      nenhuma opção pra escolher). Nova rota `GET
+      /painel/cpls/municipios-fragment` (fragmento HTMX, devolve só o
+      `<select>` de município filtrado pela UF) — **precisa estar
+      registrada antes de `GET /{cpl_id}` no arquivo**, senão o
+      FastAPI tenta casar "municipios-fragment" contra o
+      `{cpl_id}: uuid.UUID` primeiro (registrado antes) e devolve 422
+      em vez de chegar na rota certa.
+    - Templates (`lista.html` criação, `detail.html` edição): UF
+      reordenado pra antes de Município; UF é `<select>` com
+      `hx-get="/painel/cpls/municipios-fragment" hx-trigger="change"
+      hx-target="#municipio-select-wrapper" hx-swap="innerHTML"`;
+      Município é um `{% include
+      "restrito/cpls/fragments/municipio_select.html" %}` (fragmento
+      novo, reaproveitado tanto no include inicial quanto na resposta
+      HTMX) — como o Jinja `{% include %}` herda o contexto do
+      template pai, tanto `listar()` quanto `detalhe()` precisaram
+      passar explicitamente `municipios`/`municipio_selecionado` no
+      contexto, senão o `Undefined` padrão do Jinja quebra ao iterar.
+    - Testado: local via `curl` (IBGE real, antes de escrever
+      `localidades.py`) e Playwright (`localidades_shot.js`) contra o
+      app rodando de verdade — confirmando que trocar UF pra RJ de fato
+      filtra o `<select>` de município pra cidades do RJ (Rio de
+      Janeiro aparece, Atibaia/SP não aparece) e que o cadastro
+      completo (escolher UF, esperar o HTMX trocar o município,
+      escolher Niterói, submeter) persiste certo. 15 testes
+      automatizados novos (`tests/test_localidades.py`, serviço
+      mockando `urlopen` como `test_geocodificacao.py` já fazia, rotas
+      mockando `routes_cpl.estados`/`routes_cpl.municipios_do_estado`
+      no ponto de uso) — suíte completa em 107 (92 + 15), ruff limpo.
+      Gotcha de teste: `lru_cache` persiste entre testes no mesmo
+      processo pytest — precisou de fixture `autouse=True` chamando
+      `.cache_clear()` antes E depois de cada teste, senão o resultado
+      do primeiro teste "vazava" pros seguintes.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for

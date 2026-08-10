@@ -1746,6 +1746,50 @@ efetivamente expunha:
   deliberadamente não tem escopo de CPL porque cadastrar não implica
   vínculo imediato — aqui implica, então escopar faz sentido).
 
+## Setor/Município/UF como listbox no cadastro de CPL (RF-001)
+
+Pedido explícito: o campo Setor do formulário de CPL (`/painel/cpls`
+criação e `/painel/cpls/{id}` edição) virou listbox restrita, Município e
+Estado também viraram listbox, Estado antes de Município, e escolher o
+Estado filtra as opções de Município — tudo sem criar tabela nova nem
+gastar espaço de banco.
+
+- **Setor** — `<select>` com os valores já usados por alguma CPL
+  (`DISTINCT CPL.setor`, ordenado), sem tabela nova. Um `<input
+  name="setor_outro">` ao lado permite digitar um setor que ainda não
+  existe (evita um beco sem saída pra primeira CPL de um setor genuíno,
+  ou pro sistema recém-instalado sem nenhuma CPL ainda) — se preenchido,
+  tem precedência sobre o `<select>` (`_setor_final()` em
+  `app/web/routes_cpl.py`).
+- **Estado e Município** — fonte é a API pública de Localidades do IBGE
+  (`https://servicodados.ibge.gov.br/api/v1/localidades`, gratuita, sem
+  autenticação), consumida por `app/services/localidades.py`. Estado
+  escolhido primeiro; ao mudar o `<select>` de UF, HTMX
+  (`hx-get="/painel/cpls/municipios-fragment"`) busca só os municípios
+  daquele estado e substitui o `<select>` de Município, sem JavaScript
+  escrito à mão nem reload de página.
+- **Nada é persistido além do que já existia** — `CPL.municipio` e
+  `CPL.uf` são as mesmas duas colunas de sempre. A lista de 27 estados e
+  ~5.570 municípios em si só fica em cache de memória do processo
+  (`functools.lru_cache`, um `maxsize=1` pros estados e `maxsize=27` pros
+  municípios, um por UF), válido até o próximo deploy/restart — zero
+  tabela nova, atendendo ao pedido explícito de não ocupar espaço de
+  banco. O próprio IBGE manda `Cache-Control: max-age=2592000` (30 dias)
+  nas respostas, então cache em memória pela vida do processo já é bem
+  mais conservador que isso.
+- **Resiliência**: se o IBGE cair, `estados()` cai pra uma lista de
+  reserva fixa das 27 UFs (nunca mudam) embutida no código, então o
+  formulário de CPL nunca fica sem opção de Estado; `municipios_do_estado()`
+  não tem reserva (são muitos e mudam raramente, mas não vale embutir
+  ~5.570 nomes) — se falhar, só aquele estado específico fica sem opções
+  de município, sem quebrar o resto do formulário.
+- **Gotcha real ao integrar** (diferente do problema de User-Agent já
+  visto em BrasilAPI/Nominatim): o IBGE sempre devolve `Content-Encoding:
+  gzip`, mesmo sem o cliente pedir, e `urllib.request` não descomprime
+  sozinho — ler a resposta crua quebra com `UnicodeDecodeError`. Corrigido
+  detectando o header e chamando `gzip.decompress()` antes do
+  `json.loads()`.
+
 ## Portal de transparência (RF-055)
 
 O portal público (`app/web/routes_publico.py`) até aqui só tinha uma página

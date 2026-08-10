@@ -1,0 +1,6 @@
+<select class="form-select" name="municipio" id="municipio-select">
+    <option value="">—</option>
+    {% for m in municipios %}
+        <option value="{{ m }}" {% if m == municipio_selecionado %}selected{% endif %}>{{ m }}</option>
+    {% endfor %}
+</select>

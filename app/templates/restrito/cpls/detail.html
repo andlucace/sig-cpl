@@ -29,16 +29,34 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Setor</label>
-                        <input type="text" class="form-control" name="setor" value="{{ cpl.setor or '' }}">
+                        <select class="form-select mb-1" name="setor">
+                            <option value="">—</option>
+                            {% for s in setores %}
+                                <option value="{{ s }}" {% if s == cpl.setor %}selected{% endif %}>{{ s }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="text" class="form-control form-control-sm" name="setor_outro"
+                               placeholder="Ou informe um setor novo, se nenhum acima servir">
                     </div>
                     <div class="row g-2 mb-3">
-                        <div class="col-8">
-                            <label class="form-label">Município</label>
-                            <input type="text" class="form-control" name="municipio" value="{{ cpl.municipio or '' }}">
-                        </div>
                         <div class="col-4">
                             <label class="form-label">UF</label>
-                            <input type="text" class="form-control" name="uf" maxlength="2" value="{{ cpl.uf or '' }}">
+                            <select class="form-select" name="uf"
+                                    hx-get="/painel/cpls/municipios-fragment"
+                                    hx-trigger="change"
+                                    hx-target="#municipio-select-wrapper"
+                                    hx-swap="innerHTML">
+                                <option value="">—</option>
+                                {% for sigla, nome in estados %}
+                                    <option value="{{ sigla }}" {% if sigla == cpl.uf %}selected{% endif %}>{{ nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-8">
+                            <label class="form-label">Município</label>
+                            <div id="municipio-select-wrapper">
+                                {% include "restrito/cpls/fragments/municipio_select.html" %}
+                            </div>
                         </div>
                     </div>
                     <div class="mb-3">

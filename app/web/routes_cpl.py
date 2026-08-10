@@ -15,6 +15,7 @@ from app.models.entidade import Entidade
 from app.models.enums import Papel, TipoEntidade
 from app.models.pessoa import Pessoa, PessoaVinculo
 from app.models.usuario import Usuario, UsuarioPapel
+from app.services.localidades import estados, municipios_do_estado
 from app.services.validadores import cnpj_valido, cpf_valido, normalizar_cnpj, normalizar_cpf, uf_valida
 from app.web.templates import templates
 
@@ -37,6 +38,23 @@ def _opt_uuid(valor: str | None) -> uuid.UUID | None:
     return uuid.UUID(valor) if valor else None
 
 
+def _setores_cadastrados(db: Session) -> list[str]:
+    """Setor virou listbox restrita aos valores já usados por alguma CPL
+    (pedido explícito) — sem tabela nova, só `DISTINCT` no que já existe.
+    Ver `setor_outro` em `criar`/`atualizar` pra como um setor novo (ex.:
+    a primeiríssima CPL do sistema, sem nenhum setor cadastrado ainda)
+    consegue entrar na lista sem ficar num beco sem saída."""
+
+    linhas = (
+        db.query(CPL.setor).filter(CPL.setor.is_not(None)).distinct().order_by(CPL.setor).all()
+    )
+    return [linha[0] for linha in linhas]
+
+
+def _setor_final(setor: str | None, setor_outro: str | None) -> str | None:
+    return (setor_outro or "").strip() or (setor or None)
+
+
 @router.get("")
 def listar(request: Request, db: Session = Depends(get_db), usuario=Depends(get_current_user_optional)):
     if redir := _exigir_login(usuario):
@@ -54,8 +72,39 @@ def listar(request: Request, db: Session = Depends(get_db), usuario=Depends(get_
         {
             "cpls": cpls,
             "e_administrador": _e_administrador(db, usuario),
+            "estados": estados(),
+            "setores": _setores_cadastrados(db),
+            "municipios": [],
+            "municipio_selecionado": None,
             "usuario": usuario,
             "pagina_ativa": "cpls",
+        },
+    )
+
+
+@router.get("/municipios-fragment")
+def municipios_fragment(
+    request: Request,
+    uf: str = "",
+    municipio_selecionado: str = "",
+    usuario=Depends(get_current_user_optional),
+):
+    """Fragmento HTMX — o `<select>` de Estado dispara isto no `change`
+    (`hx-get`/`hx-trigger`/`hx-target`, sem JavaScript escrito à mão,
+    mesmo padrão de fragmento já usado em Cadastro/Campanhas) e troca o
+    conteúdo do `<select>` de Município pelos municípios da UF escolhida.
+    **Precisa vir registrada antes de `GET /{cpl_id}` no router** — senão
+    `/municipios-fragment` seria capturado pelo `{cpl_id}` (tentativa de
+    conversão pra UUID, 422) antes de chegar aqui."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    return templates.TemplateResponse(
+        request,
+        "restrito/cpls/fragments/municipio_select.html",
+        {
+            "municipios": municipios_do_estado(uf) if uf else [],
+            "municipio_selecionado": municipio_selecionado or None,
         },
     )
 
@@ -66,6 +115,7 @@ def criar(
     nome: str = Form(...),
     sigla: str = Form(...),
     setor: str | None = Form(None),
+    setor_outro: str | None = Form(None),
     municipio: str | None = Form(None),
     uf: str | None = Form(None),
     entidade_gestora_id: str | None = Form(None),
@@ -77,12 +127,13 @@ def criar(
     verificar_papel(db, usuario, {Papel.ADMINISTRADOR_PLATAFORMA})
     if db.query(CPL).filter(CPL.sigla == sigla).first():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Sigla já utilizada por outra CPL.")
+    _validar_mascaras(None, None, uf)
     cpl = CPL(
         nome=nome,
         sigla=sigla,
-        setor=setor or None,
+        setor=_setor_final(setor, setor_outro),
         municipio=municipio or None,
-        uf=uf or None,
+        uf=uf.strip().upper() if uf else None,
         entidade_gestora_id=_opt_uuid(entidade_gestora_id),
     )
     db.add(cpl)
@@ -123,6 +174,10 @@ def detalhe(
             "responsaveis": responsaveis,
             "papeis_responsavel": list(_PAPEIS_RESPONSAVEL_ENTIDADE_GESTORA),
             "e_administrador": _e_administrador(db, usuario),
+            "estados": estados(),
+            "setores": _setores_cadastrados(db),
+            "municipios": municipios_do_estado(cpl.uf) if cpl.uf else [],
+            "municipio_selecionado": cpl.municipio,
             "usuario": usuario,
             "pagina_ativa": "cpls",
         },
@@ -255,6 +310,7 @@ def atualizar(
     nome: str | None = Form(None),
     sigla: str | None = Form(None),
     setor: str | None = Form(None),
+    setor_outro: str | None = Form(None),
     municipio: str | None = Form(None),
     uf: str | None = Form(None),
     entidade_gestora_id: str | None = Form(None),
@@ -268,6 +324,7 @@ def atualizar(
     if cpl is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "CPL não encontrada.")
     verificar_papel(db, usuario, {Papel.ADMINISTRADOR_PLATAFORMA})
+    _validar_mascaras(None, None, uf)
 
     if sigla and sigla != cpl.sigla:
         if db.query(CPL).filter(CPL.sigla == sigla, CPL.id != cpl_id).first():
@@ -275,9 +332,9 @@ def atualizar(
         cpl.sigla = sigla
     if nome:
         cpl.nome = nome
-    cpl.setor = setor or None
+    cpl.setor = _setor_final(setor, setor_outro)
     cpl.municipio = municipio or None
-    cpl.uf = uf or None
+    cpl.uf = uf.strip().upper() if uf else None
     cpl.entidade_gestora_id = _opt_uuid(entidade_gestora_id)
     cpl.ativo = ativo == "on"
     db.commit()
