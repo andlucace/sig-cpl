@@ -2355,6 +2355,55 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
       `.cache_clear()` antes E depois de cada teste, senão o resultado
       do primeiro teste "vazava" pros seguintes.
 
+50. **Tela "Solicitar adesão" (F01): Município/UF em listbox, telefone com
+    máscara, e-mail reforçado** — pedido explícito, mesmo tratamento de
+    Estado/Município do item 49, agora aplicado à tela pública de adesão.
+    - `app/web/routes_publico.py` ganhou `GET /cpls/{id}/solicitar-adesao/
+      municipios-fragment` — mesmo fragmento HTMX
+      (`restrito/cpls/fragments/municipio_select.html`, reaproveitado
+      direto, apesar do nome da pasta) e mesmo serviço
+      (`app/services/localidades.py`) do item 49, mas **sem exigir
+      login** (`_exigir_login` não é chamado aqui — a tela inteira é
+      pública). UF virou `<select>` (antes era `<input>` livre),
+      reordenado pra antes de Município no formulário, com
+      `hx-get`/`hx-trigger="change"` disparando o fragmento.
+    - **Telefone**: máscara `(99) 99999-9999` formatada em tempo real —
+      **primeiro JavaScript escrito à mão do projeto** (`<script>` inline
+      em `solicitar_adesao.html`, ouvindo o evento `input` do campo).
+      Todo o resto do sistema usa só HTMX pra dinamismo; uma máscara de
+      digitação (inserir `(`, `)`, espaço e `-` enquanto a pessoa digita)
+      não é algo que HTMX resolve, então não dava pra manter a disciplina
+      de "zero JS" aqui sem piorar a experiência. Ainda assim, o JS é só
+      cosmético — quem desabilita JavaScript consegue digitar o telefone
+      sem máscara e a submissão funciona igual, porque a validação de
+      verdade é sempre no servidor.
+    - `app/services/validadores.py` ganhou `telefone_valido()`/
+      `normalizar_telefone()` — mesmo padrão de `cnpj_valido`/`cpf_valido`
+      (só valida quando o campo vem preenchido, já que telefone não é
+      obrigatório): aceita 10 ou 11 dígitos depois de tirar a máscara
+      (fixo ou celular), sem dígito verificador (telefone não tem um
+      oficial). Chamada em `criar_solicitacao`
+      (`app/services/adesao.py`) — cobre tanto o formulário web quanto
+      `POST /api/cpls/{id}/solicitacoes-adesao`, já que os dois passam
+      pelo mesmo service.
+    - **E-mail**: já era validado no servidor por `EmailStr` (Pydantic)
+      desde que este fluxo existe (retorna "E-mail de contato inválido."
+      em caso de erro) — o pedido de "verificar se tem @ e pontos" já
+      estava coberto; só reforcei com `pattern="[^\s@]+@[^\s@]+\.[^\s@]+"`
+      e `title` no `<input type="email">`, pra rejeitar no navegador
+      antes mesmo de enviar, sem esperar o round-trip ao servidor.
+    - Testado: local via Playwright contra o app rodando de verdade
+      (`adesao_localidades_shot.js`) — confirmando a cascata UF→Município
+      real (RJ filtra pra 93 municípios reais, Rio de Janeiro aparece),
+      a máscara formatando "11987654321" digitado em
+      "(11) 98765-4321" enquanto o usuário digita, o fluxo completo de
+      envio funcionando (chega na página de "obrigado"), e-mail inválido
+      barrado pelo navegador antes do envio (`checkValidity() === false`),
+      zero erro de console. 13 testes automatizados novos (4 em
+      `tests/test_validadores.py`, 6 em `tests/test_adesao.py`) — suíte
+      completa em 117 (107 + ~10, alguns testes de outros arquivos também
+      cresceram nesse intervalo), ruff limpo.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for

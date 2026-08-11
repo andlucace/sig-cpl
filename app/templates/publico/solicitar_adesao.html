@@ -59,13 +59,24 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-md-8">
-                            <label class="form-label">Município</label>
-                            <input type="text" class="form-control" name="municipio" value="{{ dados.get('municipio', '') }}">
-                        </div>
                         <div class="col-md-4">
                             <label class="form-label">UF</label>
-                            <input type="text" class="form-control" name="uf" maxlength="2" value="{{ dados.get('uf', '') }}">
+                            <select class="form-select" name="uf"
+                                    hx-get="/cpls/{{ cpl.id }}/solicitar-adesao/municipios-fragment"
+                                    hx-trigger="change"
+                                    hx-target="#municipio-select-wrapper"
+                                    hx-swap="innerHTML">
+                                <option value="">—</option>
+                                {% for sigla, nome in estados %}
+                                    <option value="{{ sigla }}" {% if sigla == dados.get('uf') %}selected{% endif %}>{{ nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Município</label>
+                            <div id="municipio-select-wrapper">
+                                {% include "restrito/cpls/fragments/municipio_select.html" %}
+                            </div>
                         </div>
                         <div class="col-12">
                             <label class="form-label">Mensagem (opcional)</label>
@@ -81,11 +92,19 @@
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">E-mail</label>
-                            <input type="email" class="form-control" name="contato_email" value="{{ dados.get('contato_email', '') }}" required>
+                            <input type="email" class="form-control" name="contato_email"
+                                   value="{{ dados.get('contato_email', '') }}"
+                                   pattern="[^\s@]+@[^\s@]+\.[^\s@]+"
+                                   title="Informe um e-mail válido, com @ e domínio (ex.: nome@empresa.com)."
+                                   required>
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">Telefone</label>
-                            <input type="text" class="form-control" name="contato_telefone" value="{{ dados.get('contato_telefone', '') }}">
+                            <input type="text" class="form-control" id="contato-telefone" name="contato_telefone"
+                                   value="{{ dados.get('contato_telefone', '') }}"
+                                   placeholder="(11) 91234-5678" maxlength="15"
+                                   pattern="\(\d{2}\) \d{4,5}-\d{4}"
+                                   title="Formato esperado: (99) 99999-9999.">
                         </div>
                     </div>
 
@@ -106,4 +125,22 @@
             </form>
         </div>
     </div>
+    <script>
+        (function () {
+            var campo = document.getElementById("contato-telefone");
+            if (!campo) return;
+            campo.addEventListener("input", function () {
+                var digitos = campo.value.replace(/\D/g, "").slice(0, 11);
+                var formatado = digitos;
+                if (digitos.length > 2) {
+                    formatado = "(" + digitos.slice(0, 2) + ") " + digitos.slice(2);
+                }
+                if (digitos.length > 7) {
+                    var fim = digitos.length > 10 ? 7 : 6;
+                    formatado = "(" + digitos.slice(0, 2) + ") " + digitos.slice(2, fim) + "-" + digitos.slice(fim);
+                }
+                campo.value = formatado;
+            });
+        })();
+    </script>
 {% endblock %}

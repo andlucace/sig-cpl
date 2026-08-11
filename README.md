@@ -1949,6 +1949,27 @@ entrada pra quem está de fora.
   gestão da CPL compartilhar a URL pública do formulário com quem quiser
   — é o mesmo formulário da "solicitação", só descoberto por um canal
   diferente.
+- **Município/UF em listbox, telefone com máscara, e-mail reforçado**
+  (pedido explícito) — o formulário de solicitação ganhou o mesmo
+  tratamento de Estado/Município já aplicado ao cadastro de CPL
+  (RF-001): `<select>` de UF antes de Município, Município filtrado pela
+  UF escolhida via HTMX contra a API do IBGE
+  (`app/services/localidades.py`), fragmento próprio e **público**
+  (`GET /cpls/{id}/solicitar-adesao/municipios-fragment`, sem exigir
+  login — diferente do fragmento equivalente em `/painel/cpls`, que
+  exige). Telefone ganhou máscara `(99) 99999-9999` formatada em tempo
+  real por um pequeno `<script>` inline (o primeiro JavaScript escrito à
+  mão do projeto — todo o resto do sistema usa só HTMX; aqui não dava
+  pra fugir, uma máscara de digitação não é algo que HTMX resolve) mais
+  `pattern`/`title` HTML pra feedback do navegador; a validação de
+  verdade continua no servidor, `telefone_valido()`
+  (`app/services/validadores.py`, mesmo padrão de `cnpj_valido`/
+  `cpf_valido` — só valida quando preenchido, 10 ou 11 dígitos depois de
+  tirar a formatação), chamada em `criar_solicitacao` (cobre tanto o
+  formulário web quanto `POST /api/cpls/{id}/solicitacoes-adesao`, mesmo
+  service). E-mail já era validado no servidor por `EmailStr`
+  (Pydantic) desde que este fluxo existe — ganhou só um `pattern` HTML
+  a mais, pra rejeitar no navegador antes mesmo de enviar.
 
 ## Observabilidade (RNF-012)
 

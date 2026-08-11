@@ -59,3 +59,17 @@ def cpf_valido(valor: str) -> bool:
 
 def uf_valida(valor: str) -> bool:
     return valor.strip().upper() in _UFS_VALIDAS
+
+
+def normalizar_telefone(valor: str) -> str:
+    return "".join(c for c in valor if c.isdigit())
+
+
+def telefone_valido(valor: str) -> bool:
+    """Máscara `(99) 99999-9999` (celular, DDD + 9 dígitos) ou
+    `(99) 9999-9999` (fixo, DDD + 8 dígitos) — só a contagem de dígitos
+    depois de tirar a formatação, sem dígito verificador (telefone não
+    tem um oficial como CNPJ/CPF)."""
+
+    digitos = normalizar_telefone(valor)
+    return len(digitos) in (10, 11)

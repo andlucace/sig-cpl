@@ -16,7 +16,14 @@ from app.models.entidade import Entidade, EntidadeCPL, EntidadeElo
 from app.models.enums import Papel, StatusSolicitacaoAdesao
 from app.models.pessoa import Pessoa, PessoaVinculo
 from app.schemas.adesao import SolicitacaoAdesaoCreate
-from app.services.validadores import cnpj_valido, cpf_valido, normalizar_cnpj, normalizar_cpf, uf_valida
+from app.services.validadores import (
+    cnpj_valido,
+    cpf_valido,
+    normalizar_cnpj,
+    normalizar_cpf,
+    telefone_valido,
+    uf_valida,
+)
 
 
 class SolicitacaoInvalida(Exception):
@@ -32,6 +39,8 @@ def criar_solicitacao(db: Session, cpl_id: uuid.UUID, dados: SolicitacaoAdesaoCr
         raise SolicitacaoInvalida("CPF inválido.")
     if dados.uf and not uf_valida(dados.uf):
         raise SolicitacaoInvalida("UF inválida.")
+    if dados.contato_telefone and not telefone_valido(dados.contato_telefone):
+        raise SolicitacaoInvalida("Telefone inválido — use o formato (99) 99999-9999.")
 
     solicitacao = SolicitacaoAdesao(
         cpl_id=cpl_id,

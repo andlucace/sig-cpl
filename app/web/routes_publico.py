@@ -15,6 +15,7 @@ from app.services.indicadores import (
     resumo_cadastral,
     resumo_governanca,
 )
+from app.services.localidades import estados, municipios_do_estado
 from app.services.projeto import projetos_autorizados
 from app.web.templates import templates
 
@@ -87,7 +88,40 @@ def solicitar_adesao_form(cpl_id: uuid.UUID, request: Request, db: Session = Dep
     return templates.TemplateResponse(
         request,
         "publico/solicitar_adesao.html",
-        {"cpl": cpl, "tipos": list(TipoEntidade), "elos": list(Elo), "erro": None, "dados": {}},
+        {
+            "cpl": cpl,
+            "tipos": list(TipoEntidade),
+            "elos": list(Elo),
+            "erro": None,
+            "dados": {},
+            "estados": estados(),
+            "municipios": [],
+            "municipio_selecionado": None,
+        },
+    )
+
+
+@router.get("/cpls/{cpl_id}/solicitar-adesao/municipios-fragment")
+def solicitar_adesao_municipios_fragment(
+    cpl_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    uf: str = "",
+    municipio_selecionado: str = "",
+):
+    """Fragmento HTMX do `<select>` de município, filtrado pela UF
+    escolhida — mesmo padrão de `/painel/cpls/municipios-fragment`
+    (`app/web/routes_cpl.py`), reaproveitando o mesmo template de
+    fragmento; aqui sem exigir login, porque a tela toda é pública."""
+
+    _cpl_ativa_ou_404(db, cpl_id)
+    return templates.TemplateResponse(
+        request,
+        "restrito/cpls/fragments/municipio_select.html",
+        {
+            "municipios": municipios_do_estado(uf) if uf else [],
+            "municipio_selecionado": municipio_selecionado or None,
+        },
     )
 
 
@@ -156,6 +190,9 @@ def solicitar_adesao_submit(
                 "elos": list(Elo),
                 "erro": erro,
                 "dados": dados_form,
+                "estados": estados(),
+                "municipios": municipios_do_estado(uf) if uf else [],
+                "municipio_selecionado": municipio or None,
             },
             status_code=status.HTTP_400_BAD_REQUEST,
         )

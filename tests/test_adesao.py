@@ -131,6 +131,78 @@ def test_rota_web_publica_formulario_carrega_sem_autenticacao(client, admin_clie
     assert "Solicitar adesão" in resposta.text
 
 
+def test_solicitar_adesao_telefone_invalido_e_rejeitada(client, admin_client):
+    cpl_id = _criar_cpl(admin_client, sigla="CPL-ADESAO-08")
+    resposta = client.post(
+        f"/api/cpls/{cpl_id}/solicitacoes-adesao",
+        json=_payload(contato_telefone="(11) 987-65"),
+    )
+    assert resposta.status_code == 400
+
+
+def test_solicitar_adesao_telefone_valido_e_aceita(client, admin_client):
+    cpl_id = _criar_cpl(admin_client, sigla="CPL-ADESAO-09")
+    resposta = client.post(
+        f"/api/cpls/{cpl_id}/solicitacoes-adesao",
+        json=_payload(contato_telefone="(11) 98765-4321"),
+    )
+    assert resposta.status_code == 201
+
+
+def test_solicitar_adesao_email_sem_arroba_e_rejeitada(client, admin_client):
+    cpl_id = _criar_cpl(admin_client, sigla="CPL-ADESAO-10")
+    resposta = client.post(
+        f"/api/cpls/{cpl_id}/solicitacoes-adesao",
+        json=_payload(contato_email="nao-e-email"),
+    )
+    assert resposta.status_code == 422
+
+
+def test_formulario_web_mostra_selects_de_uf_e_municipio(client, admin_client, monkeypatch):
+    from app.web import routes_publico
+
+    monkeypatch.setattr(routes_publico, "estados", lambda: [("SP", "São Paulo")])
+    cpl_id = _criar_cpl(admin_client, sigla="CPL-ADESAO-11")
+    resposta = client.get(f"/cpls/{cpl_id}/solicitar-adesao")
+    assert resposta.status_code == 200
+    assert 'name="uf"' in resposta.text
+    assert 'name="municipio"' in resposta.text
+    assert "São Paulo" in resposta.text
+
+
+def test_fragment_municipios_da_adesao_nao_exige_login(client, admin_client, monkeypatch):
+    from app.web import routes_publico
+
+    monkeypatch.setattr(routes_publico, "municipios_do_estado", lambda uf: [f"Cidade de {uf}"])
+    cpl_id = _criar_cpl(admin_client, sigla="CPL-ADESAO-12")
+    resposta = client.get(f"/cpls/{cpl_id}/solicitar-adesao/municipios-fragment?uf=RJ")
+    assert resposta.status_code == 200
+    assert "Cidade de RJ" in resposta.text
+
+
+def test_web_solicitar_adesao_grava_municipio_e_uf_do_select(client, admin_client):
+    cpl_id = _criar_cpl(admin_client, sigla="CPL-ADESAO-13")
+    resposta = client.post(
+        f"/cpls/{cpl_id}/solicitar-adesao",
+        data={
+            "tipo": "empresa",
+            "razao_social": "Empresa Via Formulário Ltda",
+            "elo_pretendido": "producao",
+            "municipio": "Atibaia",
+            "uf": "sp",
+            "contato_nome": "Fulano de Tal",
+            "contato_email": "fulano2@example.com",
+            "contato_telefone": "(11) 98765-4321",
+            "consentimento_lgpd": "true",
+        },
+    )
+    assert resposta.status_code == 200
+    solicitacoes = admin_client.get(f"/api/cpls/{cpl_id}/solicitacoes-adesao").json()
+    criada = next(s for s in solicitacoes if s["razao_social"] == "Empresa Via Formulário Ltda")
+    assert criada["municipio"] == "Atibaia"
+    assert criada["uf"] == "SP"
+
+
 def test_rota_web_gestao_exige_login(client):
     # `client`/`admin_client` compartilham a mesma instância de TestClient
     # (`admin_client` só anexa o header de autenticação nela) — usar uma

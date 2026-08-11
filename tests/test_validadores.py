@@ -1,6 +1,14 @@
 """RF-014: validadores de CNPJ/CPF/UF — funções puras, sem banco."""
 
-from app.services.validadores import cnpj_valido, cpf_valido, normalizar_cnpj, normalizar_cpf, uf_valida
+from app.services.validadores import (
+    cnpj_valido,
+    cpf_valido,
+    normalizar_cnpj,
+    normalizar_cpf,
+    normalizar_telefone,
+    telefone_valido,
+    uf_valida,
+)
 
 
 def test_cnpj_valido_aceita_cnpj_correto():
@@ -42,3 +50,19 @@ def test_uf_valida_aceita_uf_conhecida():
 
 def test_uf_valida_rejeita_uf_inexistente():
     assert uf_valida("XX") is False
+
+
+def test_telefone_valido_aceita_celular_com_mascara():
+    assert telefone_valido("(11) 98765-4321") is True
+
+
+def test_telefone_valido_aceita_fixo_com_mascara():
+    assert telefone_valido("(11) 3765-4321") is True
+
+
+def test_telefone_valido_rejeita_quantidade_errada_de_digitos():
+    assert telefone_valido("(11) 987-654") is False
+
+
+def test_normalizar_telefone_remove_mascara():
+    assert normalizar_telefone("(11) 98765-4321") == "11987654321"
