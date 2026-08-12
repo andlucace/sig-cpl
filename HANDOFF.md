@@ -2404,6 +2404,61 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
       completa em 117 (107 + ~10, alguns testes de outros arquivos também
       cresceram nesse intervalo), ruff limpo.
 
+51. **Convite de campanha (RF-012) passa a enviar e-mail de verdade** —
+    usuário relatou um caso real: "uma empresa cadastrada não recebeu o
+    e-mail de participação da campanha". Investiguei antes de mexer:
+    `convidar_entidade` (`app/api/routes/cadastro_dinamico.py` e
+    `app/web/routes_cadastro.py`, duplicado nos dois) sempre só criou um
+    `CampanhaConvite` com link/token — **nunca existiu envio de e-mail
+    nenhum**, apesar do botão da tela usar ícone de envelope. Reportei o
+    achado (não era bug de "algo quebrou", era recurso que nunca foi
+    construído, mesmo padrão do "convite" de F01/adesão) e perguntei se
+    quer o envio automático agora que o SMTP já está configurado (RF-004)
+    — resposta: sim, e também "criar um campo de e-mail vinculado à
+    entidade" e "quando tiver contato vinculado, enviar também pra eles".
+    - `Entidade.email` (nova coluna) — `Entidade` nunca teve e-mail
+      próprio, só `Pessoa.email` via `PessoaVinculo`; sem isso, uma
+      entidade sem nenhum contato cadastrado não tinha pra quem mandar
+      nada. Exposto nos três formulários que criam `Entidade` (cadastro
+      de uma CPL, cadastro de entidade gestora, API) e com uma tela/rota
+      dedicada pra editar depois (`PATCH /api/entidades/{id}/email`,
+      `POST /painel/cadastro/entidades/{id}/email`) — precisa continuar
+      editável porque é o destinatário do envio automático, não só um
+      dado de cadastro estático.
+    - `app/services/campanhas.py` (novo): `contatos_da_entidade()`
+      resolve o e-mail da entidade **mais** o de cada `Pessoa` com
+      vínculo vigente (`PessoaVinculo.data_fim` nulo ou no futuro),
+      deduplicado; `enviar_convite_email()` manda pra todos e grava o
+      resultado no próprio `CampanhaConvite`
+      (`email_enviado`/`email_enviado_em`/`email_destinatarios`
+      JSONB/`email_erro`) — gravar no convite, não só logar, é o que deixa
+      a gestão voltar na tela depois e ver se saiu de verdade, pra quem, e
+      por quê não quando não saiu.
+    - **Nunca bloqueia a criação do convite**: SMTP fora do ar (ou
+      ausente, como no dev local) só grava `email_erro`, o convite
+      continua existindo com o link copiável de sempre como alternativa.
+      Sem contato nenhum também não é erro (`email_erro=None`) — a tela
+      distingue os dois casos com textos diferentes.
+    - Chamado nos dois pontos de criação de convite (API e web, mesmo
+      service) — evita a mesma divergência que já apareceu outras vezes
+      neste projeto quando uma regra só é aplicada num dos dois.
+    - Migração `834a3a9e7775`: `entidades.email` e as quatro colunas novas
+      de `campanha_convites` — `email_enviado` é `NOT NULL` com
+      `server_default=false` (mesmo padrão já usado em migrações
+      anteriores pra não quebrar linhas existentes, ex.: `marco` em
+      RF-039/040), as outras três são nullable.
+    - Testado: local sem SMTP configurado (cenário real de dev, não
+      simulado) via Playwright contra o app rodando de verdade — convite
+      pra entidade com e-mail mostrou "Falha ao enviar e-mail (SMTP não
+      configurado...)"; convite pra entidade sem nenhum contato mostrou
+      "Nenhum e-mail cadastrado"; editar o e-mail da entidade persistiu e
+      apareceu no cabeçalho. 15 testes automatizados novos
+      (`tests/test_campanhas.py`, `enviar_email` mockado em
+      `app.services.campanhas.enviar_email` — mesmo padrão "mockar no
+      ponto de uso" de `test_localidades.py`/`test_geocodificacao.py`) —
+      suíte completa em 132 (117 + 15), ruff limpo, `campanhas.py` com
+      100% de cobertura.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for

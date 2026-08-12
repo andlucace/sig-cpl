@@ -14,6 +14,7 @@ from app.schemas.entidade import (
     CanaisDigitaisUpdate,
     EntidadeCPLRead,
     EntidadeCreate,
+    EntidadeEmailUpdate,
     EntidadeMapaRead,
     EntidadeRead,
     LocalizacaoUpdate,
@@ -249,6 +250,29 @@ def atualizar_canais_digitais(
     if entidade is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Entidade não encontrada.")
     entidade.canais_digitais = dados.canais_digitais or None
+    db.commit()
+    db.refresh(entidade)
+    return entidade
+
+
+@router.patch("/{entidade_id}/email", response_model=EntidadeRead)
+def atualizar_email(
+    entidade_id: uuid.UUID,
+    dados: EntidadeEmailUpdate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> Entidade:
+    """RF-012: e-mail de comunicações da entidade — separado do cadastro
+    principal (mesmo padrão de `atualizar_canais_digitais`, editável a
+    qualquer momento) porque é o destinatário usado pelo convite
+    automático de campanha (`app/services/campanhas.py`), então precisa
+    continuar editável mesmo depois da entidade já criada."""
+
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO)
+    entidade = db.get(Entidade, entidade_id)
+    if entidade is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entidade não encontrada.")
+    entidade.email = dados.email
     db.commit()
     db.refresh(entidade)
     return entidade

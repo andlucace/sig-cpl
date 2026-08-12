@@ -29,6 +29,7 @@ from app.schemas.cadastro_dinamico import (
     ImportacaoLoteRead,
     PrepararImportacaoRead,
 )
+from app.services.campanhas import enviar_convite_email
 from app.services.importacao_entidades import (
     CAMPOS_CONHECIDOS,
     confirmar_importacao,
@@ -127,7 +128,7 @@ def convidar_entidade(
     db.add(convite)
     db.commit()
     db.refresh(convite)
-    return convite
+    return enviar_convite_email(db, campanha, convite)
 
 
 @router.get("/campanhas/{campanha_id}/convites", response_model=list[CampanhaConviteRead])

@@ -29,6 +29,12 @@ class Entidade(TimestampedBase):
     cnae: Mapped[str | None] = mapped_column(String(20))
     porte: Mapped[str | None] = mapped_column(String(50))
 
+    # RF-012: e-mail de comunicações da própria entidade (distinto do
+    # e-mail pessoal de um contato vinculado, `Pessoa.email`) — usado como
+    # um dos destinatários do convite automático de campanha de
+    # atualização cadastral (ver `app/services/campanhas.py`).
+    email: Mapped[str | None] = mapped_column(String(255))
+
     municipio: Mapped[str | None] = mapped_column(String(255))
     uf: Mapped[str | None] = mapped_column(String(2))
     endereco: Mapped[str | None] = mapped_column(String(500))

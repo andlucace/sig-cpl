@@ -1790,6 +1790,61 @@ gastar espaço de banco.
   detectando o header e chamando `gzip.decompress()` antes do
   `json.loads()`.
 
+## Convite de campanha envia e-mail de verdade (RF-012)
+
+Achado investigando um relato real: "uma empresa cadastrada não recebeu
+o e-mail de convite da campanha". A resposta era que **nenhuma campanha
+jamais enviou e-mail nenhum** — `convidar_entidade` sempre só gerou um
+`CampanhaConvite` com link/token e devolveu isso pra a gestão copiar e
+compartilhar manualmente (mesmo padrão do "convite" de F01/adesão), apesar
+do botão da tela usar um ícone de envelope que sugere o contrário. Já
+existia um serviço de e-mail funcional (`app/services/email.py`, SMTP
+configurado em produção desde a fatia de recuperação de senha, RF-004) —
+só faltava alguém chamar `enviar_email` neste fluxo.
+
+- **`Entidade.email`** (novo) — e-mail "de comunicações" da própria
+  entidade, distinto do e-mail pessoal de um contato vinculado
+  (`Pessoa.email`, via `PessoaVinculo`). Motivo de existir separado:
+  `Entidade` nunca teve e-mail próprio (só `Pessoa` tinha), então não
+  havia pra quem mandar nada quando a entidade não tinha nenhum contato
+  cadastrado. Exposto nos três formulários que criam `Entidade`
+  (cadastro direto de uma CPL, cadastro de entidade gestora, API) e
+  editável depois a qualquer momento (`PATCH /api/entidades/{id}/email`
+  e a tela de detalhe da entidade) — precisa continuar editável porque é
+  o destinatário usado pelo envio automático.
+- **`app/services/campanhas.py::contatos_da_entidade`** — resolve pra
+  quem mandar: o e-mail da própria entidade, se cadastrado, **mais** o
+  e-mail de cada `Pessoa` com vínculo vigente (`PessoaVinculo.data_fim`
+  nulo ou no futuro), sem repetir endereço. Cobre o caso pedido
+  explicitamente: "quando tiver um contato vinculado ou mais, enviar
+  também para estes contatos" — soma, não substitui.
+- **`enviar_convite_email`** — chamada logo depois de criar o
+  `CampanhaConvite` (tanto na rota web quanto na API, mesmo service pras
+  duas) e grava o resultado no próprio convite: `email_enviado`,
+  `email_enviado_em`, `email_destinatarios` (lista JSONB dos endereços
+  que efetivamente saíram) e `email_erro`. Gravar isso no convite (não só
+  logar) é o que permite a gestão voltar na tela da campanha depois e ver
+  se o e-mail saiu de verdade, pra quem, e por que não saiu quando não
+  saiu — exatamente a pergunta que motivou esta fatia.
+- **Nunca bloqueia a criação do convite** — SMTP fora do ar (ou não
+  configurado, caso comum em dev local) só grava `email_erro` e o convite
+  continua existindo, com o link copiável funcionando como alternativa
+  manual de sempre. Sem contato nenhum cadastrado (nem entidade, nem
+  pessoa vinculada) também não é erro — `email_enviado=False`,
+  `email_erro=None`, distinção que a tela mostra em textos diferentes
+  ("nenhum e-mail cadastrado" vs. "falha ao enviar e-mail: `<motivo>`").
+- Testado local (sem SMTP configurado em dev, cenário real de "SMTP
+  ausente") via Playwright contra o app rodando de verdade — convite pra
+  entidade com e-mail mostra "Falha ao enviar e-mail (SMTP não
+  configurado...)"; convite pra entidade sem nenhum contato mostra
+  "Nenhum e-mail cadastrado"; editar o e-mail da entidade persiste e
+  aparece no cabeçalho da página. 15 testes automatizados novos
+  (`tests/test_campanhas.py`, `enviar_email` mockado no ponto de uso,
+  cobrindo dedup de endereço, vínculo encerrado excluído, falha de SMTP
+  não bloqueando o convite, e paridade entre a rota web e a API) — suíte
+  completa em 132 (117 + 15), ruff limpo, `campanhas.py` com 100% de
+  cobertura.
+
 ## Portal de transparência (RF-055)
 
 O portal público (`app/web/routes_publico.py`) até aqui só tinha uma página

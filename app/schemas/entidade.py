@@ -1,7 +1,7 @@
 import uuid
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 from app.models.enums import TipoEntidade, TipoOferta
 
@@ -17,6 +17,7 @@ class EntidadeCreate(BaseModel):
     municipio: str | None = None
     uf: str | None = None
     endereco: str | None = None
+    email: EmailStr | None = None
 
 
 class EntidadeRead(BaseModel):
@@ -31,10 +32,15 @@ class EntidadeRead(BaseModel):
     municipio: str | None
     uf: str | None
     endereco: str | None = None
+    email: str | None = None
     latitude: float | None = None
     longitude: float | None = None
     ativo: bool
     canais_digitais: dict | None = None
+
+
+class EntidadeEmailUpdate(BaseModel):
+    email: EmailStr | None = None
 
 
 class CanaisDigitaisUpdate(BaseModel):

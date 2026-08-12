@@ -205,6 +205,7 @@ def criar_entidade_gestora(
     cpf: str | None = Form(None),
     municipio: str | None = Form(None),
     uf: str | None = Form(None),
+    email: str | None = Form(None),
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user_optional),
 ):
@@ -232,6 +233,7 @@ def criar_entidade_gestora(
         cpf=normalizar_cpf(cpf) if cpf else None,
         municipio=municipio or None,
         uf=uf.strip().upper() if uf else None,
+        email=email or None,
     )
     db.add(entidade)
     db.flush()

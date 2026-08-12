@@ -80,6 +80,10 @@ class CampanhaConviteRead(BaseModel):
     respondido: bool
     respondido_em: datetime | None
     created_at: datetime
+    email_enviado: bool
+    email_enviado_em: datetime | None
+    email_destinatarios: list[str] | None
+    email_erro: str | None
 
 
 # Importação de planilha (RF-013/RF-014)

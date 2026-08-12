@@ -13,4 +13,19 @@
             </div>
         {% endif %}
     </div>
+    <div class="small mt-1">
+        {% if convite.email_enviado %}
+            <span class="text-success">
+                <i class="bi bi-check-circle me-1"></i>E-mail enviado para {{ convite.email_destinatarios|join(', ') }}
+            </span>
+        {% elif convite.email_erro %}
+            <span class="text-danger">
+                <i class="bi bi-exclamation-triangle me-1"></i>Falha ao enviar e-mail ({{ convite.email_erro }}) — copie o link acima e envie manualmente
+            </span>
+        {% else %}
+            <span class="text-body-secondary">
+                <i class="bi bi-info-circle me-1"></i>Nenhum e-mail cadastrado para esta entidade ou seus contatos — copie o link acima e envie manualmente
+            </span>
+        {% endif %}
+    </div>
 </div>

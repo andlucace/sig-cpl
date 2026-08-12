@@ -12,6 +12,7 @@
                 <span class="badge text-bg-secondary">{{ entidade.tipo.value.replace('_', ' ') }}</span>
                 {% if entidade.cnpj %}CNPJ: {{ entidade.cnpj }}{% endif %}
                 {% if entidade.municipio %} — {{ entidade.municipio }}{% if entidade.uf %}/{{ entidade.uf }}{% endif %}{% endif %}
+                {% if entidade.email %} — <i class="bi bi-envelope-at"></i> {{ entidade.email }}{% endif %}
             </p>
         </div>
         {% if entidade.cnpj %}
@@ -181,6 +182,25 @@
                         </div>
                         <button type="submit" class="btn btn-primary w-100">
                             <i class="bi bi-plus-lg me-1"></i>Adicionar
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-envelope-at me-2"></i>E-mail para comunicações
+                </div>
+                <div class="card-body">
+                    <p class="text-body-secondary small">
+                        Destinatário automático dos convites de campanha de atualização cadastral
+                        (RF-012), além de qualquer contato vinculado com e-mail próprio.
+                    </p>
+                    <form method="post" action="/painel/cadastro/entidades/{{ entidade.id }}/email" class="d-flex gap-2">
+                        <input type="email" class="form-control form-control-sm" name="email"
+                               value="{{ entidade.email or '' }}" placeholder="contato@empresa.com.br">
+                        <button type="submit" class="btn btn-outline-primary btn-sm text-nowrap">
+                            <i class="bi bi-check-lg me-1"></i>Salvar
                         </button>
                     </form>
                 </div>

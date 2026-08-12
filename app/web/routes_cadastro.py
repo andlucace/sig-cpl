@@ -29,6 +29,7 @@ from app.models.enums import StatusLoteImportacao, StatusSolicitacaoAdesao, Tipo
 from app.models.usuario import Usuario
 from app.services.adesao import SolicitacaoInvalida, aprovar_solicitacao, rejeitar_solicitacao
 from app.services.armazenamento import caminho_absoluto
+from app.services.campanhas import enviar_convite_email
 from app.services.geocodificacao import GeocodificacaoIndisponivel, geocodificar_endereco
 from app.services.importacao_entidades import (
     CAMPOS_CONHECIDOS,
@@ -192,6 +193,7 @@ def criar_entidade_para_cpl(
     cpf: str | None = Form(None),
     municipio: str | None = Form(None),
     uf: str | None = Form(None),
+    email: str | None = Form(None),
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user_optional),
 ):
@@ -221,6 +223,7 @@ def criar_entidade_para_cpl(
         cpf=normalizar_cpf(cpf) if cpf else None,
         municipio=municipio or None,
         uf=uf.strip().upper() if uf else None,
+        email=email or None,
     )
     db.add(entidade)
     db.flush()
@@ -424,6 +427,7 @@ def convidar_entidade(
     db.add(convite)
     db.commit()
     db.refresh(convite)
+    convite = enviar_convite_email(db, campanha, convite)
     return templates.TemplateResponse(
         request, "restrito/cadastro/fragments/convite_item.html", {"convite": convite}
     )
@@ -699,6 +703,31 @@ def atualizar_canais_digitais(
         if valor
     }
     entidade.canais_digitais = canais or None
+    db.commit()
+    return RedirectResponse(
+        f"/painel/cadastro/entidades/{entidade_id}", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post("/entidades/{entidade_id}/email")
+def atualizar_email_entidade(
+    entidade_id: uuid.UUID,
+    email: str | None = Form(None),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """RF-012: e-mail de comunicações da entidade, editável a qualquer
+    momento — é o destinatário usado pelo convite automático de campanha
+    (`app/services/campanhas.py`), então precisa dar pra corrigir/
+    preencher depois, não só na criação."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    entidade = db.get(Entidade, entidade_id)
+    if entidade is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entidade não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO)
+    entidade.email = email or None
     db.commit()
     return RedirectResponse(
         f"/painel/cadastro/entidades/{entidade_id}", status_code=status.HTTP_303_SEE_OTHER

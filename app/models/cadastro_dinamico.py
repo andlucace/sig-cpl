@@ -106,6 +106,17 @@ class CampanhaConvite(Base):
     respondido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    # Envio automático do convite por e-mail (ver `app/services/
+    # campanhas.py::enviar_convite_email`) — registrado no próprio convite
+    # (não só logado) pra quem gere a campanha conseguir ver, revisitando a
+    # tela depois, se o e-mail de fato saiu, pra quem, e por que não saiu
+    # quando não saiu (sem contato cadastrado vs. falha de envio são
+    # situações distintas, ambas cobertas por `email_erro`).
+    email_enviado: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    email_enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_destinatarios: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    email_erro: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     campanha: Mapped["CampanhaCadastral"] = relationship(back_populates="convites")
     entidade: Mapped["Entidade"] = relationship()
 
