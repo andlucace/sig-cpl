@@ -2459,6 +2459,28 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
       suíte completa em 132 (117 + 15), ruff limpo, `campanhas.py` com
       100% de cobertura.
 
+52. **Referências a RF-/RN-/RNF-/F0x removidas das interfaces** — pedido
+    explícito: os códigos do documento de requisitos ("Relatórios
+    (RF-041)", "Solicitações de adesão (F01)", etc.) apareciam em títulos
+    de card, subtítulos e rótulos de botão em cerca de 25 templates da
+    área restrita — vocabulário interno de rastreabilidade entre código e
+    documento, sem sentido nenhum pra quem usa o sistema no dia a dia de
+    uma CPL. Removidos ~30 parênteses assim (só texto visível — mantive
+    os mesmos códigos nas docstrings/comentários Python e Jinja, que são
+    documentação pra quem mexe no código, não "interface").
+    - Aproveitado pra corrigir, na mesma passada, um estado vazio
+      desatualizado em `governanca/cpls.html`: quando a CPL não tinha
+      nenhum órgão de governança, o texto ainda mandava o usuário criar a
+      CPL via `POST /api/cpls` no Swagger (`/docs`) — sobra de quando
+      `/painel/cpls` não existia. Trocado por um link direto pra tela de
+      cadastro de CPL que já existe há muito tempo.
+    - Nenhum código Python mudou — só HTML/Jinja, então nada de teste
+      novo (as asserções já existentes que checam texto de tela
+      continuam batendo; nenhuma checava literalmente por "(RF-...)").
+      Confirmado com Playwright contra o app rodando de verdade em várias
+      telas, checando que nenhuma delas mostra mais essas referências, e
+      suíte completa (132) + ruff, sem regressão.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for

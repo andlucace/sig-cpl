@@ -17,7 +17,7 @@
         </div>
         {% if entidade.cnpj %}
             <a href="/painel/cadastro/entidades/{{ entidade.id }}?consultar_publico=1" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-search me-1"></i>Conferir dados públicos (RF-054)
+                <i class="bi bi-search me-1"></i>Conferir dados públicos
             </a>
         {% endif %}
     </div>
@@ -59,7 +59,7 @@
         <div class="col-lg-7">
             <div class="card mb-4">
                 <div class="card-header bg-transparent fw-semibold">
-                    <i class="bi bi-box-seam text-primary me-2"></i>Produtos, serviços e tecnologias (RF-010)
+                    <i class="bi bi-box-seam text-primary me-2"></i>Produtos, serviços e tecnologias
                 </div>
                 <div class="list-group list-group-flush">
                     {% for oferta in ofertas %}
@@ -119,7 +119,7 @@
 
             <div class="card mt-4">
                 <div class="card-header bg-transparent fw-semibold">
-                    <i class="bi bi-geo-alt text-primary me-2"></i>Localização (RF-011)
+                    <i class="bi bi-geo-alt text-primary me-2"></i>Localização
                 </div>
                 <div class="card-body small">
                     {% if entidade.latitude is not none and entidade.longitude is not none %}
@@ -193,8 +193,8 @@
                 </div>
                 <div class="card-body">
                     <p class="text-body-secondary small">
-                        Destinatário automático dos convites de campanha de atualização cadastral
-                        (RF-012), além de qualquer contato vinculado com e-mail próprio.
+                        Destinatário automático dos convites de campanha de atualização cadastral,
+                        além de qualquer contato vinculado com e-mail próprio.
                     </p>
                     <form method="post" action="/painel/cadastro/entidades/{{ entidade.id }}/email" class="d-flex gap-2">
                         <input type="email" class="form-control form-control-sm" name="email"
