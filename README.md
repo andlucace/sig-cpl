@@ -1845,6 +1845,82 @@ só faltava alguém chamar `enviar_email` neste fluxo.
   completa em 132 (117 + 15), ruff limpo, `campanhas.py` com 100% de
   cobertura.
 
+## Governança — exclusão de membro com motivo, documento de posse e convocação por e-mail (RF-016/RF-017)
+
+Quatro pedidos pontuais no módulo de Governança (órgãos, conselhos e
+comissões), todos usados por quem tem `PAPEIS_GESTAO` (entidade
+gestora, dirigente, administrador):
+
+- **Convocar reunião limpa o formulário e confirma** — o formulário de
+  convocação (`/painel/governanca/orgaos/{id}`) é HTMX
+  (`hx-target="#lista-reunioes" hx-swap="afterbegin"`), então a resposta
+  nunca tocava o próprio formulário — os campos ficavam preenchidos
+  depois de convocar. Resolvido com `hx-on::after-request="if
+  (event.detail.successful) this.reset()"` direto no `<form>` — atributo
+  declarativo do HTMX, não JavaScript escrito à mão. A confirmação usa
+  **out-of-band swap** (`hx-swap-oob="true"`): a mesma resposta que
+  insere o item da reunião na lista também substitui um
+  `<div id="convocacao-confirmacao">` vazio (colocado acima da lista)
+  por um alerta de sucesso — novo fragmento
+  `fragments/reuniao_convocada.html`, que inclui `reuniao_item.html` e
+  adiciona esse bloco.
+- **Excluir membro exige motivo, registrado na auditoria** —
+  `MembroOrgao` ganhou `motivo_remocao` (texto). Excluir é desativação
+  (`ativo=False`, `data_fim` preenchido se ainda vazio), não `DELETE`:
+  preserva presenças e votos já registrados em nome desse mandato, e o
+  membro continua visível na lista, marcado "inativo", com o motivo à
+  mostra — nada desaparece silenciosamente. Como é uma alteração de
+  linha comum, a trilha de auditoria automática (RF-056) já captura o
+  antes/depois de `ativo` e `motivo_remocao` sozinha — **nenhuma chamada
+  manual a `registrar_evento` foi necessária**, diferente de eventos
+  como login/download que não correspondem a uma escrita de linha.
+  `POST /api/governanca/membros/{id}/remover` (JSON) e
+  `POST /painel/governanca/membros/{id}/remover` (form, HTMX,
+  `hx-swap="outerHTML"` no próprio item — reaparece já como inativo).
+- **Documento de posse do órgão, visível também em Documentos** —
+  `Documento` ganhou `orgao_id` opcional, mesmo padrão de `reuniao_id`
+  já usado pelos anexos de reunião (RF-017) e pela ata em PDF (RF-043):
+  mesmo repositório (RF-042), sem tabela nova. Upload em
+  `/painel/governanca/orgaos/{id}` (`POST
+  /painel/documentos/orgaos/{id}/anexos`, card "Documentos do órgão",
+  qualquer categoria — não só "documento de posse", só era o exemplo
+  citado no pedido). Como a listagem geral de
+  `/painel/documentos/cpls/{cpl_id}` nunca filtrou por
+  `reuniao_id`/`orgao_id`, o documento aparece lá **automaticamente**,
+  sem nenhum código a mais — "visível no módulo de documentos" já saía
+  de graça da forma como RF-042 já estava implementado. Espelhado
+  na API: `orgao_id` como campo opcional do mesmo
+  `POST /api/documentos/cpls/{cpl_id}` que já aceitava `reuniao_id`
+  (não uma rota nova), mais `GET /api/documentos/orgaos/{id}`.
+- **E-mail de convocação para todos os membros** — `app/services/
+  governanca.py::enviar_convocacao_email`, mesmo padrão resiliente já
+  estabelecido em `campanhas.py::enviar_convite_email` (RF-012): resolve
+  destinatários (e-mail de cada `MembroOrgao.pessoa` ativo, deduplicado),
+  envia um a um parando no primeiro erro, e **nunca bloqueia a
+  convocação** — SMTP fora do ar só grava o motivo, a reunião já foi
+  criada e continua válida. Resultado persistido em
+  `Reuniao.email_convocacao_enviado`/`_enviado_em`/`_destinatarios`
+  (JSONB)/`_erro`, mostrado tanto na confirmação transiente quanto,
+  depois, na própria tela da reunião (revisitável a qualquer momento,
+  não só no instante da convocação).
+- Migração `00adf8a90706`: `membros_orgao.motivo_remocao`,
+  `reunioes.email_convocacao_*` (`email_convocacao_enviado` é `NOT NULL`
+  com `server_default=false`, mesmo padrão de sempre pra não quebrar
+  linhas existentes) e `documentos.orgao_id`.
+- Testado: Playwright contra o app rodando de verdade, sem SMTP
+  configurado localmente (cenário real) — confirmando que o formulário
+  de convocação de fato limpa, a confirmação aparece com o texto certo
+  ("Falha ao enviar e-mail de convocação (SMTP não configurado...)"),
+  excluir membro mostra "inativo" + motivo na hora, e o documento
+  enviado no card do órgão aparece tanto ali quanto na lista geral de
+  Documentos da CPL. 12 testes automatizados novos em
+  `tests/test_governanca.py` (exclusão exige motivo, gera registro de
+  auditoria com o motivo no `dados_novos`, exige `PAPEIS_GESTAO`;
+  convocação envia e-mail só a membros ativos com e-mail cadastrado,
+  ignora membro removido, não quebra com SMTP fora do ar; upload de
+  documento do órgão aparece nas duas listagens e rejeita órgão de outra
+  CPL) — suíte completa em 144 (132 + 12), ruff limpo.
+
 ## Portal de transparência (RF-055)
 
 O portal público (`app/web/routes_publico.py`) até aqui só tinha uma página

@@ -1,0 +1,18 @@
+{% include "restrito/governanca/fragments/reuniao_item.html" %}
+<div id="convocacao-confirmacao" hx-swap-oob="true">
+    <div class="alert alert-success d-flex align-items-start gap-2 mb-3" role="alert">
+        <i class="bi bi-check-circle-fill mt-1"></i>
+        <div>
+            <strong>Reunião convocada com sucesso.</strong>
+            {% if reuniao.email_convocacao_enviado %}
+                <div>E-mail de convocação enviado para {{ reuniao.email_convocacao_destinatarios|length }}
+                    membro(s): {{ reuniao.email_convocacao_destinatarios|join(', ') }}.</div>
+            {% elif reuniao.email_convocacao_erro %}
+                <div class="text-danger">Falha ao enviar e-mail de convocação
+                    ({{ reuniao.email_convocacao_erro }}).</div>
+            {% else %}
+                <div>Nenhum membro ativo com e-mail cadastrado para notificar.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>

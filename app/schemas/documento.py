@@ -28,6 +28,7 @@ class DocumentoRead(BaseModel):
     data_retencao_ate: date | None
     criado_por_id: uuid.UUID
     reuniao_id: uuid.UUID | None
+    orgao_id: uuid.UUID | None
     created_at: datetime
 
 

@@ -17,7 +17,7 @@ from app.db.session import get_db
 from app.models.cpl import CPL
 from app.models.documento import Documento
 from app.models.enums import AcaoAuditoria, CategoriaDocumento, ConfidencialidadeDocumento
-from app.models.governanca import Reuniao
+from app.models.governanca import OrgaoGovernanca, Reuniao
 from app.models.usuario import Usuario
 from app.services.armazenamento import caminho_absoluto, salvar_arquivo
 from app.services.auditoria import registrar_evento
@@ -237,6 +237,54 @@ async def enviar_anexo_reuniao(
     db.commit()
     return RedirectResponse(
         f"/painel/governanca/reunioes/{reuniao_id}", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post("/orgaos/{orgao_id}/anexos")
+async def enviar_anexo_orgao(
+    orgao_id: uuid.UUID,
+    arquivo: UploadFile,
+    titulo: str = Form(...),
+    categoria: CategoriaDocumento = Form(...),
+    confidencialidade: ConfidencialidadeDocumento = Form(ConfidencialidadeDocumento.INTERNO),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """Documento de posse (ou qualquer outro anexo) do órgão/conselho/
+    comissão — pedido explícito. Mesmo repositório de Documentos (RF-042)
+    já usado para anexos de reunião, ligado via `orgao_id`; como a
+    listagem geral de `/painel/documentos/cpls/{cpl_id}` já não filtra
+    por `reuniao_id`/`orgao_id`, o documento aparece lá automaticamente,
+    sem nenhuma mudança extra — "visível no módulo de documentos" já sai
+    de graça. Rota fixa (não `/painel/documentos/cpls/{cpl_id}`) pelo
+    mesmo motivo do anexo de reunião: redireciona de volta pra tela do
+    órgão, não pra lista geral."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    orgao = db.get(OrgaoGovernanca, orgao_id)
+    if orgao is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Órgão de governança não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=orgao.cpl_id)
+
+    conteudo = await arquivo.read()
+    caminho = salvar_arquivo(orgao.cpl_id, arquivo.filename or "documento", conteudo)
+    documento = Documento(
+        cpl_id=orgao.cpl_id,
+        titulo=titulo,
+        categoria=categoria,
+        confidencialidade=confidencialidade,
+        arquivo_path=caminho,
+        nome_arquivo_original=arquivo.filename or "documento",
+        tipo_mime=arquivo.content_type,
+        tamanho_bytes=len(conteudo),
+        criado_por_id=usuario.id,
+        orgao_id=orgao_id,
+    )
+    db.add(documento)
+    db.commit()
+    return RedirectResponse(
+        f"/painel/governanca/orgaos/{orgao_id}", status_code=status.HTTP_303_SEE_OTHER
     )
 
 

@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -37,6 +38,7 @@ from app.schemas.governanca import (
     DeliberacaoResultadoUpdate,
     MembroOrgaoCreate,
     MembroOrgaoRead,
+    MembroOrgaoRemocaoCreate,
     OrgaoGovernancaCreate,
     OrgaoGovernancaRead,
     PresencaCreate,
@@ -52,6 +54,7 @@ from app.schemas.governanca import (
 )
 from app.services.armazenamento import salvar_arquivo
 from app.services.geracao_documentos import gerar_pdf_relatorio_comissao
+from app.services.governanca import enviar_convocacao_email
 from app.services.indicadores import resumo_orgao
 
 router = APIRouter(prefix="/governanca", tags=["Governança"])
@@ -160,6 +163,30 @@ def listar_membros(
     return db.query(MembroOrgao).filter(MembroOrgao.orgao_id == orgao_id).all()
 
 
+@router.post("/membros/{membro_id}/remover", response_model=MembroOrgaoRead)
+def remover_membro(
+    membro_id: uuid.UUID,
+    dados: MembroOrgaoRemocaoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> MembroOrgao:
+    """Exclusão de membro exige motivo — desativa (`ativo=False`) em vez
+    de excluir a linha, preservando o histórico de mandato; a alteração
+    (incluindo o motivo) já cai na trilha de auditoria automática."""
+
+    membro = db.get(MembroOrgao, membro_id)
+    if membro is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Membro não encontrado.")
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=membro.orgao.cpl_id)
+    membro.ativo = False
+    membro.motivo_remocao = dados.motivo
+    if membro.data_fim is None:
+        membro.data_fim = date.today()
+    db.commit()
+    db.refresh(membro)
+    return membro
+
+
 # --- Reuniões (RF-017) ---------------------------------------------------
 
 
@@ -178,7 +205,7 @@ def convocar_reuniao(
     db.add(reuniao)
     db.commit()
     db.refresh(reuniao)
-    return reuniao
+    return enviar_convocacao_email(db, reuniao)
 
 
 @router.get("/orgaos/{orgao_id}/reunioes", response_model=list[ReuniaoRead])

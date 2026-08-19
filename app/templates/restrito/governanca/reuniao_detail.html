@@ -22,6 +22,19 @@
     </div>
     {% if reuniao.pauta %}<p><strong>Pauta:</strong> {{ reuniao.pauta }}</p>{% endif %}
 
+    <p class="small text-body-secondary">
+        {% if reuniao.email_convocacao_enviado %}
+            <i class="bi bi-envelope-check text-success me-1"></i>E-mail de convocação enviado para
+            {{ reuniao.email_convocacao_destinatarios|join(', ') }}
+            {% if reuniao.email_convocacao_enviado_em %} em {{ reuniao.email_convocacao_enviado_em.strftime('%d/%m/%Y %H:%M') }}{% endif %}.
+        {% elif reuniao.email_convocacao_erro %}
+            <i class="bi bi-envelope-exclamation text-danger me-1"></i>Falha ao enviar e-mail de convocação
+            ({{ reuniao.email_convocacao_erro }}).
+        {% else %}
+            <i class="bi bi-envelope text-body-secondary me-1"></i>Nenhum membro ativo com e-mail cadastrado para notificar.
+        {% endif %}
+    </p>
+
     {% include "restrito/governanca/fragments/reuniao_status.html" %}
 
     <div class="row g-4">

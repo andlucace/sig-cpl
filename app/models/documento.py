@@ -52,6 +52,14 @@ class Documento(TimestampedBase):
     reuniao_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("reunioes.id"), nullable=True
     )
+    # Pedido explícito: documento de posse do órgão/conselho/comissão —
+    # mesmo padrão de `reuniao_id` (upload dedicado, mas continua no
+    # mesmo repositório de Documentos, RF-042, já filtrado por `cpl_id`
+    # na listagem geral — sem tabela nova).
+    orgao_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("orgaos_governanca.id"), nullable=True
+    )
 
     aprovado_por: Mapped["Pessoa | None"] = relationship()
     reuniao: Mapped["Reuniao | None"] = relationship()
+    orgao: Mapped["OrgaoGovernanca | None"] = relationship()

@@ -2481,6 +2481,93 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
       telas, checando que nenhuma delas mostra mais essas referências, e
       suíte completa (132) + ruff, sem regressão.
 
+53. **Governança: excluir membro com motivo, documento de posse e
+    convocação por e-mail (RF-016/RF-017)** — quatro pedidos pontuais
+    pro papel Dirigente da entidade (usa `PAPEIS_GESTAO`, mesmo grupo já
+    usado por tudo em governança: convocar reunião, gerenciar membros).
+    - **Convocar reunião limpa o form + mostra confirmação**: o form já
+      era HTMX (`hx-target="#lista-reunioes" hx-swap="afterbegin"`), que
+      nunca toca o próprio `<form>` — por isso os campos ficavam
+      preenchidos depois de convocar, sem feedback nenhum além do item
+      novo aparecer no topo da lista. Resolvido com `hx-on::after-
+      request="if (event.detail.successful) this.reset()"` (atributo
+      declarativo do HTMX 1.9, já carregado no `base.html` — não é
+      JavaScript escrito à mão) pra limpar o form, e **out-of-band
+      swap** (`hx-swap-oob="true"`) pra confirmação: a mesma resposta
+      que insere o item na lista substitui um `<div
+      id="convocacao-confirmacao">` vazio (fica acima da lista de
+      reuniões) por um alerta — novo fragmento `fragments/
+      reuniao_convocada.html`, que faz `{% include reuniao_item.html
+      %}` e acrescenta o bloco `hx-swap-oob`.
+    - **Excluir membro com motivo, auditado**: `MembroOrgao` ganhou
+      `motivo_remocao` (Text). "Excluir" é desativação (`ativo=False`,
+      `data_fim` preenchido se ainda vazio), não `DELETE` de verdade —
+      um membro removido pode já ter presenças e votos registrados em
+      reuniões passadas, apagar a linha apagaria esse histórico junto.
+      O membro continua na lista, agora com badge "inativo" e o motivo
+      visível — nada some silenciosamente. **Achado importante ao
+      planejar isso**: não precisei chamar `registrar_evento()` manual
+      pra cravar isso na trilha de auditoria — `ativo`/`motivo_remocao`
+      mudando de valor numa linha já existente é exatamente o que o
+      listener automático de `before_flush`/`after_flush`
+      (`app/services/auditoria.py`) já captura sozinho pra qualquer
+      `session.dirty`, incluindo o antes/depois de cada coluna alterada
+      (`_diff_alteracoes`). `MembroOrgao` não tem `cpl_id` direto, mas
+      `_CAMINHOS_CPL` já incluía `"orgao.cpl_id"` desde sempre (usado
+      por outros modelos), então o registro de auditoria já nasce
+      escopado à CPL certa, sem precisar adicionar nada em
+      `auditoria.py`. `POST /api/governanca/membros/{id}/remover`
+      (JSON `{motivo}`) e `POST /painel/governanca/membros/{id}/
+      remover` (form, HTMX no próprio item, `hx-swap="outerHTML"`).
+    - **Documento de posse do órgão**: `Documento` ganhou `orgao_id`
+      opcional — cópia exata do padrão já usado por `reuniao_id`
+      (anexos de reunião, RF-017, e ata em PDF, RF-043): mesma tabela,
+      zero entidade nova. Card "Documentos do órgão" em
+      `/painel/governanca/orgaos/{id}`, upload via `POST
+      /painel/documentos/orgaos/{id}/anexos` (rota fixa, redireciona de
+      volta pra tela do órgão — mesmo raciocínio da rota de anexo de
+      reunião). **"Também visível no módulo de documentos" saiu de
+      graça**: `listar_documentos` (`GET /painel/documentos/cpls/
+      {cpl_id}`) já filtrava só por `cpl_id`, nunca excluiu documentos
+      com `reuniao_id`/`orgao_id` preenchido — bastou gravar
+      `cpl_id=orgao.cpl_id` no documento novo, sem mexer na listagem
+      geral. Espelhado na API: `orgao_id` virou mais um campo opcional
+      do `POST /api/documentos/cpls/{cpl_id}` já existente (mesmo jeito
+      que `reuniao_id` já funcionava ali, não rota nova), mais `GET
+      /api/documentos/orgaos/{id}` pra listar só os do órgão.
+    - **E-mail de convocação pra todos os membros**: `app/services/
+      governanca.py` (novo) — `enviar_convocacao_email()`, cópia do
+      padrão resiliente que `campanhas.py::enviar_convite_email` já
+      tinha estabelecido nesta sessão (item 51): resolve destinatários
+      (e-mail de cada `MembroOrgao.pessoa` ativo, deduplicado), envia
+      um a um parando no primeiro erro, nunca bloqueia a ação principal
+      — SMTP fora do ar só grava o motivo, a reunião continua criada e
+      válida. `Reuniao` ganhou `email_convocacao_enviado`/`_enviado_em`/
+      `_destinatarios` (JSONB)/`_erro`, os mesmos quatro campos que
+      `CampanhaConvite` já tinha, mesmo raciocínio de transparência:
+      quem convocou consegue ver depois, revisitando a tela da reunião,
+      se o e-mail saiu de verdade — não só no instante da convocação.
+    - Migração `00adf8a90706` — `email_convocacao_enviado` é `NOT NULL`
+      com `server_default=false` (mesmo padrão de sempre, evita quebrar
+      `Reuniao`s já existentes em produção).
+    - Testado: Playwright contra o app local **sem SMTP configurado**
+      (cenário real de dev, mesmo usado pra validar o item 51) —
+      convocar limpa o form e mostra "Falha ao enviar e-mail de
+      convocação (SMTP não configurado...)"; excluir membro mostra
+      "inativo" + motivo na hora certa; documento enviado no card do
+      órgão aparece ali e na lista geral de Documentos da CPL.
+      **Gotcha do próprio teste**: a primeira rodada do script Playwright
+      falhou silenciosamente numa reexecução — o botão "Excluir" some do
+      DOM depois que o membro já foi desativado (gated por `{% if
+      membro.ativo %}`), então rodar o mesmo script duas vezes contra o
+      mesmo membro quebra na segunda vez; e o `collapse` do Bootstrap
+      tem uma animação (~350ms) que precisa de espera explícita antes de
+      preencher o textarea que ele revela — sem isso o campo não existe
+      ainda no DOM. Nenhum dos dois é bug do app, só do script de
+      verificação. 12 testes automatizados novos em `tests/
+      test_governanca.py` — suíte completa em 144 (132 + 12), ruff
+      limpo.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for

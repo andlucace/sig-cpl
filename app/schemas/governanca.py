@@ -51,6 +51,11 @@ class MembroOrgaoRead(BaseModel):
     data_inicio: date
     data_fim: date | None
     ativo: bool
+    motivo_remocao: str | None
+
+
+class MembroOrgaoRemocaoCreate(BaseModel):
+    motivo: str
 
 
 # Reunião (RF-017)
@@ -77,6 +82,10 @@ class ReuniaoRead(BaseModel):
     convocada_em: datetime | None
     ata: str | None
     quorum_atingido: bool | None
+    email_convocacao_enviado: bool
+    email_convocacao_enviado_em: datetime | None
+    email_convocacao_destinatarios: list[str] | None
+    email_convocacao_erro: str | None
 
 
 class ReuniaoAtaUpdate(BaseModel):

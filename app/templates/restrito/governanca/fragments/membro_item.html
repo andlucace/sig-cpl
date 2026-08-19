@@ -1,8 +1,35 @@
 <div class="list-group-item" id="membro-{{ membro.id }}">
-    <i class="bi bi-person-fill text-primary me-2"></i>
-    <strong>{{ membro.pessoa.nome }}</strong> — {{ membro.funcao }}
-    <small class="text-body-secondary d-block ms-4">
-        Desde {{ membro.data_inicio.strftime('%d/%m/%Y') }}
-        {% if membro.data_fim %} até {{ membro.data_fim.strftime('%d/%m/%Y') }}{% endif %}
-    </small>
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div>
+            <i class="bi bi-person-fill {% if membro.ativo %}text-primary{% else %}text-body-secondary{% endif %} me-2"></i>
+            <strong>{{ membro.pessoa.nome }}</strong> — {{ membro.funcao }}
+            {% if not membro.ativo %}<span class="badge text-bg-light border">inativo</span>{% endif %}
+            <small class="text-body-secondary d-block ms-4">
+                Desde {{ membro.data_inicio.strftime('%d/%m/%Y') }}
+                {% if membro.data_fim %} até {{ membro.data_fim.strftime('%d/%m/%Y') }}{% endif %}
+            </small>
+            {% if membro.motivo_remocao %}
+                <small class="text-body-secondary d-block ms-4">Motivo da exclusão: {{ membro.motivo_remocao }}</small>
+            {% endif %}
+        </div>
+        {% if membro.ativo %}
+            <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="collapse"
+                    data-bs-target="#remover-membro-{{ membro.id }}" aria-expanded="false">
+                <i class="bi bi-person-dash"></i> Excluir
+            </button>
+        {% endif %}
+    </div>
+    {% if membro.ativo %}
+        <div class="collapse mt-2" id="remover-membro-{{ membro.id }}">
+            <form hx-post="/painel/governanca/membros/{{ membro.id }}/remover"
+                  hx-target="#membro-{{ membro.id }}" hx-swap="outerHTML"
+                  class="border rounded p-2 bg-body-tertiary">
+                <label class="form-label small mb-1">Motivo da exclusão</label>
+                <textarea class="form-control form-control-sm mb-2" name="motivo" rows="2" required></textarea>
+                <button type="submit" class="btn btn-danger btn-sm">
+                    <i class="bi bi-check-lg me-1"></i>Confirmar exclusão
+                </button>
+            </form>
+        </div>
+    {% endif %}
 </div>

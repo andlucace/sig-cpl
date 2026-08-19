@@ -39,6 +39,7 @@ from app.models.pessoa import Pessoa
 from app.models.usuario import Usuario
 from app.services.armazenamento import salvar_arquivo
 from app.services.geracao_documentos import gerar_pdf_relatorio_comissao
+from app.services.governanca import enviar_convocacao_email
 from app.services.indicadores import resumo_orgao
 from app.web.templates import templates
 
@@ -170,6 +171,9 @@ def detalhe_orgao(
         db.query(Reuniao).filter(Reuniao.orgao_id == orgao_id).order_by(Reuniao.data_hora.desc()).all()
     )
     pessoas = db.query(Pessoa).order_by(Pessoa.nome).all()
+    documentos_orgao = (
+        db.query(Documento).filter(Documento.orgao_id == orgao_id).order_by(Documento.created_at.desc()).all()
+    )
     return templates.TemplateResponse(
         request,
         "restrito/governanca/orgao_detail.html",
@@ -179,6 +183,9 @@ def detalhe_orgao(
             "membros": membros,
             "reunioes": reunioes,
             "pessoas": pessoas,
+            "documentos_orgao": documentos_orgao,
+            "categorias_documento": list(CategoriaDocumento),
+            "confidencialidades_documento": list(ConfidencialidadeDocumento),
             "usuario": usuario,
             "pagina_ativa": "governanca",
         },
@@ -278,6 +285,38 @@ def adicionar_membro(
     )
 
 
+@router.post("/membros/{membro_id}/remover")
+def remover_membro(
+    request: Request,
+    membro_id: uuid.UUID,
+    motivo: str = Form(...),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """Exclusão de membro exige motivo (texto) — pedido explícito. Feita
+    como desativação (`ativo=False`), não `DELETE` de verdade: preserva o
+    histórico de mandato já registrado (presenças, votos) e cai sozinha
+    na trilha de auditoria automática (`ativo`/`motivo_remocao` viram um
+    ATUALIZACAO com o antes/depois, incluindo o motivo — sem chamada
+    manual a `registrar_evento`, ver app/services/auditoria.py)."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    membro = db.get(MembroOrgao, membro_id)
+    if membro is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Membro não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=membro.orgao.cpl_id)
+    membro.ativo = False
+    membro.motivo_remocao = motivo
+    if membro.data_fim is None:
+        membro.data_fim = date.today()
+    db.commit()
+    db.refresh(membro)
+    return templates.TemplateResponse(
+        request, "restrito/governanca/fragments/membro_item.html", {"membro": membro}
+    )
+
+
 # --- Reuniões (RF-017) ------------------------------------------------------
 
 
@@ -309,8 +348,9 @@ def convocar_reuniao(
     db.add(reuniao)
     db.commit()
     db.refresh(reuniao)
+    reuniao = enviar_convocacao_email(db, reuniao)
     return templates.TemplateResponse(
-        request, "restrito/governanca/fragments/reuniao_item.html", {"reuniao": reuniao}
+        request, "restrito/governanca/fragments/reuniao_convocada.html", {"reuniao": reuniao}
     )
 
 

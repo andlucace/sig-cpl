@@ -16,7 +16,7 @@ from app.db.session import get_db
 from app.models.cpl import CPL
 from app.models.documento import Documento
 from app.models.enums import AcaoAuditoria, CategoriaDocumento, ConfidencialidadeDocumento
-from app.models.governanca import Reuniao
+from app.models.governanca import OrgaoGovernanca, Reuniao
 from app.models.usuario import Usuario
 from app.schemas.documento import DocumentoAprovacaoUpdate, DocumentoRead
 from app.services.armazenamento import caminho_absoluto, salvar_arquivo
@@ -60,15 +60,16 @@ async def enviar_documento(
     confidencialidade: ConfidencialidadeDocumento = Form(ConfidencialidadeDocumento.INTERNO),
     data_validade: str | None = Form(None),
     reuniao_id: uuid.UUID | None = Form(None),
+    orgao_id: uuid.UUID | None = Form(None),
     db: Session = Depends(get_db),
     usuario_atual: Usuario = Depends(get_current_user),
 ) -> Documento:
     """RF-042: envia um novo documento para o repositório da CPL.
 
-    `reuniao_id` (RF-017, "anexos de arquivo" da reunião) é opcional —
-    mesma tabela `Documento` já usada pela ata gerada automaticamente
-    (RF-043), sem entidade nova; a reunião precisa pertencer à mesma
-    CPL do upload."""
+    `reuniao_id` (RF-017, "anexos de arquivo" da reunião) e `orgao_id`
+    (documento de posse do órgão/conselho/comissão, pedido explícito) são
+    opcionais — mesma tabela `Documento`, sem entidade nova; o recurso
+    referenciado precisa pertencer à mesma CPL do upload."""
 
     _get_cpl_or_404(db, cpl_id)
     verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=cpl_id)
@@ -78,6 +79,12 @@ async def enviar_documento(
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Reunião não encontrada.")
         if reuniao.orgao.cpl_id != cpl_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Reunião não pertence a esta CPL.")
+    if orgao_id is not None:
+        orgao = db.get(OrgaoGovernanca, orgao_id)
+        if orgao is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Órgão de governança não encontrado.")
+        if orgao.cpl_id != cpl_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Órgão não pertence a esta CPL.")
 
     conteudo = await arquivo.read()
     caminho = salvar_arquivo(cpl_id, arquivo.filename or "documento", conteudo)
@@ -95,11 +102,42 @@ async def enviar_documento(
         data_validade=date.fromisoformat(data_validade) if data_validade else None,
         criado_por_id=usuario_atual.id,
         reuniao_id=reuniao_id,
+        orgao_id=orgao_id,
     )
     db.add(documento)
     db.commit()
     db.refresh(documento)
     return documento
+
+
+@router.get("/orgaos/{orgao_id}", response_model=list[DocumentoRead])
+def listar_documentos_orgao(
+    orgao_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[Documento]:
+    """Documentos ligados a um órgão de governança (ex.: documento de
+    posse) — mesmo repositório de Documentos (RF-042), filtrado por
+    `orgao_id`. Mesma lógica de `listar_anexos_reuniao` abaixo."""
+
+    orgao = db.get(OrgaoGovernanca, orgao_id)
+    if orgao is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Órgão de governança não encontrado.")
+    cpl_id = orgao.cpl_id
+    verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_LEITURA, cpl_id=cpl_id)
+    documentos = (
+        db.query(Documento).filter(Documento.orgao_id == orgao_id).order_by(Documento.created_at.desc()).all()
+    )
+    tem_acesso_confidencial = True
+    try:
+        verificar_papel(db, usuario_atual, PAPEIS_IMPEDIMENTO_LEITURA, cpl_id=cpl_id)
+    except HTTPException:
+        tem_acesso_confidencial = False
+    if not tem_acesso_confidencial:
+        documentos = [
+            d for d in documentos if d.confidencialidade != ConfidencialidadeDocumento.CONFIDENCIAL
+        ]
+    return documentos
 
 
 @router.get("/reunioes/{reuniao_id}", response_model=list[DocumentoRead])

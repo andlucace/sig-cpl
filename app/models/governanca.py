@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampedBase
@@ -42,6 +42,10 @@ class MembroOrgao(Base):
     data_inicio: Mapped[date] = mapped_column(Date, nullable=False)
     data_fim: Mapped[date | None] = mapped_column(Date, nullable=True)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Pedido explícito: excluir um membro exige motivo (texto), preservado
+    # aqui — a alteração de `ativo`/`motivo_remocao` já cai na trilha de
+    # auditoria automática (app/services/auditoria.py), sem chamada manual.
+    motivo_remocao: Mapped[str | None] = mapped_column(Text)
 
     orgao: Mapped["OrgaoGovernanca"] = relationship(back_populates="membros")
     pessoa: Mapped["Pessoa"] = relationship()
@@ -61,6 +65,15 @@ class Reuniao(TimestampedBase):
     convocada_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ata: Mapped[str | None] = mapped_column(Text)
     quorum_atingido: Mapped[bool | None] = mapped_column(Boolean)
+
+    # Pedido explícito: e-mail de convocação para todos os membros do
+    # órgão — mesmo padrão resiliente de `CampanhaConvite.email_*`
+    # (app/services/campanhas.py): nunca bloqueia a convocação em si, só
+    # registra o que aconteceu (ver app/services/governanca.py).
+    email_convocacao_enviado: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    email_convocacao_enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_convocacao_destinatarios: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    email_convocacao_erro: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     orgao: Mapped["OrgaoGovernanca"] = relationship(back_populates="reunioes")
     presencas: Mapped[list["Presenca"]] = relationship(back_populates="reuniao")
