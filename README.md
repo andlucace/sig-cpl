@@ -1921,6 +1921,106 @@ gestora, dirigente, administrador):
   documento do órgão aparece nas duas listagens e rejeita órgão de outra
   CPL) — suíte completa em 144 (132 + 12), ruff limpo.
 
+## Cadastro e dados, Documentos e Indicadores — pedidos pontuais do Dirigente da entidade (RF-012/RF-042/RF-044)
+
+Sete pedidos pontuais em três módulos, todos usados por quem tem
+`PAPEIS_GESTAO`:
+
+- **Reenviar convite de campanha** — a lista de entidades convidáveis
+  (`entidades_convidaveis`) já excluía quem já tinha convite, então não
+  dava pra convidar a mesma entidade de novo. Em vez de remover esse
+  filtro (o que criaria convites duplicados, tokens diferentes pra
+  mesma entidade), cada convite pendente ganhou um botão "Reenviar"
+  (`POST /painel/cadastro/campanhas/convites/{id}/reenviar` e o
+  espelho em `/api/cadastro/campanhas/convites/{id}/reenviar`) que
+  dispara `enviar_convite_email` de novo pro **mesmo** convite —
+  mesmo token, mesmo link, só o e-mail sai de novo. Útil quando o
+  primeiro e-mail falhou (SMTP fora do ar) ou só pra lembrar quem
+  ainda não respondeu.
+- **Convidar todas as entidades de uma vez** — botão "Convidar todas as
+  entidades" ao lado do formulário de convite individual
+  (`POST .../convites/todas`, web e API), que cria e envia um convite
+  pra cada entidade da CPL ainda sem convite nesta campanha, num loop
+  reaproveitando o mesmo `enviar_convite_email`. Não duplica quem já
+  foi convidado — mesmo critério de `entidades_convidaveis`, só que
+  agindo sobre todas de uma vez.
+- **Campos que faltavam no link de diagnóstico** — comparado
+  `atualizacao_form.html` (o formulário público de campanha) contra
+  `CAMPOS_CONHECIDOS` (`app/services/importacao_entidades.py`, os
+  campos que a importação de planilha reconhece), faltavam 3 dos 26
+  campos de `DiagnosticoCadastral`: `compartilha_recursos`,
+  `recursos_compartilhados` e `ods_relacionados`. Adicionados ao
+  formulário público e ao handler de `POST /atualizacao/{token}` —
+  agora o link tem exatamente os mesmos campos que a planilha de
+  importação reconhece, nem mais nem menos.
+- **Resumo do diagnóstico mostrava só 3 de 26 campos** — a tela de
+  detalhe da entidade (`/painel/cadastro/entidades/{id}`) resumia o
+  diagnóstico cadastral mostrando só capacidade produtiva,
+  diferenciais competitivos e certificações; os outros 23 campos
+  respondidos (atividades e produtos, faturamento, empregos, ODS,
+  exportação, sustentabilidade, qualificação, contatos internacionais
+  etc.) ficavam invisíveis ali, apesar de já estarem salvos no banco.
+  Reescrito como uma lista de definição (`<dl>`) cobrindo todos os
+  campos — com um cuidado que não existia antes: campos booleanos
+  (ex.: "Realiza inovação?") só aparecem se a pergunta **de fato foi
+  respondida**, distinguindo "nunca respondido" (não aparece, campo é
+  `None` no banco) de "respondido como Não" (aparece, é uma resposta
+  de verdade, `False` explícito) — um `{% if valor %}` ingênuo
+  esconderia os dois casos igual, o que seria enganoso.
+- **Código do documento e busca por nome/código** — `Documento` ganhou
+  `codigo` (formato `DOC-000123`), gerado pelo próprio Postgres via
+  `nextval()` de uma sequência dedicada (`documentos_codigo_seq`) como
+  `server_default` da coluna — decisão deliberada pra não precisar
+  tocar nos ~20 pontos do código que criam um `Documento` (relatórios
+  automáticos, atas, anexos de reunião/órgão etc.); qualquer `INSERT`
+  novo já sai com código, de graça, e o `ADD COLUMN` da migração já
+  preencheu retroativamente os documentos existentes (cada um com seu
+  próprio número da sequência). Busca por nome ou código
+  (`?q=...`, `ilike` case-insensitive em `titulo` **ou** `codigo`) na
+  lista de documentos da CPL, web e API.
+- **Quantas e quais aprovações/assinaturas um documento exige** — até
+  aqui só existia `Documento.aprovado`/`assinado`, dois booleanos
+  simples sem saber "aprovado por quem" ou "quantos ainda faltam".
+  Novo modelo `AprovacaoDocumento` (`documento_id`, `pessoa_id`, `tipo`
+  — `aprovacao` ou `assinatura` —, `concluido`, `concluido_em`) registra
+  exigências específicas; nova tela `/painel/documentos/{id}` mostra
+  "X de Y concluídas" com a lista de quem falta e quem já concluiu, e
+  um formulário pra adicionar novas exigências. Os dois mecanismos
+  convivem — um documento sem nenhuma exigência cadastrada aqui
+  simplesmente não mostra a contagem, continua funcionando só com o
+  aprovado/assinado simples de sempre.
+- **Como montar o campo valor, ao registrar um indicador** — o
+  mini-formulário inline de "valor atual" em
+  `/painel/planejamento/objetivos/{id}` já mostrava fórmula/fonte/
+  unidade do indicador como texto solto acima do formulário, mas não
+  amarrava essa informação ao ato de preencher o valor. Ganhou uma
+  linha de ajuda logo abaixo do campo, combinando os três numa frase
+  ("siga a fórmula X, expresso em Y — fonte: Z") e lembrando que cada
+  valor registrado vira um novo ponto da série histórica
+  (`IndicadorValorHistorico`), não sobrescreve o anterior — resposta
+  direta a "como é montado o campo valor".
+- Migração `776412f023c7`: `documentos_codigo_seq` (sequência,
+  `CREATE SEQUENCE` explícito — precisa existir antes da coluna que a
+  referencia), `documentos.codigo` e a tabela `aprovacoes_documento`.
+  A mesma sequência também precisou ser declarada como
+  `sqlalchemy.Sequence` presa à `Base.metadata`
+  (`app/models/documento.py`) — a suíte de testes cria o schema via
+  `Base.metadata.create_all()`, não roda as migrações do Alembic, então
+  sem isso o `CREATE TABLE documentos` falharia nos testes por não
+  achar a sequência (funcionava em produção, que sempre passa pela
+  migração, mas quebrava local).
+- Testado com Playwright contra o app rodando de verdade (convidar
+  todas as entidades restantes numa campanha, reenviar um convite já
+  existente, preencher e enviar o formulário público com os 3 campos
+  novos, conferir o resumo expandido na tela da entidade, criar um
+  documento e ver o código gerado, buscar por nome e por código, exigir
+  uma assinatura e marcá-la concluída, e ver a linha de ajuda do valor
+  do indicador) e 27 testes automatizados novos (`tests/
+  test_campanhas.py` +7, `tests/test_diagnostico.py` novo com 6,
+  `tests/test_documentos.py` novo com 14, mais os já existentes que
+  passaram a cobrir `codigo`/`orgao_id`) — suíte completa em 171
+  (144 + 27), ruff limpo.
+
 ## Portal de transparência (RF-055)
 
 O portal público (`app/web/routes_publico.py`) até aqui só tinha uma página

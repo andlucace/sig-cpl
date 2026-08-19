@@ -95,16 +95,49 @@
                 </div>
                 <div class="card-body small">
                     {% if diagnostico %}
-                        {% if diagnostico.capacidade_produtiva %}
-                            <p class="mb-2"><strong>Capacidade produtiva:</strong> {{ diagnostico.capacidade_produtiva }}</p>
-                        {% endif %}
-                        {% if diagnostico.diferenciais_competitivos %}
-                            <p class="mb-2"><strong>Diferenciais competitivos:</strong> {{ diagnostico.diferenciais_competitivos }}</p>
-                        {% endif %}
-                        {% if diagnostico.certificacoes %}
-                            <p class="mb-0"><strong>Certificações:</strong> {{ diagnostico.certificacoes }}</p>
-                        {% endif %}
-                        {% if not diagnostico.capacidade_produtiva and not diagnostico.diferenciais_competitivos and not diagnostico.certificacoes %}
+                        {% macro simnao(v) %}{% if v is not none %}{{ "Sim" if v else "Não" }}{% endif %}{% endmacro %}
+                        {% set campos = [
+                            ("Atividades e produtos", diagnostico.atividades_produtos),
+                            ("Diferenciais competitivos", diagnostico.diferenciais_competitivos),
+                            ("Capacidade produtiva", diagnostico.capacidade_produtiva),
+                            ("Faixa de faturamento", diagnostico.faturamento_faixa),
+                            ("Empregos diretos", diagnostico.empregos_diretos if diagnostico.empregos_diretos is not none else none),
+                            ("Empregos indiretos", diagnostico.empregos_indiretos if diagnostico.empregos_indiretos is not none else none),
+                            ("Realiza inovação?", simnao(diagnostico.realiza_inovacao)|trim or none),
+                            ("Descrição da inovação", diagnostico.descricao_inovacao),
+                            ("Realiza P&D?", simnao(diagnostico.realiza_pd)|trim or none),
+                            ("ODS relacionados", diagnostico.ods_relacionados),
+                            ("Exporta?", simnao(diagnostico.exporta)|trim or none),
+                            ("Mercados de exportação", diagnostico.mercados_exportacao),
+                            ("Interesse em comissões temáticas", diagnostico.interesse_comissoes),
+                            ("Participa de associação/entidade de classe?", simnao(diagnostico.participacao_associativa)|trim or none),
+                            ("Quais entidades associativas", diagnostico.entidades_associativas),
+                            ("Compartilha recursos com outras empresas?", simnao(diagnostico.compartilha_recursos)|trim or none),
+                            ("Quais recursos compartilhados", diagnostico.recursos_compartilhados),
+                            ("Oferece qualificação aos colaboradores?", simnao(diagnostico.oferece_qualificacao_colaboradores)|trim or none),
+                            ("Descrição da qualificação", diagnostico.descricao_qualificacao),
+                            ("Adota práticas de sustentabilidade?", simnao(diagnostico.adota_praticas_sustentabilidade)|trim or none),
+                            ("Quais práticas de sustentabilidade", diagnostico.descricao_sustentabilidade),
+                            ("Possui contatos internacionais?", simnao(diagnostico.possui_contatos_internacionais)|trim or none),
+                            ("Quais países/parceiros", diagnostico.descricao_contatos_internacionais),
+                            ("Possui certificações?", simnao(diagnostico.possui_certificacoes)|trim or none),
+                            ("Certificações", diagnostico.certificacoes),
+                            ("Nível de digitalização", diagnostico.nivel_digitalizacao),
+                        ] %}
+                        {% set ns = namespace(algum=false) %}
+                        {% for rotulo, valor in campos %}
+                            {% if valor is not none and valor != "" %}{% set ns.algum = true %}{% endif %}
+                        {% endfor %}
+                        {% if ns.algum %}
+                            <dl class="row mb-0">
+                                {% for rotulo, valor in campos %}
+                                    {% if valor is not none and valor != "" %}
+                                        <dt class="col-sm-5">{{ rotulo }}</dt>
+                                        <dd class="col-sm-7">{{ valor }}</dd>
+                                    {% endif %}
+                                {% endfor %}
+                            </dl>
+                        {% else %}
                             <p class="text-body-secondary mb-0">Nenhum campo relevante respondido ainda.</p>
                         {% endif %}
                     {% else %}

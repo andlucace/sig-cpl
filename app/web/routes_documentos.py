@@ -3,6 +3,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user_optional
@@ -15,9 +16,15 @@ from app.core.rbac import (
 )
 from app.db.session import get_db
 from app.models.cpl import CPL
-from app.models.documento import Documento
-from app.models.enums import AcaoAuditoria, CategoriaDocumento, ConfidencialidadeDocumento
+from app.models.documento import AprovacaoDocumento, Documento
+from app.models.enums import (
+    AcaoAuditoria,
+    CategoriaDocumento,
+    ConfidencialidadeDocumento,
+    TipoAprovacaoDocumento,
+)
 from app.models.governanca import OrgaoGovernanca, Reuniao
+from app.models.pessoa import Pessoa
 from app.models.usuario import Usuario
 from app.services.armazenamento import caminho_absoluto, salvar_arquivo
 from app.services.auditoria import registrar_evento
@@ -62,6 +69,7 @@ def selecionar_cpl(
 def listar_documentos(
     request: Request,
     cpl_id: uuid.UUID,
+    q: str | None = None,
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user_optional),
 ):
@@ -72,7 +80,11 @@ def listar_documentos(
         return RedirectResponse("/painel/documentos", status_code=status.HTTP_303_SEE_OTHER)
     verificar_papel(db, usuario, PAPEIS_GOVERNANCA_LEITURA, cpl_id=cpl_id)
 
-    documentos = db.query(Documento).filter(Documento.cpl_id == cpl_id).order_by(Documento.created_at.desc()).all()
+    query = db.query(Documento).filter(Documento.cpl_id == cpl_id)
+    if q:
+        termo = f"%{q}%"
+        query = query.filter(or_(Documento.titulo.ilike(termo), Documento.codigo.ilike(termo)))
+    documentos = query.order_by(Documento.created_at.desc()).all()
     tem_acesso_confidencial = True
     try:
         verificar_papel(db, usuario, PAPEIS_IMPEDIMENTO_LEITURA, cpl_id=cpl_id)
@@ -89,9 +101,84 @@ def listar_documentos(
             "documentos": documentos,
             "categorias": list(CategoriaDocumento),
             "confidencialidades": list(ConfidencialidadeDocumento),
+            "q": q or "",
             "usuario": usuario,
             "pagina_ativa": "documentos",
         },
+    )
+
+
+@router.get("/{documento_id}")
+def detalhe_documento(
+    request: Request,
+    documento_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """Pedido explícito: tela do documento com código, e visualização de
+    quantas e quais aprovações/assinaturas ele exige (além do
+    `aprovado`/`assinado` simples que já existia)."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    documento = db.get(Documento, documento_id)
+    if documento is None:
+        return RedirectResponse("/painel/documentos", status_code=status.HTTP_303_SEE_OTHER)
+    _verificar_leitura(db, usuario, documento)
+    requisitos = (
+        db.query(AprovacaoDocumento).filter(AprovacaoDocumento.documento_id == documento_id).all()
+    )
+    pessoas = db.query(Pessoa).order_by(Pessoa.nome).all()
+    return templates.TemplateResponse(
+        request,
+        "restrito/documentos/documento_detail.html",
+        {
+            "documento": documento,
+            "requisitos": requisitos,
+            "pessoas": pessoas,
+            "tipos_requisito": list(TipoAprovacaoDocumento),
+            "usuario": usuario,
+            "pagina_ativa": "documentos",
+        },
+    )
+
+
+@router.post("/{documento_id}/requisitos")
+def exigir_aprovacao_ou_assinatura(
+    documento_id: uuid.UUID,
+    pessoa_id: uuid.UUID = Form(...),
+    tipo: TipoAprovacaoDocumento = Form(...),
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    documento = db.get(Documento, documento_id)
+    if documento is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Documento não encontrado.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=documento.cpl_id)
+    db.add(AprovacaoDocumento(documento_id=documento_id, pessoa_id=pessoa_id, tipo=tipo))
+    db.commit()
+    return RedirectResponse(f"/painel/documentos/{documento_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/requisitos/{requisito_id}/concluir")
+def concluir_requisito(
+    requisito_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    if redir := _exigir_login(usuario):
+        return redir
+    requisito = db.get(AprovacaoDocumento, requisito_id)
+    if requisito is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Exigência de aprovação/assinatura não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=requisito.documento.cpl_id)
+    requisito.concluido = True
+    requisito.concluido_em = date.today()
+    db.commit()
+    return RedirectResponse(
+        f"/painel/documentos/{requisito.documento_id}", status_code=status.HTTP_303_SEE_OTHER
     )
 
 

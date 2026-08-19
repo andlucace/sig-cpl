@@ -7,11 +7,20 @@
 {% block conteudo %}
     <h1 class="h3 mb-3">Documentos — {{ cpl.nome }}</h1>
 
+    <form method="get" class="mb-3" style="max-width: 420px;">
+        <div class="input-group">
+            <input type="text" class="form-control" name="q" value="{{ q }}" placeholder="Buscar por nome ou código">
+            <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-search"></i></button>
+            {% if q %}<a href="/painel/documentos/cpls/{{ cpl.id }}" class="btn btn-outline-secondary">Limpar</a>{% endif %}
+        </div>
+    </form>
+
     <div class="row g-4">
         <div class="col-lg-8">
             <div class="card">
                 <div class="card-header bg-transparent fw-semibold">
                     <i class="bi bi-archive text-primary me-2"></i>Repositório
+                    {% if q %}<span class="fw-normal text-body-secondary small">— resultados para "{{ q }}"</span>{% endif %}
                 </div>
                 <div class="list-group list-group-flush">
                     {% for doc in documentos %}
@@ -19,7 +28,10 @@
                             <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
                                 <div>
                                     <i class="bi bi-file-earmark-text text-primary me-1"></i>
-                                    <strong>{{ doc.titulo }}</strong>
+                                    <a href="/painel/documentos/{{ doc.id }}" class="link-body-emphasis text-decoration-none">
+                                        <strong>{{ doc.titulo }}</strong>
+                                    </a>
+                                    <span class="badge text-bg-light border">{{ doc.codigo }}</span>
                                     <span class="badge text-bg-secondary">{{ doc.categoria.value.replace('_', ' ') }}</span>
                                     <span class="badge
                                         {% if doc.confidencialidade.value == 'confidencial' %}text-bg-danger
@@ -28,6 +40,11 @@
                                     {% if doc.versao > 1 %}<span class="badge text-bg-info">v{{ doc.versao }}</span>{% endif %}
                                     {% if doc.aprovado %}<span class="badge text-bg-success"><i class="bi bi-check-lg"></i> aprovado</span>{% endif %}
                                     {% if doc.assinado %}<span class="badge text-bg-success"><i class="bi bi-pen"></i> assinado</span>{% endif %}
+                                    {% if doc.requisitos %}
+                                        <a href="/painel/documentos/{{ doc.id }}" class="badge text-bg-info text-decoration-none">
+                                            {{ doc.requisitos|selectattr('concluido')|list|length }}/{{ doc.requisitos|length }} aprovações/assinaturas
+                                        </a>
+                                    {% endif %}
                                     <small class="text-body-secondary d-block ms-4">
                                         {{ doc.nome_arquivo_original }}
                                         {% if doc.tamanho_bytes %} — {{ (doc.tamanho_bytes / 1024) | round(1) }} KB{% endif %}
@@ -36,6 +53,9 @@
                                     {% if doc.descricao %}<small class="text-body-secondary d-block ms-4">{{ doc.descricao }}</small>{% endif %}
                                 </div>
                                 <div class="d-flex gap-2 flex-wrap">
+                                    <a href="/painel/documentos/{{ doc.id }}" class="btn btn-outline-secondary btn-sm">
+                                        <i class="bi bi-eye"></i> Detalhes
+                                    </a>
                                     <a href="/painel/documentos/{{ doc.id }}/arquivo" class="btn btn-outline-primary btn-sm">
                                         <i class="bi bi-download"></i> Baixar
                                     </a>
@@ -57,7 +77,9 @@
                             </div>
                         </div>
                     {% else %}
-                        <div class="list-group-item text-body-secondary">Nenhum documento enviado ainda.</div>
+                        <div class="list-group-item text-body-secondary">
+                            {% if q %}Nenhum documento encontrado para "{{ q }}".{% else %}Nenhum documento enviado ainda.{% endif %}
+                        </div>
                     {% endfor %}
                 </div>
             </div>

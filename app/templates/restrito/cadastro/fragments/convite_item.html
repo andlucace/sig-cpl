@@ -7,9 +7,17 @@
             </span>
         </span>
         {% if not convite.respondido %}
-            <div class="input-group input-group-sm" style="max-width: 380px;">
-                <input type="text" class="form-control" readonly
-                       value="{{ request.url_for('form_atualizacao', token=convite.token) if request else '/atualizacao/' + convite.token }}">
+            <div class="d-flex gap-1 align-items-center flex-wrap">
+                <div class="input-group input-group-sm" style="max-width: 380px;">
+                    <input type="text" class="form-control" readonly
+                           value="{{ request.url_for('form_atualizacao', token=convite.token) if request else '/atualizacao/' + convite.token }}">
+                </div>
+                <form hx-post="/painel/cadastro/campanhas/convites/{{ convite.id }}/reenviar"
+                      hx-target="#convite-{{ convite.id }}" hx-swap="outerHTML">
+                    <button type="submit" class="btn btn-outline-secondary btn-sm" title="Enviar o convite de novo">
+                        <i class="bi bi-arrow-repeat"></i> Reenviar
+                    </button>
+                </form>
             </div>
         {% endif %}
     </div>

@@ -1,0 +1,112 @@
+{% extends "restrito/_layout.html" %}
+{% block title %}SIG-CPL — {{ documento.titulo }}{% endblock %}
+{% block subtitulo %}
+    <a href="/painel/documentos/cpls/{{ documento.cpl_id }}" class="link-secondary text-decoration-none">Documentos</a>
+    <i class="bi bi-chevron-right small mx-1"></i>{{ documento.titulo }}
+{% endblock %}
+{% block conteudo %}
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div>
+            <h1 class="h3 mb-1">
+                {{ documento.titulo }}
+                <span class="badge text-bg-light border fs-6 align-middle" title="Código do documento">{{ documento.codigo }}</span>
+            </h1>
+            <p class="text-body-secondary mb-0">
+                <span class="badge text-bg-secondary">{{ documento.categoria.value.replace('_', ' ') }}</span>
+                <span class="badge
+                    {% if documento.confidencialidade.value == 'confidencial' %}text-bg-danger
+                    {% elif documento.confidencialidade.value == 'interno' %}text-bg-secondary
+                    {% else %}text-bg-success{% endif %}">{{ documento.confidencialidade.value }}</span>
+                {% if documento.versao > 1 %}<span class="badge text-bg-info">v{{ documento.versao }}</span>{% endif %}
+                {% if documento.data_validade %} · válido até {{ documento.data_validade.strftime('%d/%m/%Y') }}{% endif %}
+            </p>
+            {% if documento.descricao %}<p class="mt-2 mb-0">{{ documento.descricao }}</p>{% endif %}
+        </div>
+        <a href="/painel/documentos/{{ documento.id }}/arquivo" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-download"></i> Baixar arquivo
+        </a>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-check2-square text-primary me-2"></i>Aprovações e assinaturas necessárias</span>
+                    {% if requisitos %}
+                        <span class="badge text-bg-secondary">
+                            {{ requisitos|selectattr('concluido')|list|length }} de {{ requisitos|length }} concluídas
+                        </span>
+                    {% endif %}
+                </div>
+                <div class="list-group list-group-flush">
+                    {% for requisito in requisitos %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2"
+                             id="requisito-{{ requisito.id }}">
+                            <span>
+                                <i class="bi {% if requisito.tipo.value == 'assinatura' %}bi-pen{% else %}bi-check-lg{% endif %} me-2"></i>
+                                <strong>{{ requisito.pessoa.nome }}</strong>
+                                <span class="badge text-bg-light border">
+                                    {{ 'assinatura' if requisito.tipo.value == 'assinatura' else 'aprovação' }}
+                                </span>
+                                {% if requisito.concluido %}
+                                    <span class="badge text-bg-success">
+                                        concluído{% if requisito.concluido_em %} em {{ requisito.concluido_em.strftime('%d/%m/%Y') }}{% endif %}
+                                    </span>
+                                {% else %}
+                                    <span class="badge text-bg-warning">pendente</span>
+                                {% endif %}
+                            </span>
+                            {% if not requisito.concluido %}
+                                <form method="post" action="/painel/documentos/requisitos/{{ requisito.id }}/concluir">
+                                    <button type="submit" class="btn btn-outline-success btn-sm">
+                                        <i class="bi bi-check-lg"></i> Marcar concluído
+                                    </button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <div class="list-group-item text-body-secondary">
+                            Nenhuma aprovação/assinatura específica exigida — use os botões "Aprovar"/"Assinar" na
+                            lista de documentos para o registro simples.
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header bg-transparent fw-semibold">
+                    <i class="bi bi-plus-circle me-2"></i>Exigir aprovação/assinatura
+                </div>
+                <div class="card-body">
+                    {% if pessoas %}
+                        <form method="post" action="/painel/documentos/{{ documento.id }}/requisitos">
+                            <div class="mb-3">
+                                <label class="form-label">Pessoa</label>
+                                <select class="form-select" name="pessoa_id" required>
+                                    {% for pessoa in pessoas %}
+                                        <option value="{{ pessoa.id }}">{{ pessoa.nome }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Tipo</label>
+                                <select class="form-select" name="tipo" required>
+                                    {% for tipo in tipos_requisito %}
+                                        <option value="{{ tipo.value }}">{{ 'Assinatura' if tipo.value == 'assinatura' else 'Aprovação' }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-plus-lg me-1"></i>Adicionar exigência
+                            </button>
+                        </form>
+                    {% else %}
+                        <p class="text-body-secondary small mb-0">Nenhuma pessoa cadastrada ainda.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

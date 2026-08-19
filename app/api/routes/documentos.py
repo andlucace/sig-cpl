@@ -3,6 +3,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
@@ -14,11 +15,16 @@ from app.core.rbac import (
 )
 from app.db.session import get_db
 from app.models.cpl import CPL
-from app.models.documento import Documento
+from app.models.documento import AprovacaoDocumento, Documento
 from app.models.enums import AcaoAuditoria, CategoriaDocumento, ConfidencialidadeDocumento
 from app.models.governanca import OrgaoGovernanca, Reuniao
 from app.models.usuario import Usuario
-from app.schemas.documento import DocumentoAprovacaoUpdate, DocumentoRead
+from app.schemas.documento import (
+    AprovacaoDocumentoCreate,
+    AprovacaoDocumentoRead,
+    DocumentoAprovacaoUpdate,
+    DocumentoRead,
+)
 from app.services.armazenamento import caminho_absoluto, salvar_arquivo
 from app.services.auditoria import registrar_evento
 from app.services.geracao_documentos import gerar_pdf_ata
@@ -175,12 +181,21 @@ def listar_anexos_reuniao(
 @router.get("/cpls/{cpl_id}", response_model=list[DocumentoRead])
 def listar_documentos(
     cpl_id: uuid.UUID,
+    q: str | None = None,
     db: Session = Depends(get_db),
     usuario_atual: Usuario = Depends(get_current_user),
 ) -> list[Documento]:
+    """Pedido explícito: busca por nome (`titulo`) ou código (`codigo`),
+    case-insensitive, substring — `q` é opcional pra não quebrar quem já
+    chamava essa rota sem o parâmetro."""
+
     _get_cpl_or_404(db, cpl_id)
     verificar_papel(db, usuario_atual, PAPEIS_GOVERNANCA_LEITURA, cpl_id=cpl_id)
-    documentos = db.query(Documento).filter(Documento.cpl_id == cpl_id).all()
+    query = db.query(Documento).filter(Documento.cpl_id == cpl_id)
+    if q:
+        termo = f"%{q}%"
+        query = query.filter(or_(Documento.titulo.ilike(termo), Documento.codigo.ilike(termo)))
+    documentos = query.order_by(Documento.created_at.desc()).all()
     tem_acesso_confidencial = True
     try:
         verificar_papel(db, usuario_atual, PAPEIS_IMPEDIMENTO_LEITURA, cpl_id=cpl_id)
@@ -250,6 +265,60 @@ def atualizar_aprovacao(
     db.commit()
     db.refresh(documento)
     return documento
+
+
+@router.post(
+    "/{documento_id}/requisitos", response_model=AprovacaoDocumentoRead, status_code=status.HTTP_201_CREATED
+)
+def exigir_aprovacao_ou_assinatura(
+    documento_id: uuid.UUID,
+    dados: AprovacaoDocumentoCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> AprovacaoDocumento:
+    """Pedido explícito: registrar quais aprovações/assinaturas um
+    documento exige, de quem — visualização de "quantas e quais" além do
+    `Documento.aprovado`/`assinado` booleano simples que já existia."""
+
+    documento = _get_documento_or_404(db, documento_id)
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=documento.cpl_id)
+    requisito = AprovacaoDocumento(documento_id=documento_id, pessoa_id=dados.pessoa_id, tipo=dados.tipo)
+    db.add(requisito)
+    db.commit()
+    db.refresh(requisito)
+    return requisito
+
+
+@router.get("/{documento_id}/requisitos", response_model=list[AprovacaoDocumentoRead])
+def listar_requisitos(
+    documento_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[AprovacaoDocumento]:
+    documento = _get_documento_or_404(db, documento_id)
+    _verificar_leitura(db, usuario_atual, documento)
+    return (
+        db.query(AprovacaoDocumento)
+        .filter(AprovacaoDocumento.documento_id == documento_id)
+        .all()
+    )
+
+
+@router.post("/requisitos/{requisito_id}/concluir", response_model=AprovacaoDocumentoRead)
+def concluir_requisito(
+    requisito_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> AprovacaoDocumento:
+    requisito = db.get(AprovacaoDocumento, requisito_id)
+    if requisito is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Exigência de aprovação/assinatura não encontrada.")
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=requisito.documento.cpl_id)
+    requisito.concluido = True
+    requisito.concluido_em = date.today()
+    db.commit()
+    db.refresh(requisito)
+    return requisito
 
 
 @router.post(

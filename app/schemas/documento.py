@@ -3,13 +3,14 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.enums import CategoriaDocumento, ConfidencialidadeDocumento
+from app.models.enums import CategoriaDocumento, ConfidencialidadeDocumento, TipoAprovacaoDocumento
 
 
 class DocumentoRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    codigo: str
     cpl_id: uuid.UUID
     titulo: str
     categoria: CategoriaDocumento
@@ -37,3 +38,19 @@ class DocumentoAprovacaoUpdate(BaseModel):
     assinado: bool | None = None
     aprovado_por_id: uuid.UUID | None = None
     data_retencao_ate: date | None = None
+
+
+class AprovacaoDocumentoCreate(BaseModel):
+    pessoa_id: uuid.UUID
+    tipo: TipoAprovacaoDocumento
+
+
+class AprovacaoDocumentoRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    documento_id: uuid.UUID
+    pessoa_id: uuid.UUID
+    tipo: TipoAprovacaoDocumento
+    concluido: bool
+    concluido_em: date | None

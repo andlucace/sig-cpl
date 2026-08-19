@@ -433,6 +433,71 @@ def convidar_entidade(
     )
 
 
+@router.post("/campanhas/{campanha_id}/convites/todas")
+def convidar_todas_entidades(
+    request: Request,
+    campanha_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """Pedido explícito: convidar de uma vez todas as entidades vinculadas
+    à CPL que ainda não foram convidadas nesta campanha, em vez de
+    selecionar uma por vez no formulário ao lado."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    campanha = db.get(CampanhaCadastral, campanha_id)
+    if campanha is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Campanha não encontrada.")
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=campanha.cpl_id)
+
+    ids_convidadas = {
+        c.entidade_id
+        for c in db.query(CampanhaConvite).filter(CampanhaConvite.campanha_id == campanha_id).all()
+    }
+    vinculos = db.query(EntidadeCPL).filter(
+        EntidadeCPL.cpl_id == campanha.cpl_id, EntidadeCPL.ativo.is_(True)
+    ).all()
+    novos_convites = []
+    for vinculo in vinculos:
+        if vinculo.entidade_id in ids_convidadas:
+            continue
+        convite = CampanhaConvite(
+            campanha_id=campanha_id, entidade_id=vinculo.entidade_id, token=secrets.token_urlsafe(24)
+        )
+        db.add(convite)
+        db.commit()
+        db.refresh(convite)
+        novos_convites.append(enviar_convite_email(db, campanha, convite))
+    return templates.TemplateResponse(
+        request, "restrito/cadastro/fragments/convites_lista.html", {"convites": novos_convites}
+    )
+
+
+@router.post("/campanhas/convites/{convite_id}/reenviar")
+def reenviar_convite(
+    request: Request,
+    convite_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user_optional),
+):
+    """Pedido explícito: enviar o convite mais de uma vez para uma
+    entidade já selecionada — reenvia o mesmo link/token, sem criar um
+    `CampanhaConvite` novo."""
+
+    if redir := _exigir_login(usuario):
+        return redir
+    convite = db.get(CampanhaConvite, convite_id)
+    if convite is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Convite não encontrado.")
+    campanha = convite.campanha
+    verificar_papel(db, usuario, PAPEIS_GESTAO, cpl_id=campanha.cpl_id)
+    convite = enviar_convite_email(db, campanha, convite)
+    return templates.TemplateResponse(
+        request, "restrito/cadastro/fragments/convite_item.html", {"convite": convite}
+    )
+
+
 @router.get("/cpls/{cpl_id}/exportar-entidades")
 def exportar_entidades_cpl(
     cpl_id: uuid.UUID,

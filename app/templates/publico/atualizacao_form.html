@@ -113,6 +113,23 @@
                             <label class="form-label">Quais entidades associativas?</label>
                             <input type="text" class="form-control" name="entidades_associativas" value="{{ (diagnostico.entidades_associativas or '') if diagnostico else '' }}">
                         </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Compartilha recursos com outras empresas?</label>
+                            <select class="form-select" name="compartilha_recursos">
+                                <option value="nao" {% if diagnostico and not diagnostico.compartilha_recursos %}selected{% endif %}>Não</option>
+                                <option value="sim" {% if diagnostico and diagnostico.compartilha_recursos %}selected{% endif %}>Sim</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Quais recursos compartilhados?</label>
+                            <input type="text" class="form-control" name="recursos_compartilhados" value="{{ (diagnostico.recursos_compartilhados or '') if diagnostico else '' }}">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">ODS relacionados (Objetivos de Desenvolvimento Sustentável)</label>
+                            <input type="text" class="form-control" name="ods_relacionados"
+                                   placeholder="ex.: ODS 8 — Trabalho decente e crescimento econômico"
+                                   value="{{ (diagnostico.ods_relacionados or '') if diagnostico else '' }}">
+                        </div>
                     </div>
 
                     <h2 class="h6 text-body-secondary text-uppercase mt-4">Qualificação, sustentabilidade e certificações</h2>

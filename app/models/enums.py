@@ -164,6 +164,16 @@ class ConfidencialidadeDocumento(str, enum.Enum):
     CONFIDENCIAL = "confidencial"
 
 
+class TipoAprovacaoDocumento(str, enum.Enum):
+    """RF-042: os dois tipos de exigência que um documento pode ter de uma
+    pessoa específica — pedido explícito de visualizar quantas e quais
+    aprovações/assinaturas um documento precisa, além do simples
+    `Documento.aprovado`/`assinado` booleano (que continua existindo)."""
+
+    APROVACAO = "aprovacao"
+    ASSINATURA = "assinatura"
+
+
 class AcaoAuditoria(str, enum.Enum):
     """RF-056/RNF-003: tipo de evento registrado na trilha de auditoria.
     CRIACAO/ATUALIZACAO/EXCLUSAO são capturados automaticamente por um

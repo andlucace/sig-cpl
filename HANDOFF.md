@@ -2568,6 +2568,129 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
       test_governanca.py` — suíte completa em 144 (132 + 12), ruff
       limpo.
 
+54. **Sete pedidos pontuais: Cadastro e dados, Documentos e Indicadores
+    (RF-012/RF-042/RF-044)** — mesmo papel Dirigente da entidade (usa
+    `PAPEIS_GESTAO`).
+    - **Reenviar convite** e **convidar todas as entidades**: a lista
+      "Convidar entidade" já filtrava `entidades_convidaveis` pra
+      excluir quem já tinha convite — sem esse filtro, escolher a
+      mesma entidade de novo criaria um `CampanhaConvite` duplicado
+      (token diferente, dois links pra mesma entidade, confuso).
+      Resolvido separando os dois casos: "Reenviar" (botão em cada
+      convite pendente) dispara `enviar_convite_email` de novo pro
+      **mesmo** convite (mesmo token); "Convidar todas" é uma ação nova
+      que cria e envia um convite pra cada entidade ainda sem convite
+      — reaproveita o mesmo cálculo de `entidades_convidaveis` que já
+      existia, só que age sobre todas de uma vez em vez de uma
+      selecionada no `<select>`. Fragmento novo
+      `fragments/convites_lista.html` (loop de `convite_item.html`)
+      pra devolver múltiplos itens de uma vez pro `hx-swap="afterbegin"`.
+    - **Campos faltando no link de diagnóstico**: comparei
+      `atualizacao_form.html` (formulário público) contra
+      `CAMPOS_CONHECIDOS` (`_ALIASES_CAMPO` em
+      `app/services/importacao_entidades.py`) campo a campo — dos 26
+      campos de `DiagnosticoCadastral` que a planilha de importação
+      reconhece, o formulário público só tinha 23. Faltavam
+      `compartilha_recursos`, `recursos_compartilhados` e
+      `ods_relacionados` — os três já existiam no modelo e na
+      importação, só nunca tinham chegado no formulário público.
+      Adicionados ao template e ao handler `processar_atualizacao`.
+    - **Resumo do diagnóstico só mostrava 3 de 26 campos**: reli
+      `entidade_detail.html` procurando "o anexo de diagnóstico
+      cadastral" que o pedido menciona — é o card "Diagnóstico
+      cadastral" da tela de detalhe da entidade, que só tinha
+      `{% if %}` pra capacidade produtiva, diferenciais competitivos e
+      certificações; os outros 23 campos ficavam invisíveis mesmo já
+      salvos no banco (respondidos via campanha ou importação).
+      Reescrito como `<dl>` cobrindo todos os 26. **Achado no processo,
+      corrigido antes de virar bug visível**: um `{% if valor %}`
+      ingênuo pra campos booleanos (`realiza_inovacao` etc.) esconderia
+      "nunca respondido" (`None`) e "respondido como Não" (`False`) do
+      mesmo jeito — os dois são falsy em Python/Jinja. Resolvido com
+      uma macro Jinja (`simnao(v)`) que só produz texto quando
+      `v is not none`, e checagem explícita `is not none` (não só
+      truthy) também pros campos inteiros (`empregos_diretos` — `0` é
+      uma resposta real, não "vazio"). Testado via
+      `test_resumo_diagnostico_mostra_campos_antes_ausentes` (campo
+      `False` explícito aparece) e
+      `test_resumo_diagnostico_nao_mostra_pergunta_nunca_respondida`
+      (campo nunca tocado não aparece) — as duas situações lado a lado
+      pra não regredir.
+    - **Código do documento**: pedido pra "cada documento ganhar um
+      código". Em vez de gerar em Python (o que exigiria tocar nos
+      ~20 pontos do código que criam um `Documento` — relatórios
+      automáticos de maturidade/projeto/indicadores, atas, anexos de
+      reunião/órgão, nova versão etc.), usei um `server_default` de
+      coluna que chama `nextval()` de uma sequência Postgres dedicada
+      (`documentos_codigo_seq`). Qualquer `INSERT` novo em `documentos`
+      já sai com `codigo` (formato `DOC-000123`), **de graça**, sem
+      precisar de mudança nenhuma nos ~20 call sites. Bônus: como é
+      `server_default` (não um valor fixo), o próprio `ALTER TABLE ...
+      ADD COLUMN` da migração populou retroativamente todos os
+      documentos já existentes em produção, cada um com um número
+      novo da sequência — confirmado localmente (89 documentos de teste
+      todos ganharam código sequencial único ao aplicar a migração).
+      - **Armadilha real, só apareceu ao rodar os testes**: a suíte de
+        testes cria o schema via `Base.metadata.create_all()`
+        (`tests/conftest.py`), não roda as migrações do Alembic — então
+        o `CREATE SEQUENCE documentos_codigo_seq` da migração nunca
+        acontecia nos testes, e o `CREATE TABLE documentos` falhava
+        (`relation "documentos_codigo_seq" does not exist`, porque o
+        Postgres valida os identificadores usados num `DEFAULT` já na
+        hora do `CREATE TABLE`, não só na hora do `INSERT`). Resolvido
+        declarando a mesma sequência como `sqlalchemy.Sequence(...,
+        metadata=Base.metadata)` em `app/models/documento.py` — dessa
+        forma `Base.metadata.create_all()`/`drop_all()` cria/derruba a
+        sequência sozinho, na ordem certa, sem duplicar a lógica entre
+        migração e teste.
+    - **Busca por nome ou código**: `?q=...` em
+      `GET /painel/documentos/cpls/{id}` e no espelho da API,
+      `ilike` (case-insensitive, substring) em `titulo` **ou**
+      `codigo` — parâmetro opcional, não quebra quem já chamava a rota
+      sem ele.
+    - **Quantas e quais aprovações/assinaturas um documento exige**:
+      `Documento.aprovado`/`assinado` já existiam, mas são só dois
+      booleanos globais — não dá pra saber "aprovado por quem" nem
+      "quantos ainda faltam" quando um documento precisa de mais de uma
+      pessoa. Novo modelo `AprovacaoDocumento` (`documento_id`,
+      `pessoa_id`, `tipo` — `aprovacao` ou `assinatura`, novo enum
+      `TipoAprovacaoDocumento` —, `concluido`, `concluido_em`); nova
+      tela `/painel/documentos/{id}` (não existia detalhe de documento
+      antes, só a lista) mostra "X de Y concluídas" com nome e status
+      de cada exigência, e um formulário pra cadastrar novas. Os dois
+      mecanismos (booleano simples e requisitos granulares) convivem
+      sem conflito — um documento sem nenhum requisito cadastrado
+      simplesmente não mostra a contagem, continua funcionando só com
+      os botões "Aprovar"/"Assinar" de sempre.
+    - **Como o campo valor é montado, ao registrar um indicador**:
+      `fragments/indicador_item.html` já mostrava fórmula/fonte/
+      unidade acima do formulário de "valor atual", mas como texto
+      solto, sem ligação explícita com o campo em si. Acrescentei uma
+      linha de ajuda logo abaixo do input, amarrando os três numa frase
+      só e lembrando que cada valor salvo vira um novo ponto de
+      `IndicadorValorHistorico` (não sobrescreve o anterior) — resposta
+      direta ao pedido, sem inventar campo novo (a fórmula já existia,
+      só não estava conectada ao ato de preencher o valor).
+    - Migração `776412f023c7`: `CREATE SEQUENCE documentos_codigo_seq`
+      (antes da coluna, porque o `server_default` já referencia ela),
+      `documentos.codigo` (unique, not null), tabela
+      `aprovacoes_documento`.
+    - Testado: Playwright contra o app rodando de verdade — convidar
+      todas as 2 entidades restantes numa campanha (a 3ª, já convidada,
+      não duplicou), reenviar convite existente, preencher e enviar o
+      formulário público com os 3 campos novos, conferir que o resumo
+      da entidade mostra os campos preenchidos e omite os nunca
+      respondidos, criar documento e ver `DOC-000090` gerado, buscar
+      por nome e por código, exigir uma assinatura e marcá-la
+      concluída (contagem "0 de 1" → "1 de 1"), e ver a linha "Como
+      montar o valor" no indicador. 27 testes automatizados novos —
+      `tests/test_campanhas.py` (+7: reenviar, convidar todas, cada um
+      com caso de sucesso + RBAC), `tests/test_diagnostico.py` (novo,
+      6 testes — este módulo nunca tinha teste nenhum antes),
+      `tests/test_documentos.py` (novo, 14 testes — mesma situação,
+      zero cobertura antes desta fatia). Suíte completa em 171
+      (144 + 27), ruff limpo.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for

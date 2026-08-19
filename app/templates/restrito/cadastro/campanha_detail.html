@@ -47,6 +47,14 @@
                                 <i class="bi bi-send me-1"></i>Convidar
                             </button>
                         </form>
+                        <hr>
+                        <form hx-post="/painel/cadastro/campanhas/{{ campanha.id }}/convites/todas"
+                              hx-target="#lista-convites" hx-swap="afterbegin"
+                              hx-confirm="Convidar de uma vez as {{ entidades_convidaveis|length }} entidade(s) ainda não convidada(s)?">
+                            <button type="submit" class="btn btn-outline-primary w-100">
+                                <i class="bi bi-people me-1"></i>Convidar todas as entidades
+                            </button>
+                        </form>
                     {% else %}
                         <p class="text-body-secondary small mb-0">
                             Todas as entidades vinculadas à CPL já foram convidadas nesta campanha.

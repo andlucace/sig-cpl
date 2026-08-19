@@ -239,3 +239,132 @@ def test_convidar_entidade_exige_papel_gestao(client, admin_client, db_session):
         f"/api/cadastro/campanhas/{campanha_id}/convites", json={"entidade_id": entidade_id}
     )
     assert resposta.status_code == 403
+
+
+# --- Reenviar convite (pedido explícito) -------------------------------------
+
+
+def test_reenviar_convite_envia_de_novo_mesmo_token(admin_client, monkeypatch):
+    chamadas = []
+    monkeypatch.setattr(campanhas_service, "enviar_email", lambda *a, **k: chamadas.append(a))
+
+    cpl_id, entidade_id = _cpl_e_entidade(admin_client, "M", email_entidade="empresa-m@teste.com")
+    campanha_id = _campanha(admin_client, cpl_id, "M")
+    convite = admin_client.post(
+        f"/api/cadastro/campanhas/{campanha_id}/convites", json={"entidade_id": entidade_id}
+    ).json()
+    assert len(chamadas) == 1
+
+    resposta = admin_client.post(f"/api/cadastro/campanhas/convites/{convite['id']}/reenviar")
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["id"] == convite["id"]
+    assert corpo["token"] == convite["token"]
+    assert len(chamadas) == 2
+
+
+def test_reenviar_convite_exige_papel_gestao(client, admin_client, db_session):
+    cpl_id, entidade_id = _cpl_e_entidade(admin_client, "N", email_entidade="empresa-n@teste.com")
+    campanha_id = _campanha(admin_client, cpl_id, "N")
+    convite = admin_client.post(
+        f"/api/cadastro/campanhas/{campanha_id}/convites", json={"entidade_id": entidade_id}
+    ).json()
+
+    leitor = criar_usuario_com_papel(db_session, Papel.CONSELHO_COMITE, cpl_id=cpl_id)
+    client_leitor = login_como(client, leitor)
+    resposta = client_leitor.post(f"/api/cadastro/campanhas/convites/{convite['id']}/reenviar")
+    assert resposta.status_code == 403
+
+
+def test_web_reenviar_convite_mostra_botao_e_reenvia(admin_client, monkeypatch):
+    chamadas = []
+    monkeypatch.setattr(campanhas_service, "enviar_email", lambda *a, **k: chamadas.append(a))
+
+    cpl_id, entidade_id = _cpl_e_entidade(admin_client, "O", email_entidade="empresa-o@teste.com")
+    campanha_id = _campanha(admin_client, cpl_id, "O")
+    admin_client.post(f"/painel/cadastro/campanhas/{campanha_id}/convites", data={"entidade_id": entidade_id})
+    assert len(chamadas) == 1
+
+    pagina = admin_client.get(f"/painel/cadastro/campanhas/{campanha_id}")
+    assert "Reenviar" in pagina.text
+
+    convite_id = admin_client.get(f"/api/cadastro/campanhas/{campanha_id}/convites").json()[0]["id"]
+    resposta = admin_client.post(f"/painel/cadastro/campanhas/convites/{convite_id}/reenviar")
+    assert resposta.status_code == 200
+    assert len(chamadas) == 2
+
+
+# --- Convidar todas as entidades (pedido explícito) --------------------------
+
+
+def test_convidar_todas_entidades_convida_as_pendentes(admin_client, monkeypatch):
+    chamadas = []
+    monkeypatch.setattr(campanhas_service, "enviar_email", lambda *a, **k: chamadas.append(a))
+
+    cpl_id, entidade_1 = _cpl_e_entidade(admin_client, "P1", email_entidade="empresa-p1@teste.com")
+    entidade_2 = admin_client.post(
+        "/api/entidades",
+        json={"tipo": "empresa", "razao_social": "Empresa Campanha P2", "email": "empresa-p2@teste.com"},
+    ).json()["id"]
+    admin_client.post(f"/api/cpls/{cpl_id}/entidades/{entidade_2}/vinculo")
+    campanha_id = _campanha(admin_client, cpl_id, "P")
+
+    resposta = admin_client.post(f"/api/cadastro/campanhas/{campanha_id}/convites/todas")
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert len(corpo) == 2
+    assert {c["entidade_id"] for c in corpo} == {entidade_1, entidade_2}
+    assert len(chamadas) == 2
+
+
+def test_convidar_todas_entidades_nao_duplica_ja_convidada(admin_client, monkeypatch):
+    monkeypatch.setattr(campanhas_service, "enviar_email", lambda *a, **k: None)
+
+    cpl_id, entidade_1 = _cpl_e_entidade(admin_client, "Q1", email_entidade="empresa-q1@teste.com")
+    entidade_2 = admin_client.post(
+        "/api/entidades", json={"tipo": "empresa", "razao_social": "Empresa Campanha Q2"}
+    ).json()["id"]
+    admin_client.post(f"/api/cpls/{cpl_id}/entidades/{entidade_2}/vinculo")
+    campanha_id = _campanha(admin_client, cpl_id, "Q")
+
+    admin_client.post(f"/api/cadastro/campanhas/{campanha_id}/convites", json={"entidade_id": entidade_1})
+    resposta = admin_client.post(f"/api/cadastro/campanhas/{campanha_id}/convites/todas")
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert len(corpo) == 1
+    assert corpo[0]["entidade_id"] == entidade_2
+
+    total_convites = admin_client.get(f"/api/cadastro/campanhas/{campanha_id}/convites").json()
+    assert len(total_convites) == 2
+
+
+def test_convidar_todas_entidades_exige_papel_gestao(client, admin_client, db_session):
+    cpl_id, _entidade_id = _cpl_e_entidade(admin_client, "R", email_entidade="empresa-r@teste.com")
+    campanha_id = _campanha(admin_client, cpl_id, "R")
+
+    leitor = criar_usuario_com_papel(db_session, Papel.CONSELHO_COMITE, cpl_id=cpl_id)
+    client_leitor = login_como(client, leitor)
+    resposta = client_leitor.post(f"/api/cadastro/campanhas/{campanha_id}/convites/todas")
+    assert resposta.status_code == 403
+
+
+def test_web_convidar_todas_entidades(admin_client, monkeypatch):
+    chamadas = []
+    monkeypatch.setattr(campanhas_service, "enviar_email", lambda *a, **k: chamadas.append(a))
+
+    cpl_id, entidade_1 = _cpl_e_entidade(admin_client, "S1", email_entidade="empresa-s1@teste.com")
+    entidade_2 = admin_client.post(
+        "/api/entidades",
+        json={"tipo": "empresa", "razao_social": "Empresa Campanha S2", "email": "empresa-s2@teste.com"},
+    ).json()["id"]
+    admin_client.post(f"/api/cpls/{cpl_id}/entidades/{entidade_2}/vinculo")
+    campanha_id = _campanha(admin_client, cpl_id, "S")
+
+    pagina = admin_client.get(f"/painel/cadastro/campanhas/{campanha_id}")
+    assert "Convidar todas as entidades" in pagina.text
+
+    resposta = admin_client.post(f"/painel/cadastro/campanhas/{campanha_id}/convites/todas")
+    assert resposta.status_code == 200
+    assert "Empresa Campanha S1" in resposta.text
+    assert "Empresa Campanha S2" in resposta.text
+    assert len(chamadas) == 2

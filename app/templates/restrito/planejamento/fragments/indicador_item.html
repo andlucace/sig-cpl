@@ -24,10 +24,19 @@
               hx-post="/painel/planejamento/indicadores/{{ indicador.id }}/valor"
               hx-target="#indicador-{{ indicador.id }}" hx-swap="outerHTML">
             <input type="text" class="form-control form-control-sm" style="width: 140px;"
-                   name="valor_atual" placeholder="valor atual" value="{{ indicador.valor_atual or '' }}">
+                   name="valor_atual" placeholder="valor atual" value="{{ indicador.valor_atual or '' }}"
+                   title="{% if indicador.formula %}Fórmula: {{ indicador.formula }}{% endif %}{% if indicador.unidade %} — unidade: {{ indicador.unidade }}{% endif %}">
             <button type="submit" class="btn btn-outline-primary btn-sm">
                 <i class="bi bi-save"></i>
             </button>
         </form>
     </div>
+    <small class="text-body-secondary d-block ms-4 mt-1">
+        <i class="bi bi-info-circle me-1"></i>Como montar o valor:
+        {% if indicador.formula %}siga a fórmula "{{ indicador.formula }}"{% else %}sem fórmula definida para este indicador — registre o valor apurado diretamente{% endif %}
+        {% if indicador.unidade %}, expresso em {{ indicador.unidade }}{% endif %}
+        {% if indicador.fonte %} (fonte de dados: {{ indicador.fonte }}){% endif %}.
+        Cada valor salvo aqui vira um novo ponto na
+        <a href="/painel/indicadores/{{ indicador.id }}/historico">série histórica</a>, não sobrescreve o anterior.
+    </small>
 </div>

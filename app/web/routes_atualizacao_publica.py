@@ -64,6 +64,9 @@ def processar_atualizacao(
     interesse_comissoes: str | None = Form(None),
     participacao_associativa: str | None = Form(None),
     entidades_associativas: str | None = Form(None),
+    compartilha_recursos: str | None = Form(None),
+    recursos_compartilhados: str | None = Form(None),
+    ods_relacionados: str | None = Form(None),
     oferece_qualificacao_colaboradores: str | None = Form(None),
     descricao_qualificacao: str | None = Form(None),
     adota_praticas_sustentabilidade: str | None = Form(None),
@@ -127,6 +130,9 @@ def processar_atualizacao(
     diagnostico.interesse_comissoes = interesse_comissoes or None
     diagnostico.participacao_associativa = participacao_associativa == "sim"
     diagnostico.entidades_associativas = entidades_associativas or None
+    diagnostico.compartilha_recursos = compartilha_recursos == "sim"
+    diagnostico.recursos_compartilhados = recursos_compartilhados or None
+    diagnostico.ods_relacionados = ods_relacionados or None
     diagnostico.oferece_qualificacao_colaboradores = oferece_qualificacao_colaboradores == "sim"
     diagnostico.descricao_qualificacao = descricao_qualificacao or None
     diagnostico.adota_praticas_sustentabilidade = adota_praticas_sustentabilidade == "sim"

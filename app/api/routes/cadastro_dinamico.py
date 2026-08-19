@@ -15,7 +15,7 @@ from app.models.cadastro_dinamico import (
     ImportacaoLote,
 )
 from app.models.cpl import CPL
-from app.models.entidade import Entidade
+from app.models.entidade import Entidade, EntidadeCPL
 from app.models.enums import StatusLoteImportacao
 from app.models.usuario import Usuario
 from app.schemas.cadastro_dinamico import (
@@ -128,6 +128,62 @@ def convidar_entidade(
     db.add(convite)
     db.commit()
     db.refresh(convite)
+    return enviar_convite_email(db, campanha, convite)
+
+
+@router.post("/campanhas/{campanha_id}/convites/todas", response_model=list[CampanhaConviteRead])
+def convidar_todas_entidades(
+    campanha_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> list[CampanhaConvite]:
+    """Pedido explícito: convidar de uma vez todas as entidades vinculadas
+    à CPL que ainda não foram convidadas nesta campanha — mesmo critério
+    de `entidades_convidaveis` da tela web, só que agindo sobre todas ao
+    invés de uma selecionada por vez."""
+
+    campanha = _get_campanha_or_404(db, campanha_id)
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=campanha.cpl_id)
+
+    ids_convidadas = {
+        c.entidade_id
+        for c in db.query(CampanhaConvite).filter(CampanhaConvite.campanha_id == campanha_id).all()
+    }
+    vinculos = (
+        db.query(EntidadeCPL)
+        .filter(EntidadeCPL.cpl_id == campanha.cpl_id, EntidadeCPL.ativo.is_(True))
+        .all()
+    )
+    novos_convites = []
+    for vinculo in vinculos:
+        if vinculo.entidade_id in ids_convidadas:
+            continue
+        convite = CampanhaConvite(
+            campanha_id=campanha_id, entidade_id=vinculo.entidade_id, token=secrets.token_urlsafe(24)
+        )
+        db.add(convite)
+        db.commit()
+        db.refresh(convite)
+        novos_convites.append(enviar_convite_email(db, campanha, convite))
+    return novos_convites
+
+
+@router.post("/campanhas/convites/{convite_id}/reenviar", response_model=CampanhaConviteRead)
+def reenviar_convite(
+    convite_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    usuario_atual: Usuario = Depends(get_current_user),
+) -> CampanhaConvite:
+    """Pedido explícito: permitir enviar o convite mais de uma vez para
+    uma entidade já selecionada — reenvia o mesmo link/token (não cria
+    um `CampanhaConvite` novo), útil quando o primeiro e-mail falhou ou
+    simplesmente para lembrar quem ainda não respondeu."""
+
+    convite = db.get(CampanhaConvite, convite_id)
+    if convite is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Convite não encontrado.")
+    campanha = convite.campanha
+    verificar_papel(db, usuario_atual, PAPEIS_GESTAO, cpl_id=campanha.cpl_id)
     return enviar_convite_email(db, campanha, convite)
 
 
