@@ -2021,6 +2021,83 @@ Sete pedidos pontuais em três módulos, todos usados por quem tem
   passaram a cobrir `codigo`/`orgao_id`) — suíte completa em 171
   (144 + 27), ruff limpo.
 
+## Gap-fill contra o gabarito real da planilha "CPLS - FORMS.xlsx" (RF-012)
+
+A planilha real "Cadastro de Empresas Participantes das CPLs", citada
+desde o início do RF-012/013 mas nunca antes anexada ao projeto, foi
+finalmente anexada (como PDF estruturado — 14 seções, 59 campos, 50
+obrigatórios). Pedido explícito: "na campanha de atualização cadastral,
+adicionar informações que por acaso não estejam no documento em anexo."
+Diff campo a campo entre o gabarito e `Entidade`/`DiagnosticoCadastral`
+encontrou ~29 campos ausentes, adicionados nos mesmos 4 pontos de
+escrita de sempre (model + migração, `_ALIASES_CAMPO`/`CAMPOS_CONHECIDOS`
+da importação, formulário público + `POST /atualizacao/{token}`, resumo
+em `/painel/cadastro/entidades/{id}`), mais os schemas Pydantic
+(`DiagnosticoCadastralUpdate`/`Read`, `EntidadeCreate`/`Read`):
+
+- **Endereço estruturado** — `Entidade` ganhou `cep`, `numero`,
+  `complemento`, `bairro` e `possui_filiais`. `endereco` continua sendo
+  o logradouro em texto livre (rua/av.) que a geocodificação já usava —
+  os campos novos são granularidade adicional, não substituição.
+- **Responsável pela empresa** — o formulário público não pedia nenhum
+  dado de "quem está respondendo"; ganhou nome/cargo/telefone/WhatsApp/
+  e-mail, que viram um `PessoaVinculo` da entidade nesta CPL (papel
+  `EMPRESA_MEMBRO`), idempotente por e-mail — exatamente o mesmo
+  raciocínio de `adesao.py::_vincular_pessoa_contato` (RF-007/F01), só
+  que reaproveitado no fluxo de campanha em vez do de adesão.
+  `Pessoa` ganhou um campo `whatsapp` (distinto de `telefone`).
+- **Elos da cadeia no formulário público** — checkboxes (um por valor
+  de `Elo`, RF-009) que chamam `app/services/campanhas.py::
+  sincronizar_elos`: ativa os elos marcados e desativa (soft, `ativo=
+  False`) os desmarcados na resposta atual, reaproveitando `EntidadeElo`
+  já existente em vez de duplicar a informação como texto livre em
+  `DiagnosticoCadastral` — o formulário público nunca tinha essa escrita
+  antes, só quem administra classificava elo manualmente.
+- **Capital humano granular** — `funcionarios_clt`, `terceirizados`,
+  `aprendizes`, `colaboradores_pcd` (inteiros), complementando os já
+  existentes `empregos_diretos`/`empregos_indiretos` (mantidos como
+  estavam, sem sobreposição de significado).
+- **Relacionamento na cadeia** — `materia_prima_principal`,
+  `produto_principal`, `compra_de`, `vende_para`,
+  `parcerias_instituicoes` (texto livre).
+- **Investimento e digitalização** — `investimentos_recentes`,
+  `pretende_investir` (bool), `areas_investimento`,
+  `tecnologias_utilizadas`.
+- **Inovação granular** — `desenvolve_novos_produtos`,
+  `desenvolve_novos_processos`, `possui_setor_pd`,
+  `possui_projetos_inovacao`, `possui_patente`,
+  `possui_registro_software`, `possui_marca_registrada`,
+  `recebeu_recursos_publicos_inovacao` (todos bool), complementando
+  `realiza_inovacao`/`realiza_pd`/`descricao_inovacao` (mantidos).
+- **Internacionalização granular** — `importa`,
+  `possui_clientes_internacionais`, `participa_feiras_internacionais`,
+  `interesse_exportar` (bool), complementando `exporta`/
+  `mercados_exportacao` (mantidos).
+- **Sustentabilidade** — `praticas_ambientais` (texto livre),
+  complementando `adota_praticas_sustentabilidade`/
+  `descricao_sustentabilidade` (mantidos).
+- **Demandas da empresa** — `necessidades_empresa`, `outras_demandas`.
+- **Consentimento LGPD passou a ser exigido** — o formulário público de
+  campanha nunca pedia nenhuma declaração de consentimento, ao contrário
+  do formulário de adesão (F01), que já exige `consentimento_lgpd` desde
+  a criação. `CampanhaConvite` ganhou `consentimento_lgpd`/
+  `consentimento_em`; `POST /atualizacao/{token}` agora rejeita (400)
+  uma submissão sem o checkbox marcado, mesma mensagem de erro do
+  formulário de UF inválida.
+- Campos de seleção cujas opções exatas não vieram no gabarito (ex.:
+  "situação da empresa em relação à CPL") ficaram como texto livre, não
+  enum — decisão deliberada pra não inventar opções que a planilha real
+  não confirmou.
+- Migração `0a0be2859e14`, gerada por `alembic revision
+  --autogenerate` e ajustada só para dar `server_default=false` à nova
+  coluna `NOT NULL` `campanha_convites.consentimento_lgpd` (mesmo
+  cuidado de sempre com booleana obrigatória em tabela já populada).
+- 10 testes automatizados novos (`tests/test_gabarito_cpls_forms.py`),
+  mais os 2 testes existentes de `test_diagnostico.py` que passaram a
+  enviar `consentimento_lgpd=sim` (o formulário público exigindo
+  consentimento quebrava as duas submissões de teste que já existiam) —
+  suíte completa em 181, sem falhas.
+
 ## Portal de transparência (RF-055)
 
 O portal público (`app/web/routes_publico.py`) até aqui só tinha uma página

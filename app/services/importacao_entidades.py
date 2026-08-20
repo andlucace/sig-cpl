@@ -47,7 +47,12 @@ _ALIASES_CAMPO: dict[str, list[str]] = {
     "porte": ["porte"],
     "municipio": ["municipio", "cidade"],
     "uf": ["uf", "estado"],
-    "endereco": ["endereco"],
+    "endereco": ["endereco", "rua", "logradouro", "rua/av", "rua/av."],
+    "cep": ["cep"],
+    "numero": ["numero", "número"],
+    "complemento": ["complemento"],
+    "bairro": ["bairro"],
+    "possui_filiais": ["possui filiais", "tem filiais", "filiais"],
     "tipo": ["tipo", "tipo de entidade", "tipo de organizacao"],
     "atividades_produtos": ["atividades", "produtos", "atividades e produtos"],
     "diferenciais_competitivos": ["diferenciais", "diferenciais competitivos"],
@@ -77,6 +82,39 @@ _ALIASES_CAMPO: dict[str, list[str]] = {
     # RF-010: capacidade produtiva — adicionado numa sessão posterior à
     # criação do modelo, mesmo motivo dos campos do RF-046/047 acima.
     "capacidade_produtiva": ["capacidade produtiva", "capacidade de producao"],
+    # RF-012: campos do gabarito real da planilha "CPLS - FORMS.xlsx"
+    # ("Cadastro de Empresas Participantes das CPLs"), anexado ao projeto
+    # numa sessão posterior à criação do modelo — mesmo motivo das seções
+    # RF-046/047 acima.
+    "situacao_vinculo_cpl": ["situacao em relacao a cpl", "situacao da empresa em relacao a cpl"],
+    "materia_prima_principal": ["materia prima principal", "principal materia prima"],
+    "produto_principal": ["produto principal", "principal produto fabricado"],
+    "compra_de": ["compra principalmente de", "compra de"],
+    "vende_para": ["vende principalmente para", "vende para"],
+    "parcerias_instituicoes": ["parceria com instituicoes", "instituicoes parceiras"],
+    "funcionarios_clt": ["funcionarios clt", "numero de funcionarios clt"],
+    "terceirizados": ["terceirizados", "numero de terceirizados"],
+    "aprendizes": ["aprendizes", "numero de aprendizes"],
+    "colaboradores_pcd": ["colaboradores pcd", "numero de colaboradores pcd", "pcd"],
+    "investimentos_recentes": ["investimentos recentes", "principais investimentos realizados"],
+    "pretende_investir": ["pretende investir", "pretende investir nos proximos 24 meses"],
+    "areas_investimento": ["areas de investimento", "em quais areas pretende investir"],
+    "tecnologias_utilizadas": ["tecnologias utilizadas", "tecnologias que a empresa utiliza"],
+    "desenvolve_novos_produtos": ["desenvolve novos produtos"],
+    "desenvolve_novos_processos": ["desenvolve novos processos"],
+    "possui_setor_pd": ["possui setor de p&d", "possui setor de pd"],
+    "possui_projetos_inovacao": ["possui projetos de inovacao"],
+    "possui_patente": ["possui patente"],
+    "possui_registro_software": ["possui registro de software"],
+    "possui_marca_registrada": ["possui marca registrada"],
+    "recebeu_recursos_publicos_inovacao": ["recebeu recursos publicos para inovacao"],
+    "praticas_ambientais": ["praticas ambientais", "quais praticas ambientais a empresa adota"],
+    "importa": ["importa"],
+    "possui_clientes_internacionais": ["possui clientes internacionais"],
+    "participa_feiras_internacionais": ["participa de feiras internacionais"],
+    "interesse_exportar": ["interesse em exportar", "tem interesse em exportar"],
+    "necessidades_empresa": ["necessidades da empresa", "principais necessidades da empresa"],
+    "outras_demandas": ["outras demandas", "outra demanda importante"],
 }
 
 _CAMPOS_BOOLEANOS = {
@@ -89,11 +127,31 @@ _CAMPOS_BOOLEANOS = {
     "adota_praticas_sustentabilidade",
     "possui_contatos_internacionais",
     "possui_certificacoes",
+    "pretende_investir",
+    "desenvolve_novos_produtos",
+    "desenvolve_novos_processos",
+    "possui_setor_pd",
+    "possui_projetos_inovacao",
+    "possui_patente",
+    "possui_registro_software",
+    "possui_marca_registrada",
+    "recebeu_recursos_publicos_inovacao",
+    "importa",
+    "possui_clientes_internacionais",
+    "participa_feiras_internacionais",
+    "interesse_exportar",
 }
-_CAMPOS_INTEIROS = {"empregos_diretos", "empregos_indiretos"}
-_CAMPOS_DIAGNOSTICO = set(_ALIASES_CAMPO) - {
-    "razao_social", "nome_fantasia", "cnpj", "cpf", "cnae", "porte", "municipio", "uf", "endereco", "tipo",
+_CAMPOS_INTEIROS = {
+    "empregos_diretos", "empregos_indiretos", "funcionarios_clt", "terceirizados", "aprendizes", "colaboradores_pcd",
 }
+# Campos de Entidade (cadastro básico) que ficam fora de _CAMPOS_DIAGNOSTICO —
+# tratados à parte em `_processar_linhas`, não via setattr genérico em
+# DiagnosticoCadastral.
+_CAMPOS_ENTIDADE = {
+    "razao_social", "nome_fantasia", "cnpj", "cpf", "cnae", "porte", "municipio", "uf", "endereco",
+    "cep", "numero", "complemento", "bairro", "possui_filiais", "tipo",
+}
+_CAMPOS_DIAGNOSTICO = set(_ALIASES_CAMPO) - _CAMPOS_ENTIDADE
 
 CAMPOS_CONHECIDOS = list(_ALIASES_CAMPO.keys())
 """Campos que o mapeamento (automático ou manual) pode preencher — usado
@@ -251,6 +309,18 @@ def _processar_linhas(
             entidade.uf = valores["uf"].upper()[:2]
         if valores.get("endereco"):
             entidade.endereco = valores["endereco"]
+        if valores.get("cep"):
+            entidade.cep = valores["cep"]
+        if valores.get("numero"):
+            entidade.numero = valores["numero"]
+        if valores.get("complemento"):
+            entidade.complemento = valores["complemento"]
+        if valores.get("bairro"):
+            entidade.bairro = valores["bairro"]
+        if valores.get("possui_filiais"):
+            parsed_filiais = _parse_bool(valores["possui_filiais"])
+            if parsed_filiais is not None:
+                entidade.possui_filiais = parsed_filiais
 
         db.flush()
 

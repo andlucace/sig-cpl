@@ -13,7 +13,13 @@
                 {% if entidade.cnpj %}CNPJ: {{ entidade.cnpj }}{% endif %}
                 {% if entidade.municipio %} — {{ entidade.municipio }}{% if entidade.uf %}/{{ entidade.uf }}{% endif %}{% endif %}
                 {% if entidade.email %} — <i class="bi bi-envelope-at"></i> {{ entidade.email }}{% endif %}
+                {% if entidade.possui_filiais %} — <span class="badge text-bg-light border">possui filiais</span>{% endif %}
             </p>
+            {% if entidade.endereco or entidade.numero or entidade.bairro or entidade.cep %}
+                <p class="text-body-secondary small mb-0">
+                    <i class="bi bi-geo-alt me-1"></i>{{ entidade.endereco or "" }}{% if entidade.numero %}, {{ entidade.numero }}{% endif %}{% if entidade.complemento %} — {{ entidade.complemento }}{% endif %}{% if entidade.bairro %} — {{ entidade.bairro }}{% endif %}{% if entidade.cep %} — CEP {{ entidade.cep }}{% endif %}
+                </p>
+            {% endif %}
         </div>
         {% if entidade.cnpj %}
             <a href="/painel/cadastro/entidades/{{ entidade.id }}?consultar_publico=1" class="btn btn-outline-secondary btn-sm">
@@ -123,6 +129,35 @@
                             ("Possui certificações?", simnao(diagnostico.possui_certificacoes)|trim or none),
                             ("Certificações", diagnostico.certificacoes),
                             ("Nível de digitalização", diagnostico.nivel_digitalizacao),
+                            ("Situação em relação à CPL", diagnostico.situacao_vinculo_cpl),
+                            ("Matéria-prima principal", diagnostico.materia_prima_principal),
+                            ("Produto principal", diagnostico.produto_principal),
+                            ("Compra principalmente de", diagnostico.compra_de),
+                            ("Vende principalmente para", diagnostico.vende_para),
+                            ("Parcerias com instituições", diagnostico.parcerias_instituicoes),
+                            ("Funcionários CLT", diagnostico.funcionarios_clt if diagnostico.funcionarios_clt is not none else none),
+                            ("Terceirizados", diagnostico.terceirizados if diagnostico.terceirizados is not none else none),
+                            ("Aprendizes", diagnostico.aprendizes if diagnostico.aprendizes is not none else none),
+                            ("Colaboradores PCD", diagnostico.colaboradores_pcd if diagnostico.colaboradores_pcd is not none else none),
+                            ("Investimentos recentes", diagnostico.investimentos_recentes),
+                            ("Pretende investir nos próximos 24 meses?", simnao(diagnostico.pretende_investir)|trim or none),
+                            ("Áreas de investimento pretendido", diagnostico.areas_investimento),
+                            ("Tecnologias utilizadas", diagnostico.tecnologias_utilizadas),
+                            ("Desenvolve novos produtos?", simnao(diagnostico.desenvolve_novos_produtos)|trim or none),
+                            ("Desenvolve novos processos?", simnao(diagnostico.desenvolve_novos_processos)|trim or none),
+                            ("Possui setor de P&D?", simnao(diagnostico.possui_setor_pd)|trim or none),
+                            ("Possui projetos de inovação?", simnao(diagnostico.possui_projetos_inovacao)|trim or none),
+                            ("Possui patente?", simnao(diagnostico.possui_patente)|trim or none),
+                            ("Possui registro de software?", simnao(diagnostico.possui_registro_software)|trim or none),
+                            ("Possui marca registrada?", simnao(diagnostico.possui_marca_registrada)|trim or none),
+                            ("Já recebeu recursos públicos para inovação?", simnao(diagnostico.recebeu_recursos_publicos_inovacao)|trim or none),
+                            ("Práticas ambientais adotadas", diagnostico.praticas_ambientais),
+                            ("Importa?", simnao(diagnostico.importa)|trim or none),
+                            ("Possui clientes internacionais?", simnao(diagnostico.possui_clientes_internacionais)|trim or none),
+                            ("Participa de feiras internacionais?", simnao(diagnostico.participa_feiras_internacionais)|trim or none),
+                            ("Tem interesse em exportar?", simnao(diagnostico.interesse_exportar)|trim or none),
+                            ("Principais necessidades da empresa", diagnostico.necessidades_empresa),
+                            ("Outras demandas", diagnostico.outras_demandas),
                         ] %}
                         {% set ns = namespace(algum=false) %}
                         {% for rotulo, valor in campos %}

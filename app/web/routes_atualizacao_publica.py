@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
@@ -6,12 +6,23 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.cadastro_dinamico import CampanhaConvite, DiagnosticoCadastral
-from app.models.entidade import Entidade
+from app.models.entidade import Entidade, EntidadeElo
+from app.models.enums import Elo
+from app.services.campanhas import sincronizar_elos, vincular_responsavel
 from app.services.indicadores import registrar_snapshot_diagnostico
 from app.services.validadores import uf_valida
 from app.web.templates import templates
 
 router = APIRouter(prefix="/atualizacao", tags=["Autopreenchimento público"])
+
+
+def _elos_ativos(db: Session, entidade_id, cpl_id) -> set[Elo]:
+    return {
+        e.elo
+        for e in db.query(EntidadeElo)
+        .filter(EntidadeElo.entidade_id == entidade_id, EntidadeElo.cpl_id == cpl_id, EntidadeElo.ativo.is_(True))
+        .all()
+    }
 
 
 @router.get("/{token}")
@@ -37,6 +48,8 @@ def form_atualizacao(request: Request, token: str, db: Session = Depends(get_db)
             "entidade": convite.entidade,
             "campanha": convite.campanha,
             "diagnostico": diagnostico,
+            "elos": Elo,
+            "elos_ativos": _elos_ativos(db, convite.entidade_id, convite.campanha.cpl_id),
         },
     )
 
@@ -76,6 +89,47 @@ def processar_atualizacao(
     possui_certificacoes: str | None = Form(None),
     certificacoes: str | None = Form(None),
     nivel_digitalizacao: str | None = Form(None),
+    cep: str | None = Form(None),
+    numero: str | None = Form(None),
+    complemento: str | None = Form(None),
+    bairro: str | None = Form(None),
+    possui_filiais: str | None = Form(None),
+    situacao_vinculo_cpl: str | None = Form(None),
+    elos: list[str] = Form([]),
+    materia_prima_principal: str | None = Form(None),
+    produto_principal: str | None = Form(None),
+    compra_de: str | None = Form(None),
+    vende_para: str | None = Form(None),
+    parcerias_instituicoes: str | None = Form(None),
+    funcionarios_clt: str | None = Form(None),
+    terceirizados: str | None = Form(None),
+    aprendizes: str | None = Form(None),
+    colaboradores_pcd: str | None = Form(None),
+    investimentos_recentes: str | None = Form(None),
+    pretende_investir: str | None = Form(None),
+    areas_investimento: str | None = Form(None),
+    tecnologias_utilizadas: str | None = Form(None),
+    desenvolve_novos_produtos: str | None = Form(None),
+    desenvolve_novos_processos: str | None = Form(None),
+    possui_setor_pd: str | None = Form(None),
+    possui_projetos_inovacao: str | None = Form(None),
+    possui_patente: str | None = Form(None),
+    possui_registro_software: str | None = Form(None),
+    possui_marca_registrada: str | None = Form(None),
+    recebeu_recursos_publicos_inovacao: str | None = Form(None),
+    praticas_ambientais: str | None = Form(None),
+    importa: str | None = Form(None),
+    possui_clientes_internacionais: str | None = Form(None),
+    participa_feiras_internacionais: str | None = Form(None),
+    interesse_exportar: str | None = Form(None),
+    necessidades_empresa: str | None = Form(None),
+    outras_demandas: str | None = Form(None),
+    responsavel_nome: str | None = Form(None),
+    responsavel_cargo: str | None = Form(None),
+    responsavel_telefone: str | None = Form(None),
+    responsavel_whatsapp: str | None = Form(None),
+    responsavel_email: str | None = Form(None),
+    consentimento_lgpd: str | None = Form(None),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
     convite = db.query(CampanhaConvite).filter(CampanhaConvite.token == token).first()
@@ -84,7 +138,7 @@ def processar_atualizacao(
             request, "publico/atualizacao_invalida.html", {}, status_code=404
         )
 
-    if uf and not uf_valida(uf):
+    def _erro(mensagem: str) -> HTMLResponse:
         diagnostico = (
             db.query(DiagnosticoCadastral)
             .filter(DiagnosticoCadastral.entidade_id == convite.entidade_id)
@@ -98,10 +152,17 @@ def processar_atualizacao(
                 "entidade": convite.entidade,
                 "campanha": convite.campanha,
                 "diagnostico": diagnostico,
-                "erro": f"UF {uf!r} não é uma unidade da federação válida.",
+                "elos": Elo,
+                "elos_ativos": _elos_ativos(db, convite.entidade_id, convite.campanha.cpl_id),
+                "erro": mensagem,
             },
             status_code=400,
         )
+
+    if uf and not uf_valida(uf):
+        return _erro(f"UF {uf!r} não é uma unidade da federação válida.")
+    if not consentimento_lgpd:
+        return _erro("É necessário consentir com o tratamento de dados para enviar a atualização.")
 
     entidade: Entidade = convite.entidade
     entidade.razao_social = razao_social
@@ -109,6 +170,11 @@ def processar_atualizacao(
     entidade.municipio = municipio or None
     entidade.uf = (uf or "").upper()[:2] or None
     entidade.endereco = endereco or None
+    entidade.cep = cep or None
+    entidade.numero = numero or None
+    entidade.complemento = complemento or None
+    entidade.bairro = bairro or None
+    entidade.possui_filiais = possui_filiais == "sim"
 
     diagnostico = (
         db.query(DiagnosticoCadastral).filter(DiagnosticoCadastral.entidade_id == entidade.id).first()
@@ -142,9 +208,53 @@ def processar_atualizacao(
     diagnostico.possui_certificacoes = possui_certificacoes == "sim"
     diagnostico.certificacoes = certificacoes or None
     diagnostico.nivel_digitalizacao = nivel_digitalizacao or None
+    diagnostico.situacao_vinculo_cpl = situacao_vinculo_cpl or None
+    diagnostico.materia_prima_principal = materia_prima_principal or None
+    diagnostico.produto_principal = produto_principal or None
+    diagnostico.compra_de = compra_de or None
+    diagnostico.vende_para = vende_para or None
+    diagnostico.parcerias_instituicoes = parcerias_instituicoes or None
+    diagnostico.funcionarios_clt = int(funcionarios_clt) if funcionarios_clt else None
+    diagnostico.terceirizados = int(terceirizados) if terceirizados else None
+    diagnostico.aprendizes = int(aprendizes) if aprendizes else None
+    diagnostico.colaboradores_pcd = int(colaboradores_pcd) if colaboradores_pcd else None
+    diagnostico.investimentos_recentes = investimentos_recentes or None
+    diagnostico.pretende_investir = pretende_investir == "sim"
+    diagnostico.areas_investimento = areas_investimento or None
+    diagnostico.tecnologias_utilizadas = tecnologias_utilizadas or None
+    diagnostico.desenvolve_novos_produtos = desenvolve_novos_produtos == "sim"
+    diagnostico.desenvolve_novos_processos = desenvolve_novos_processos == "sim"
+    diagnostico.possui_setor_pd = possui_setor_pd == "sim"
+    diagnostico.possui_projetos_inovacao = possui_projetos_inovacao == "sim"
+    diagnostico.possui_patente = possui_patente == "sim"
+    diagnostico.possui_registro_software = possui_registro_software == "sim"
+    diagnostico.possui_marca_registrada = possui_marca_registrada == "sim"
+    diagnostico.recebeu_recursos_publicos_inovacao = recebeu_recursos_publicos_inovacao == "sim"
+    diagnostico.praticas_ambientais = praticas_ambientais or None
+    diagnostico.importa = importa == "sim"
+    diagnostico.possui_clientes_internacionais = possui_clientes_internacionais == "sim"
+    diagnostico.participa_feiras_internacionais = participa_feiras_internacionais == "sim"
+    diagnostico.interesse_exportar = interesse_exportar == "sim"
+    diagnostico.necessidades_empresa = necessidades_empresa or None
+    diagnostico.outras_demandas = outras_demandas or None
+
+    elos_validos = {Elo(v) for v in elos if v in {e.value for e in Elo}}
+    sincronizar_elos(db, entidade, convite.campanha.cpl_id, list(elos_validos))
+    vincular_responsavel(
+        db,
+        entidade,
+        convite.campanha.cpl_id,
+        responsavel_nome,
+        responsavel_cargo,
+        responsavel_telefone,
+        responsavel_whatsapp,
+        responsavel_email,
+    )
 
     convite.respondido = True
     convite.respondido_em = datetime.now()
+    convite.consentimento_lgpd = True
+    convite.consentimento_em = datetime.now(UTC)
     db.flush()
     registrar_snapshot_diagnostico(db, diagnostico)
     db.commit()

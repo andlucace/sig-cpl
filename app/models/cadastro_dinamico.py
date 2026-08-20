@@ -53,6 +53,56 @@ class DiagnosticoCadastral(TimestampedBase):
     # mesmo raciocínio de `quantidade` em `AquisicaoProjeto`).
     capacidade_produtiva: Mapped[str | None] = mapped_column(Text)
 
+    # RF-012: campos adicionados a partir do gabarito real da planilha
+    # "CPLS - FORMS.xlsx" ("Cadastro de Empresas Participantes das CPLs"),
+    # anexado ao projeto numa sessão posterior à criação do modelo — por
+    # isso ficam depois dos campos originais, mesmo raciocínio das seções
+    # RF-046/047 acima. Campos de seleção única/múltipla cujas opções
+    # exatas não vieram no gabarito (ex.: "situação em relação à CPL")
+    # ficam como texto livre, não enum, pra não inventar opções que a
+    # planilha real não confirmou.
+    situacao_vinculo_cpl: Mapped[str | None] = mapped_column(String(255))
+    materia_prima_principal: Mapped[str | None] = mapped_column(Text)
+    produto_principal: Mapped[str | None] = mapped_column(Text)
+    compra_de: Mapped[str | None] = mapped_column(Text)
+    vende_para: Mapped[str | None] = mapped_column(Text)
+    parcerias_instituicoes: Mapped[str | None] = mapped_column(Text)
+    # Capital humano — quebra granular do quadro de pessoal (além do já
+    # existente empregos_diretos/indiretos, que ficam como estavam).
+    funcionarios_clt: Mapped[int | None] = mapped_column(Integer)
+    terceirizados: Mapped[int | None] = mapped_column(Integer)
+    aprendizes: Mapped[int | None] = mapped_column(Integer)
+    colaboradores_pcd: Mapped[int | None] = mapped_column(Integer)
+    # Dados econômicos — investimento.
+    investimentos_recentes: Mapped[str | None] = mapped_column(Text)
+    pretende_investir: Mapped[bool | None] = mapped_column(Boolean)
+    areas_investimento: Mapped[str | None] = mapped_column(Text)
+    # Transformação digital — tecnologias em uso, distinto do
+    # nivel_digitalizacao (que é um nível agregado, não uma lista).
+    tecnologias_utilizadas: Mapped[str | None] = mapped_column(Text)
+    # Inovação granular — complementa realiza_inovacao/realiza_pd, que
+    # ficam como estavam (pergunta agregada já usada em outras telas).
+    desenvolve_novos_produtos: Mapped[bool | None] = mapped_column(Boolean)
+    desenvolve_novos_processos: Mapped[bool | None] = mapped_column(Boolean)
+    possui_setor_pd: Mapped[bool | None] = mapped_column(Boolean)
+    possui_projetos_inovacao: Mapped[bool | None] = mapped_column(Boolean)
+    possui_patente: Mapped[bool | None] = mapped_column(Boolean)
+    possui_registro_software: Mapped[bool | None] = mapped_column(Boolean)
+    possui_marca_registrada: Mapped[bool | None] = mapped_column(Boolean)
+    recebeu_recursos_publicos_inovacao: Mapped[bool | None] = mapped_column(Boolean)
+    # Sustentabilidade — complementa adota_praticas_sustentabilidade/
+    # descricao_sustentabilidade, que ficam como estavam.
+    praticas_ambientais: Mapped[str | None] = mapped_column(Text)
+    # Internacionalização — complementa exporta/mercados_exportacao, que
+    # ficam como estavam.
+    importa: Mapped[bool | None] = mapped_column(Boolean)
+    possui_clientes_internacionais: Mapped[bool | None] = mapped_column(Boolean)
+    participa_feiras_internacionais: Mapped[bool | None] = mapped_column(Boolean)
+    interesse_exportar: Mapped[bool | None] = mapped_column(Boolean)
+    # Demandas da empresa.
+    necessidades_empresa: Mapped[str | None] = mapped_column(Text)
+    outras_demandas: Mapped[str | None] = mapped_column(Text)
+
     entidade: Mapped["Entidade"] = relationship()
 
 
@@ -116,6 +166,14 @@ class CampanhaConvite(Base):
     email_enviado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     email_destinatarios: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     email_erro: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # Consentimento LGPD — planilha "CPLS - FORMS.xlsx", seção "Declarações
+    # e consentimentos", que o formulário público de atualização não pedia
+    # antes. Mesmo raciocínio de `SolicitacaoAdesao.consentimento_lgpd`
+    # (app/models/adesao.py): obrigatório pra registrar a resposta,
+    # `consentimento_em` congela o momento da submissão.
+    consentimento_lgpd: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    consentimento_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     campanha: Mapped["CampanhaCadastral"] = relationship(back_populates="convites")
     entidade: Mapped["Entidade"] = relationship()

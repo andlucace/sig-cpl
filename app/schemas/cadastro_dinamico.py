@@ -35,6 +35,35 @@ class DiagnosticoCadastralUpdate(BaseModel):
     certificacoes: str | None = None
     nivel_digitalizacao: str | None = None
     capacidade_produtiva: str | None = None
+    situacao_vinculo_cpl: str | None = None
+    materia_prima_principal: str | None = None
+    produto_principal: str | None = None
+    compra_de: str | None = None
+    vende_para: str | None = None
+    parcerias_instituicoes: str | None = None
+    funcionarios_clt: int | None = None
+    terceirizados: int | None = None
+    aprendizes: int | None = None
+    colaboradores_pcd: int | None = None
+    investimentos_recentes: str | None = None
+    pretende_investir: bool | None = None
+    areas_investimento: str | None = None
+    tecnologias_utilizadas: str | None = None
+    desenvolve_novos_produtos: bool | None = None
+    desenvolve_novos_processos: bool | None = None
+    possui_setor_pd: bool | None = None
+    possui_projetos_inovacao: bool | None = None
+    possui_patente: bool | None = None
+    possui_registro_software: bool | None = None
+    possui_marca_registrada: bool | None = None
+    recebeu_recursos_publicos_inovacao: bool | None = None
+    praticas_ambientais: str | None = None
+    importa: bool | None = None
+    possui_clientes_internacionais: bool | None = None
+    participa_feiras_internacionais: bool | None = None
+    interesse_exportar: bool | None = None
+    necessidades_empresa: str | None = None
+    outras_demandas: str | None = None
 
 
 class DiagnosticoCadastralRead(DiagnosticoCadastralUpdate):

@@ -2691,6 +2691,59 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
       zero cobertura antes desta fatia). Suíte completa em 171
       (144 + 27), ruff limpo.
 
+55. **Gap-fill contra o gabarito real da planilha "CPLS - FORMS.xlsx"
+    (RF-012)** — a planilha real ("Cadastro de Empresas Participantes das
+    CPLs"), citada desde o RF-012/013 como "nunca anexada ao projeto", foi
+    finalmente anexada (PDF estruturado, 14 seções/59 campos/50
+    obrigatórios). Pedido explícito: "na campanha de atualização
+    cadastral, adicionar informações que por acaso não estejam no
+    documento em anexo." Reli `Entidade`/`DiagnosticoCadastral`/
+    `EntidadeElo`/`Pessoa` campo a campo contra as 14 seções do PDF antes
+    de escrever qualquer código — achado ~29 campos ausentes, detalhados
+    no README (seção "Gap-fill contra o gabarito real da planilha 'CPLS -
+    FORMS.xlsx'"). Decisões de modelagem que valem registrar aqui (o
+    README tem a lista completa dos campos):
+    - **Elos da cadeia no formulário público**: em vez de duplicar como
+      texto livre em `DiagnosticoCadastral`, o formulário público ganhou
+      checkboxes (um por `Elo`) que chamam uma função nova,
+      `sincronizar_elos()` (`app/services/campanhas.py`) — ativa os elos
+      marcados e desativa (soft) os desmarcados, reaproveitando
+      `EntidadeElo` (RF-009) que já existia mas nunca tinha caminho de
+      escrita público, só manual por quem administra.
+    - **Responsável pela empresa**: o formulário público nunca pedia
+      nenhum dado de "quem preencheu" (diferente do formulário de F01/
+      adesão, que já pede). Copiei o mesmo raciocínio de
+      `adesao.py::_vincular_pessoa_contato` — nome/cargo/telefone/
+      WhatsApp/e-mail viram um `PessoaVinculo` (papel `EMPRESA_MEMBRO`),
+      idempotente por e-mail. `Pessoa` ganhou `whatsapp` (o modelo só
+      tinha `telefone`).
+    - **Consentimento LGPD obrigatório**: mesmo padrão de
+      `SolicitacaoAdesao.consentimento_lgpd`, mas o formulário de
+      campanha nunca tinha essa exigência — `CampanhaConvite` ganhou
+      `consentimento_lgpd`/`consentimento_em`; submissão sem o checkbox
+      marcado volta 400, mesmo tratamento de erro que a validação de UF
+      já usava (função `_erro()` extraída no handler pra não duplicar o
+      contexto de re-render nos dois casos).
+    - **Campos de opção sem lista confirmada viraram texto livre**: ex.
+      "situação da empresa em relação à CPL" tem "seleção única, 6
+      opções" no PDF, mas as opções em si não vieram — decisão
+      deliberada de não inventar um enum com valores que a planilha real
+      não confirmou (mesmo raciocínio já usado antes pra
+      `mercados_exportacao`, `interesse_comissoes` etc.).
+    - Migração `0a0be2859e14`: gerada via `alembic revision
+      --autogenerate` (rápido o suficiente pra valer a pena com Postgres
+      local já rodando via `docker compose`) — só precisou de um ajuste
+      manual, `server_default=sa.text('false')` na nova coluna `NOT
+      NULL` `campanha_convites.consentimento_lgpd` (mesmo cuidado do
+      item 54 com colunas booleanas obrigatórias em tabela já populada).
+    - 10 testes novos em `tests/test_gabarito_cpls_forms.py`
+      (endereço estruturado, elos sincronizando/dessincronizando,
+      responsável virando `PessoaVinculo`, capital humano/inovação/
+      internacionalização granulares, consentimento obrigatório) — mais
+      2 testes existentes de `test_diagnostico.py` que passaram a
+      enviar `consentimento_lgpd=sim` (quebravam com a nova exigência).
+      Suíte completa em 181 (171 + 10), ruff limpo.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for

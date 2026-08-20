@@ -19,6 +19,7 @@ class Pessoa(TimestampedBase):
     cpf: Mapped[str | None] = mapped_column(String(14), index=True)
     email: Mapped[str | None] = mapped_column(String(255), index=True)
     telefone: Mapped[str | None] = mapped_column(String(30))
+    whatsapp: Mapped[str | None] = mapped_column(String(30))
 
 
 class PessoaVinculo(Base):

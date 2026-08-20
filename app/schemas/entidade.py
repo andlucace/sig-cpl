@@ -17,6 +17,11 @@ class EntidadeCreate(BaseModel):
     municipio: str | None = None
     uf: str | None = None
     endereco: str | None = None
+    cep: str | None = None
+    numero: str | None = None
+    complemento: str | None = None
+    bairro: str | None = None
+    possui_filiais: bool | None = None
     email: EmailStr | None = None
 
 
@@ -32,6 +37,11 @@ class EntidadeRead(BaseModel):
     municipio: str | None
     uf: str | None
     endereco: str | None = None
+    cep: str | None = None
+    numero: str | None = None
+    complemento: str | None = None
+    bairro: str | None = None
+    possui_filiais: bool | None = None
     email: str | None = None
     latitude: float | None = None
     longitude: float | None = None

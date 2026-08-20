@@ -2,6 +2,27 @@
 {% block title %}SIG-CPL — Atualização cadastral{% endblock %}
 {% block nav %}{% endblock %}
 {% block content %}
+    {% macro simnao(nome, valor, rotulo, col='col-md-4') %}
+        <div class="{{ col }}">
+            <label class="form-label">{{ rotulo }}</label>
+            <select class="form-select" name="{{ nome }}">
+                <option value="nao" {% if not valor %}selected{% endif %}>Não</option>
+                <option value="sim" {% if valor %}selected{% endif %}>Sim</option>
+            </select>
+        </div>
+    {% endmacro %}
+    {% macro texto(nome, valor, rotulo, col='col-12', placeholder='') %}
+        <div class="{{ col }}">
+            <label class="form-label">{{ rotulo }}</label>
+            <input type="text" class="form-control" name="{{ nome }}" value="{{ valor or '' }}" {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}>
+        </div>
+    {% endmacro %}
+    {% macro numero(nome, valor, rotulo, col='col-md-3') %}
+        <div class="{{ col }}">
+            <label class="form-label">{{ rotulo }}</label>
+            <input type="number" min="0" class="form-control" name="{{ nome }}" value="{{ valor if valor is not none else '' }}">
+        </div>
+    {% endmacro %}
     <div class="row justify-content-center">
         <div class="col-12 col-lg-8">
             <div class="mb-4">
@@ -38,8 +59,50 @@
                             <input type="text" class="form-control" name="uf" maxlength="2" value="{{ entidade.uf or '' }}">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Endereço</label>
+                            <label class="form-label">Endereço (rua/av.)</label>
                             <input type="text" class="form-control" name="endereco" value="{{ entidade.endereco or '' }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">CEP</label>
+                            <input type="text" class="form-control" name="cep" value="{{ entidade.cep or '' }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Número</label>
+                            <input type="text" class="form-control" name="numero" value="{{ entidade.numero or '' }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Complemento</label>
+                            <input type="text" class="form-control" name="complemento" value="{{ entidade.complemento or '' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Bairro</label>
+                            <input type="text" class="form-control" name="bairro" value="{{ entidade.bairro or '' }}">
+                        </div>
+                        {{ simnao('possui_filiais', entidade.possui_filiais, 'Possui filiais?') }}
+                    </div>
+
+                    <h2 class="h6 text-body-secondary text-uppercase">Responsável pela empresa</h2>
+                    <p class="text-body-secondary small">Quem está preenchendo esta atualização em nome da empresa.</p>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label">Nome</label>
+                            <input type="text" class="form-control" name="responsavel_nome">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Cargo</label>
+                            <input type="text" class="form-control" name="responsavel_cargo">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">E-mail</label>
+                            <input type="email" class="form-control" name="responsavel_email">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Telefone</label>
+                            <input type="text" class="form-control" name="responsavel_telefone">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">WhatsApp</label>
+                            <input type="text" class="form-control" name="responsavel_whatsapp">
                         </div>
                     </div>
 
@@ -187,6 +250,77 @@
                                 {% endfor %}
                             </select>
                         </div>
+                        {{ texto('praticas_ambientais', (diagnostico.praticas_ambientais or '') if diagnostico else '', 'Quais práticas ambientais a empresa adota?') }}
+                    </div>
+
+                    <h2 class="h6 text-body-secondary text-uppercase mt-4">Participação na cadeia produtiva</h2>
+                    <div class="row g-3">
+                        {{ texto('situacao_vinculo_cpl', (diagnostico.situacao_vinculo_cpl or '') if diagnostico else '', 'Situação da empresa em relação à CPL', 'col-md-6') }}
+                        <div class="col-12">
+                            <label class="form-label d-block">Em quais elos da cadeia a empresa atua?</label>
+                            {% for elo in elos %}
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="checkbox" name="elos" value="{{ elo.value }}" id="elo-{{ elo.value }}" {% if elo in elos_ativos %}checked{% endif %}>
+                                    <label class="form-check-label" for="elo-{{ elo.value }}">{{ elo.value.replace('_', ' ') | title }}</label>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        {{ texto('materia_prima_principal', (diagnostico.materia_prima_principal or '') if diagnostico else '', 'Principal matéria-prima utilizada', 'col-md-6') }}
+                        {{ texto('produto_principal', (diagnostico.produto_principal or '') if diagnostico else '', 'Principal produto fabricado', 'col-md-6') }}
+                        {{ texto('compra_de', (diagnostico.compra_de or '') if diagnostico else '', 'Compra principalmente de', 'col-md-6') }}
+                        {{ texto('vende_para', (diagnostico.vende_para or '') if diagnostico else '', 'Vende principalmente para', 'col-md-6') }}
+                        {{ texto('parcerias_instituicoes', (diagnostico.parcerias_instituicoes or '') if diagnostico else '', 'Possui parceria com quais instituições?') }}
+                    </div>
+
+                    <h2 class="h6 text-body-secondary text-uppercase mt-4">Capital humano</h2>
+                    <div class="row g-3">
+                        {{ numero('funcionarios_clt', diagnostico.funcionarios_clt if diagnostico else none, 'Funcionários CLT') }}
+                        {{ numero('terceirizados', diagnostico.terceirizados if diagnostico else none, 'Terceirizados') }}
+                        {{ numero('aprendizes', diagnostico.aprendizes if diagnostico else none, 'Aprendizes') }}
+                        {{ numero('colaboradores_pcd', diagnostico.colaboradores_pcd if diagnostico else none, 'Colaboradores PCD') }}
+                    </div>
+
+                    <h2 class="h6 text-body-secondary text-uppercase mt-4">Investimentos e digitalização</h2>
+                    <div class="row g-3">
+                        {{ texto('investimentos_recentes', (diagnostico.investimentos_recentes or '') if diagnostico else '', 'Principais investimentos realizados recentemente') }}
+                        {{ simnao('pretende_investir', diagnostico.pretende_investir if diagnostico else none, 'Pretende investir nos próximos 24 meses?', 'col-md-4') }}
+                        {{ texto('areas_investimento', (diagnostico.areas_investimento or '') if diagnostico else '', 'Em quais áreas pretende investir?', 'col-md-8') }}
+                        {{ texto('tecnologias_utilizadas', (diagnostico.tecnologias_utilizadas or '') if diagnostico else '', 'Quais tecnologias a empresa utiliza?') }}
+                    </div>
+
+                    <h2 class="h6 text-body-secondary text-uppercase mt-4">Inovação — detalhamento</h2>
+                    <div class="row g-3">
+                        {{ simnao('desenvolve_novos_produtos', diagnostico.desenvolve_novos_produtos if diagnostico else none, 'Desenvolve novos produtos?') }}
+                        {{ simnao('desenvolve_novos_processos', diagnostico.desenvolve_novos_processos if diagnostico else none, 'Desenvolve novos processos?') }}
+                        {{ simnao('possui_setor_pd', diagnostico.possui_setor_pd if diagnostico else none, 'Possui setor de P&D?') }}
+                        {{ simnao('possui_projetos_inovacao', diagnostico.possui_projetos_inovacao if diagnostico else none, 'Possui projetos de inovação?') }}
+                        {{ simnao('possui_patente', diagnostico.possui_patente if diagnostico else none, 'Possui patente?') }}
+                        {{ simnao('possui_registro_software', diagnostico.possui_registro_software if diagnostico else none, 'Possui registro de software?') }}
+                        {{ simnao('possui_marca_registrada', diagnostico.possui_marca_registrada if diagnostico else none, 'Possui marca registrada?') }}
+                        {{ simnao('recebeu_recursos_publicos_inovacao', diagnostico.recebeu_recursos_publicos_inovacao if diagnostico else none, 'Já recebeu recursos públicos para inovação?') }}
+                    </div>
+
+                    <h2 class="h6 text-body-secondary text-uppercase mt-4">Internacionalização — detalhamento</h2>
+                    <div class="row g-3">
+                        {{ simnao('importa', diagnostico.importa if diagnostico else none, 'Importa?') }}
+                        {{ simnao('possui_clientes_internacionais', diagnostico.possui_clientes_internacionais if diagnostico else none, 'Possui clientes internacionais?') }}
+                        {{ simnao('participa_feiras_internacionais', diagnostico.participa_feiras_internacionais if diagnostico else none, 'Participa de feiras internacionais?') }}
+                        {{ simnao('interesse_exportar', diagnostico.interesse_exportar if diagnostico else none, 'Tem interesse em exportar?') }}
+                    </div>
+
+                    <h2 class="h6 text-body-secondary text-uppercase mt-4">Demandas da empresa</h2>
+                    <div class="row g-3">
+                        {{ texto('necessidades_empresa', (diagnostico.necessidades_empresa or '') if diagnostico else '', 'Quais são hoje as principais necessidades da empresa?') }}
+                        {{ texto('outras_demandas', (diagnostico.outras_demandas or '') if diagnostico else '', 'Existe alguma outra demanda importante?') }}
+                    </div>
+
+                    <h2 class="h6 text-body-secondary text-uppercase mt-4">Declarações e consentimento</h2>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="consentimento_lgpd" value="sim" id="consentimento_lgpd" required>
+                        <label class="form-check-label" for="consentimento_lgpd">
+                            Declaro que as informações prestadas são verdadeiras e consinto com o tratamento dos
+                            dados aqui informados pela gestão da CPL, conforme a Lei Geral de Proteção de Dados (LGPD).
+                        </label>
                     </div>
 
                     <button type="submit" class="btn btn-primary mt-4">

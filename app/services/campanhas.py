@@ -14,13 +14,15 @@ destinatários (deduplicados): o e-mail da própria entidade, se
 cadastrado, mais o e-mail de cada pessoa com vínculo vigente com ela
 (`data_fim` nulo ou no futuro)."""
 
+import uuid
 from datetime import UTC, date, datetime
 
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.cadastro_dinamico import CampanhaCadastral, CampanhaConvite
-from app.models.entidade import Entidade
+from app.models.entidade import Entidade, EntidadeElo
+from app.models.enums import Elo, Papel
 from app.models.pessoa import Pessoa, PessoaVinculo
 from app.services.email import enviar_email
 
@@ -95,3 +97,84 @@ def enviar_convite_email(
     db.commit()
     db.refresh(convite)
     return convite
+
+
+def sincronizar_elos(db: Session, entidade: Entidade, cpl_id: uuid.UUID, elos: list[Elo]) -> None:
+    """RF-009/RF-012: ativa os elos selecionados na resposta do formulário
+    público de atualização cadastral e desativa (soft, `ativo=False`) os
+    que não foram selecionados desta vez. Reaproveita `EntidadeElo`
+    (mesmo modelo usado pela classificação de elo feita por quem
+    administra) em vez de duplicar a informação como texto livre em
+    `DiagnosticoCadastral`."""
+
+    existentes = {
+        e.elo: e
+        for e in db.query(EntidadeElo)
+        .filter(EntidadeElo.entidade_id == entidade.id, EntidadeElo.cpl_id == cpl_id)
+        .all()
+    }
+    for elo in Elo:
+        if elo in elos:
+            if elo in existentes:
+                existentes[elo].ativo = True
+            else:
+                db.add(EntidadeElo(entidade_id=entidade.id, cpl_id=cpl_id, elo=elo, ativo=True))
+        elif elo in existentes:
+            existentes[elo].ativo = False
+
+
+def vincular_responsavel(
+    db: Session,
+    entidade: Entidade,
+    cpl_id: uuid.UUID,
+    nome: str | None,
+    cargo: str | None,
+    telefone: str | None,
+    whatsapp: str | None,
+    email: str | None,
+) -> None:
+    """RF-012 (planilha "CPLS - FORMS.xlsx", seção "Responsável pela
+    Empresa"): registra quem respondeu a campanha como `PessoaVinculo` da
+    entidade nesta CPL (papel `EMPRESA_MEMBRO`) — mesmo raciocínio de
+    `adesao.py::_vincular_pessoa_contato`, idempotente por e-mail. Só faz
+    algo se nome e e-mail vierem preenchidos: são os únicos dois campos
+    realmente necessários pra identificar e reaproveitar a `Pessoa`."""
+
+    if not nome or not email:
+        return
+
+    pessoa = db.query(Pessoa).filter(Pessoa.email == email).first()
+    if pessoa is None:
+        pessoa = Pessoa(nome=nome, email=email, telefone=telefone, whatsapp=whatsapp)
+        db.add(pessoa)
+        db.flush()
+    else:
+        pessoa.nome = nome
+        if telefone:
+            pessoa.telefone = telefone
+        if whatsapp:
+            pessoa.whatsapp = whatsapp
+
+    vinculo = (
+        db.query(PessoaVinculo)
+        .filter(
+            PessoaVinculo.pessoa_id == pessoa.id,
+            PessoaVinculo.entidade_id == entidade.id,
+            PessoaVinculo.cpl_id == cpl_id,
+            PessoaVinculo.data_fim.is_(None),
+        )
+        .first()
+    )
+    if vinculo is None:
+        db.add(
+            PessoaVinculo(
+                pessoa_id=pessoa.id,
+                entidade_id=entidade.id,
+                cpl_id=cpl_id,
+                papel=Papel.EMPRESA_MEMBRO,
+                cargo=cargo,
+                data_inicio=date.today(),
+            )
+        )
+    elif cargo:
+        vinculo.cargo = cargo

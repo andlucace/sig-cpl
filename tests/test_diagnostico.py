@@ -43,6 +43,7 @@ def test_atualizacao_publica_grava_compartilha_recursos_e_ods(client, admin_clie
             "compartilha_recursos": "sim",
             "recursos_compartilhados": "Galpão e maquinário compartilhados",
             "ods_relacionados": "ODS 9 — Indústria, inovação e infraestrutura",
+            "consentimento_lgpd": "sim",
         },
     )
     assert resposta.status_code == 200
@@ -57,7 +58,7 @@ def test_atualizacao_publica_grava_compartilha_recursos_nao(client, admin_client
     cpl_id, entidade_id, token = _cpl_entidade_e_token(admin_client, "C")
     client.post(
         f"/atualizacao/{token}",
-        data={"razao_social": "Empresa Diagnostico C", "compartilha_recursos": "nao"},
+        data={"razao_social": "Empresa Diagnostico C", "compartilha_recursos": "nao", "consentimento_lgpd": "sim"},
     )
     diagnostico = admin_client.get(f"/api/cadastro/entidades/{entidade_id}/diagnostico").json()
     assert diagnostico["compartilha_recursos"] is False

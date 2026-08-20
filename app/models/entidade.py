@@ -38,6 +38,17 @@ class Entidade(TimestampedBase):
     municipio: Mapped[str | None] = mapped_column(String(255))
     uf: Mapped[str | None] = mapped_column(String(2))
     endereco: Mapped[str | None] = mapped_column(String(500))
+    # Campos de endereço estruturado (planilha "CPLS - FORMS.xlsx", seção
+    # "Localização") — `endereco` acima continua sendo o logradouro em
+    # texto livre (rua/av.) usado também pela geocodificação; cep/numero/
+    # complemento/bairro são granularidade adicional, não substituem `endereco`.
+    cep: Mapped[str | None] = mapped_column(String(10))
+    numero: Mapped[str | None] = mapped_column(String(20))
+    complemento: Mapped[str | None] = mapped_column(String(100))
+    bairro: Mapped[str | None] = mapped_column(String(100))
+    # Planilha "CPLS - FORMS.xlsx", seção "Localização": se a empresa
+    # possui unidades/filiais além do endereço principal cadastrado.
+    possui_filiais: Mapped[bool | None] = mapped_column(Boolean)
 
     # RF-011: georreferenciamento — preenchido manualmente ou via
     # geocodificação automática a partir de endereco/municipio/uf
