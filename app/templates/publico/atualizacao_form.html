@@ -17,6 +17,12 @@
             <input type="text" class="form-control" name="{{ nome }}" value="{{ valor or '' }}" {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}>
         </div>
     {% endmacro %}
+    {% macro textarea_campo(nome, valor, rotulo, col='col-12', rows=2) %}
+        <div class="{{ col }}">
+            <label class="form-label">{{ rotulo }}</label>
+            <textarea class="form-control" name="{{ nome }}" rows="{{ rows }}">{{ valor or '' }}</textarea>
+        </div>
+    {% endmacro %}
     {% macro numero(nome, valor, rotulo, col='col-md-3') %}
         <div class="{{ col }}">
             <label class="form-label">{{ rotulo }}</label>
@@ -157,14 +163,8 @@
                             <label class="form-label">Descrição da inovação</label>
                             <textarea class="form-control" name="descricao_inovacao" rows="2">{{ (diagnostico.descricao_inovacao or '') if diagnostico else '' }}</textarea>
                         </div>
-                        <div class="col-12">
-                            <label class="form-label">Mercados de exportação</label>
-                            <input type="text" class="form-control" name="mercados_exportacao" value="{{ (diagnostico.mercados_exportacao or '') if diagnostico else '' }}">
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Interesse em comissões temáticas</label>
-                            <input type="text" class="form-control" name="interesse_comissoes" value="{{ (diagnostico.interesse_comissoes or '') if diagnostico else '' }}">
-                        </div>
+                        {{ textarea_campo('mercados_exportacao', (diagnostico.mercados_exportacao or '') if diagnostico else '', 'Mercados de exportação') }}
+                        {{ textarea_campo('interesse_comissoes', (diagnostico.interesse_comissoes or '') if diagnostico else '', 'Interesse em comissões temáticas') }}
                         <div class="col-md-4">
                             <label class="form-label">Participa de associação/entidade de classe?</label>
                             <select class="form-select" name="participacao_associativa">
@@ -172,10 +172,7 @@
                                 <option value="sim" {% if diagnostico and diagnostico.participacao_associativa %}selected{% endif %}>Sim</option>
                             </select>
                         </div>
-                        <div class="col-md-8">
-                            <label class="form-label">Quais entidades associativas?</label>
-                            <input type="text" class="form-control" name="entidades_associativas" value="{{ (diagnostico.entidades_associativas or '') if diagnostico else '' }}">
-                        </div>
+                        {{ textarea_campo('entidades_associativas', (diagnostico.entidades_associativas or '') if diagnostico else '', 'Quais entidades associativas?', 'col-md-8') }}
                         <div class="col-md-4">
                             <label class="form-label">Compartilha recursos com outras empresas?</label>
                             <select class="form-select" name="compartilha_recursos">
@@ -183,15 +180,15 @@
                                 <option value="sim" {% if diagnostico and diagnostico.compartilha_recursos %}selected{% endif %}>Sim</option>
                             </select>
                         </div>
-                        <div class="col-md-8">
-                            <label class="form-label">Quais recursos compartilhados?</label>
-                            <input type="text" class="form-control" name="recursos_compartilhados" value="{{ (diagnostico.recursos_compartilhados or '') if diagnostico else '' }}">
-                        </div>
+                        {{ textarea_campo('recursos_compartilhados', (diagnostico.recursos_compartilhados or '') if diagnostico else '', 'Quais recursos compartilhados?', 'col-md-8') }}
                         <div class="col-12">
                             <label class="form-label">ODS relacionados (Objetivos de Desenvolvimento Sustentável)</label>
-                            <input type="text" class="form-control" name="ods_relacionados"
-                                   placeholder="ex.: ODS 8 — Trabalho decente e crescimento econômico"
-                                   value="{{ (diagnostico.ods_relacionados or '') if diagnostico else '' }}">
+                            <select class="form-select" name="ods_relacionados" multiple size="10">
+                                {% for opcao in ods_opcoes %}
+                                    <option value="{{ opcao }}" {% if opcao in ods_selecionados %}selected{% endif %}>{{ opcao }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Segure Ctrl (ou Cmd no Mac) para selecionar mais de um ODS.</div>
                         </div>
                     </div>
 
@@ -226,10 +223,7 @@
                                 <option value="sim" {% if diagnostico and diagnostico.possui_contatos_internacionais %}selected{% endif %}>Sim</option>
                             </select>
                         </div>
-                        <div class="col-md-8">
-                            <label class="form-label">Quais países/parceiros?</label>
-                            <input type="text" class="form-control" name="descricao_contatos_internacionais" value="{{ (diagnostico.descricao_contatos_internacionais or '') if diagnostico else '' }}">
-                        </div>
+                        {{ textarea_campo('descricao_contatos_internacionais', (diagnostico.descricao_contatos_internacionais or '') if diagnostico else '', 'Quais países/parceiros?', 'col-md-8') }}
                         <div class="col-md-4">
                             <label class="form-label">Possui certificações?</label>
                             <select class="form-select" name="possui_certificacoes">
@@ -250,7 +244,7 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        {{ texto('praticas_ambientais', (diagnostico.praticas_ambientais or '') if diagnostico else '', 'Quais práticas ambientais a empresa adota?') }}
+                        {{ textarea_campo('praticas_ambientais', (diagnostico.praticas_ambientais or '') if diagnostico else '', 'Quais práticas ambientais a empresa adota?') }}
                     </div>
 
                     <h2 class="h6 text-body-secondary text-uppercase mt-4">Participação na cadeia produtiva</h2>
@@ -265,11 +259,11 @@
                                 </div>
                             {% endfor %}
                         </div>
-                        {{ texto('materia_prima_principal', (diagnostico.materia_prima_principal or '') if diagnostico else '', 'Principal matéria-prima utilizada', 'col-md-6') }}
-                        {{ texto('produto_principal', (diagnostico.produto_principal or '') if diagnostico else '', 'Principal produto fabricado', 'col-md-6') }}
-                        {{ texto('compra_de', (diagnostico.compra_de or '') if diagnostico else '', 'Compra principalmente de', 'col-md-6') }}
-                        {{ texto('vende_para', (diagnostico.vende_para or '') if diagnostico else '', 'Vende principalmente para', 'col-md-6') }}
-                        {{ texto('parcerias_instituicoes', (diagnostico.parcerias_instituicoes or '') if diagnostico else '', 'Possui parceria com quais instituições?') }}
+                        {{ textarea_campo('materia_prima_principal', (diagnostico.materia_prima_principal or '') if diagnostico else '', 'Principal matéria-prima utilizada', 'col-md-6') }}
+                        {{ textarea_campo('produto_principal', (diagnostico.produto_principal or '') if diagnostico else '', 'Principal produto fabricado', 'col-md-6') }}
+                        {{ textarea_campo('compra_de', (diagnostico.compra_de or '') if diagnostico else '', 'Compra principalmente de', 'col-md-6') }}
+                        {{ textarea_campo('vende_para', (diagnostico.vende_para or '') if diagnostico else '', 'Vende principalmente para', 'col-md-6') }}
+                        {{ textarea_campo('parcerias_instituicoes', (diagnostico.parcerias_instituicoes or '') if diagnostico else '', 'Possui parceria com quais instituições?') }}
                     </div>
 
                     <h2 class="h6 text-body-secondary text-uppercase mt-4">Capital humano</h2>
@@ -282,10 +276,10 @@
 
                     <h2 class="h6 text-body-secondary text-uppercase mt-4">Investimentos e digitalização</h2>
                     <div class="row g-3">
-                        {{ texto('investimentos_recentes', (diagnostico.investimentos_recentes or '') if diagnostico else '', 'Principais investimentos realizados recentemente') }}
+                        {{ textarea_campo('investimentos_recentes', (diagnostico.investimentos_recentes or '') if diagnostico else '', 'Principais investimentos realizados recentemente') }}
                         {{ simnao('pretende_investir', diagnostico.pretende_investir if diagnostico else none, 'Pretende investir nos próximos 24 meses?', 'col-md-4') }}
                         {{ texto('areas_investimento', (diagnostico.areas_investimento or '') if diagnostico else '', 'Em quais áreas pretende investir?', 'col-md-8') }}
-                        {{ texto('tecnologias_utilizadas', (diagnostico.tecnologias_utilizadas or '') if diagnostico else '', 'Quais tecnologias a empresa utiliza?') }}
+                        {{ textarea_campo('tecnologias_utilizadas', (diagnostico.tecnologias_utilizadas or '') if diagnostico else '', 'Quais tecnologias a empresa utiliza?') }}
                     </div>
 
                     <h2 class="h6 text-body-secondary text-uppercase mt-4">Inovação — detalhamento</h2>
@@ -310,8 +304,8 @@
 
                     <h2 class="h6 text-body-secondary text-uppercase mt-4">Demandas da empresa</h2>
                     <div class="row g-3">
-                        {{ texto('necessidades_empresa', (diagnostico.necessidades_empresa or '') if diagnostico else '', 'Quais são hoje as principais necessidades da empresa?') }}
-                        {{ texto('outras_demandas', (diagnostico.outras_demandas or '') if diagnostico else '', 'Existe alguma outra demanda importante?') }}
+                        {{ textarea_campo('necessidades_empresa', (diagnostico.necessidades_empresa or '') if diagnostico else '', 'Quais são hoje as principais necessidades da empresa?') }}
+                        {{ textarea_campo('outras_demandas', (diagnostico.outras_demandas or '') if diagnostico else '', 'Existe alguma outra demanda importante?') }}
                     </div>
 
                     <h2 class="h6 text-body-secondary text-uppercase mt-4">Declarações e consentimento</h2>

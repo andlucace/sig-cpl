@@ -173,13 +173,13 @@ def resumo_cadastral(db: Session, cpl_id: uuid.UUID) -> dict:
         positivos = sum(1 for d in diagnosticos if getattr(d, campo) is True)
         return round(100 * positivos / total_com_diagnostico, 1)
 
-    def contador_lista(campo: str) -> Counter[str]:
+    def contador_lista(campo: str, separador: str = ",") -> Counter[str]:
         contador: Counter[str] = Counter()
         for d in diagnosticos:
             valor = getattr(d, campo)
             if not valor:
                 continue
-            for item in valor.split(","):
+            for item in valor.split(separador):
                 item = item.strip()
                 if item:
                     contador[item] += 1
@@ -199,7 +199,10 @@ def resumo_cadastral(db: Session, cpl_id: uuid.UUID) -> dict:
         "percentual_pd": percentual("realiza_pd"),
         "percentual_exportacao": percentual("exporta"),
         "percentual_associativismo": percentual("participacao_associativa"),
-        "ods_mais_citados": contador_lista("ods_relacionados").most_common(5),
+        # separador "; " — não vírgula: vários títulos oficiais de ODS já
+        # têm vírgula (ex.: "Indústria, inovação e infraestrutura"), que
+        # quebraria a contagem se usasse o mesmo separador de `certificacoes`
+        "ods_mais_citados": contador_lista("ods_relacionados", separador=";").most_common(5),
         "percentual_qualificacao": percentual("oferece_qualificacao_colaboradores"),
         "percentual_sustentabilidade": percentual("adota_praticas_sustentabilidade"),
         "percentual_contatos_internacionais": percentual("possui_contatos_internacionais"),

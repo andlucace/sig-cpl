@@ -32,7 +32,12 @@ class DiagnosticoCadastral(TimestampedBase):
     realiza_inovacao: Mapped[bool | None] = mapped_column(Boolean)
     descricao_inovacao: Mapped[str | None] = mapped_column(Text)
     realiza_pd: Mapped[bool | None] = mapped_column(Boolean)
-    ods_relacionados: Mapped[str | None] = mapped_column(String(255))
+    # Texto com os ODS selecionados, separados por "; " — não vírgula,
+    # porque o próprio título oficial de vários ODS já contém vírgula
+    # (ex.: "Indústria, inovação e infraestrutura"), o que quebraria tanto
+    # a listbox (RF-012) quanto `indicadores.py::contador_lista`, que soma
+    # por outro campo (`certificacoes`) usando vírgula como separador.
+    ods_relacionados: Mapped[str | None] = mapped_column(Text)
     exporta: Mapped[bool | None] = mapped_column(Boolean)
     mercados_exportacao: Mapped[str | None] = mapped_column(Text)
     interesse_comissoes: Mapped[str | None] = mapped_column(Text)

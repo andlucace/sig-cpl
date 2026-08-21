@@ -2098,6 +2098,48 @@ em `/painel/cadastro/entidades/{id}`), mais os schemas Pydantic
   consentimento quebrava as duas submissões de teste que já existiam) —
   suíte completa em 181, sem falhas.
 
+### ODS relacionados virou listbox; 15 campos viraram textarea (RF-012)
+
+Dois ajustes pontuais pedidos na campanha de atualização cadastral:
+
+- **"ODS relacionados" virou uma listbox de seleção múltipla** com os 17
+  Objetivos de Desenvolvimento Sustentável (títulos oficiais da tradução
+  ONU Brasil), em vez de texto livre — `ODS_OPCOES` (`app/web/
+  routes_atualizacao_publica.py`) é uma lista fixa de 17 strings; valor e
+  texto exibido na `<option>` são a mesma string, guardada em
+  `DiagnosticoCadastral.ods_relacionados` (ampliado de `VARCHAR(255)` pra
+  `Text`, migração `8ceb2431f363`) separada por `"; "`.
+  **Não vírgula** — achado ao revisar `indicadores.py::contador_lista`
+  (usada por `ods_mais_citados`): vários títulos oficiais de ODS já têm
+  vírgula própria (ex.: "ODS 9 — Indústria, inovação e infraestrutura",
+  "ODS 16 — Paz, justiça e instituições eficazes"), então separar por
+  vírgula fragmentaria a contagem em pedaços sem sentido
+  ("Indústria" e "inovação e infraestrutura" contados como dois ODS
+  diferentes). `contador_lista` ganhou um parâmetro `separador` (default
+  `","`, preservando o comportamento de `certificacoes_mais_citadas`, que
+  continua separado por vírgula de verdade) e a chamada de
+  `ods_mais_citados` passou a usar `separador=";"`.
+  Reabrir o formulário pré-seleciona os ODS já respondidos (`_ods_
+  selecionados()`, split por `;` + interseção com `ODS_OPCOES` — texto
+  livre legado que não bater exatamente com nenhuma opção simplesmente
+  não pré-seleciona nada, sem perder o dado já salvo).
+- **15 campos de texto viraram `<textarea>`** (pedido explícito, "aceite
+  pulo de linha com Enter"): mercados de exportação, interesse em
+  comissões temáticas, entidades associativas, recursos compartilhados,
+  países/parceiros, práticas ambientais, matéria-prima principal, produto
+  principal, compra de/vende para, parcerias institucionais,
+  investimentos recentes, tecnologias utilizadas, necessidades da empresa
+  e outras demandas. Novo macro Jinja `textarea_campo()` (mesmo padrão de
+  `texto()`/`simnao()`/`numero()` já existentes no template), usado tanto
+  nos 5 campos que ainda eram `<input>` cru quanto nos 10 que já usavam o
+  macro `texto()`.
+- 7 testes novos em `tests/test_ods_e_campos_longos.py` (listbox mostra
+  os 17 ODS, grava múltiplos separados por `;`, ignora ODS não
+  reconhecido, reabre com seleção prévia marcada, campos são `<textarea>`
+  e não `<input>`, grava texto com quebra de linha, `ods_mais_citados`
+  não fragmenta título com vírgula interna) — suíte completa em 188, sem
+  falhas.
+
 ## Portal de transparência (RF-055)
 
 O portal público (`app/web/routes_publico.py`) até aqui só tinha uma página

@@ -15,6 +15,31 @@ from app.web.templates import templates
 
 router = APIRouter(prefix="/atualizacao", tags=["Autopreenchimento público"])
 
+# RF-012: os 17 Objetivos de Desenvolvimento Sustentável da Agenda 2030
+# (títulos oficiais da tradução da ONU Brasil), pra listbox de seleção
+# múltipla — texto e valor são a mesma string, guardada em
+# `DiagnosticoCadastral.ods_relacionados` separada por "; " (não vírgula:
+# vários títulos já têm vírgula, ver comentário no model/indicadores.py).
+ODS_OPCOES = [
+    "ODS 1 — Erradicação da pobreza",
+    "ODS 2 — Fome zero e agricultura sustentável",
+    "ODS 3 — Saúde e bem-estar",
+    "ODS 4 — Educação de qualidade",
+    "ODS 5 — Igualdade de gênero",
+    "ODS 6 — Água potável e saneamento",
+    "ODS 7 — Energia limpa e acessível",
+    "ODS 8 — Trabalho decente e crescimento econômico",
+    "ODS 9 — Indústria, inovação e infraestrutura",
+    "ODS 10 — Redução das desigualdades",
+    "ODS 11 — Cidades e comunidades sustentáveis",
+    "ODS 12 — Consumo e produção responsáveis",
+    "ODS 13 — Ação contra a mudança global do clima",
+    "ODS 14 — Vida na água",
+    "ODS 15 — Vida terrestre",
+    "ODS 16 — Paz, justiça e instituições eficazes",
+    "ODS 17 — Parcerias e meios de implementação",
+]
+
 
 def _elos_ativos(db: Session, entidade_id, cpl_id) -> set[Elo]:
     return {
@@ -23,6 +48,12 @@ def _elos_ativos(db: Session, entidade_id, cpl_id) -> set[Elo]:
         .filter(EntidadeElo.entidade_id == entidade_id, EntidadeElo.cpl_id == cpl_id, EntidadeElo.ativo.is_(True))
         .all()
     }
+
+
+def _ods_selecionados(diagnostico: DiagnosticoCadastral | None) -> set[str]:
+    if diagnostico is None or not diagnostico.ods_relacionados:
+        return set()
+    return {o.strip() for o in diagnostico.ods_relacionados.split(";")} & set(ODS_OPCOES)
 
 
 @router.get("/{token}")
@@ -50,6 +81,8 @@ def form_atualizacao(request: Request, token: str, db: Session = Depends(get_db)
             "diagnostico": diagnostico,
             "elos": Elo,
             "elos_ativos": _elos_ativos(db, convite.entidade_id, convite.campanha.cpl_id),
+            "ods_opcoes": ODS_OPCOES,
+            "ods_selecionados": _ods_selecionados(diagnostico),
         },
     )
 
@@ -79,7 +112,7 @@ def processar_atualizacao(
     entidades_associativas: str | None = Form(None),
     compartilha_recursos: str | None = Form(None),
     recursos_compartilhados: str | None = Form(None),
-    ods_relacionados: str | None = Form(None),
+    ods_relacionados: list[str] = Form([]),
     oferece_qualificacao_colaboradores: str | None = Form(None),
     descricao_qualificacao: str | None = Form(None),
     adota_praticas_sustentabilidade: str | None = Form(None),
@@ -154,6 +187,8 @@ def processar_atualizacao(
                 "diagnostico": diagnostico,
                 "elos": Elo,
                 "elos_ativos": _elos_ativos(db, convite.entidade_id, convite.campanha.cpl_id),
+                "ods_opcoes": ODS_OPCOES,
+                "ods_selecionados": _ods_selecionados(diagnostico),
                 "erro": mensagem,
             },
             status_code=400,
@@ -198,7 +233,8 @@ def processar_atualizacao(
     diagnostico.entidades_associativas = entidades_associativas or None
     diagnostico.compartilha_recursos = compartilha_recursos == "sim"
     diagnostico.recursos_compartilhados = recursos_compartilhados or None
-    diagnostico.ods_relacionados = ods_relacionados or None
+    ods_validos = [o for o in ods_relacionados if o in ODS_OPCOES]
+    diagnostico.ods_relacionados = "; ".join(ods_validos) or None
     diagnostico.oferece_qualificacao_colaboradores = oferece_qualificacao_colaboradores == "sim"
     diagnostico.descricao_qualificacao = descricao_qualificacao or None
     diagnostico.adota_praticas_sustentabilidade = adota_praticas_sustentabilidade == "sim"

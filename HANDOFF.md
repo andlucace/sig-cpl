@@ -2744,6 +2744,44 @@ A sequência de decisões afeta o que é seguro mudar sem quebrar coisas:
       enviar `consentimento_lgpd=sim` (quebravam com a nova exigência).
       Suíte completa em 181 (171 + 10), ruff limpo.
 
+56. **ODS relacionados vira listbox; 15 campos viram textarea (RF-012)** —
+    dois ajustes pontuais na campanha de atualização cadastral, pedidos
+    logo depois do item 55.
+    - **Listbox de ODS**: `ODS_OPCOES`, lista fixa com os 17 Objetivos de
+      Desenvolvimento Sustentável (títulos oficiais, tradução ONU
+      Brasil) em `app/web/routes_atualizacao_publica.py`. Trocado
+      `<input type="text">` por `<select multiple>`.
+    - **Achado no processo, corrigido antes de virar bug**: ia usar
+      vírgula como separador dos ODS selecionados (mesmo padrão de
+      `certificacoes`, "separadas por vírgula"), mas vários títulos
+      oficiais de ODS já têm vírgula própria — "ODS 9 — Indústria,
+      inovação e infraestrutura", "ODS 16 — Paz, justiça e instituições
+      eficazes". `indicadores.py::contador_lista` (usada por
+      `ods_mais_citados`) já existia e sempre separou por vírgula —
+      usar o mesmo separador fragmentaria a contagem ("Indústria"
+      contado como um ODS, "inovação e infraestrutura" como outro).
+      Resolvido com um parâmetro `separador` em `contador_lista`
+      (default `","`, não muda `certificacoes_mais_citadas`) e `ods_
+      relacionados` passou a usar `separador=";"`. `Diagnostico
+      Cadastral.ods_relacionados` ampliado de `VARCHAR(255)` pra `Text`
+      (17 títulos completos selecionados de uma vez passam de 255
+      caracteres) — migração `8ceb2431f363`, só `alter_column`, sem
+      risco de truncar dado existente (toda migração de VARCHAR pra
+      Text é estritamente mais permissiva).
+    - **15 campos viraram `<textarea>`** (pedido explícito, "aceite
+      pulo de linha com Enter"): mercados de exportação, interesse em
+      comissões, entidades associativas, recursos compartilhados,
+      países/parceiros, práticas ambientais, matéria-prima/produto
+      principal, compra de/vende para, parcerias institucionais,
+      investimentos recentes, tecnologias utilizadas, necessidades e
+      outras demandas da empresa. Novo macro Jinja `textarea_campo()`
+      no template público, mesmo padrão dos macros `texto()`/`simnao()`/
+      `numero()` já existentes (item 55) — usado tanto nos 5 campos que
+      ainda eram `<input>` cru (nunca convertidos no item 55) quanto nos
+      10 que já usavam `texto()`.
+    - 7 testes novos em `tests/test_ods_e_campos_longos.py` — suíte
+      completa em 188 (181 + 7), ruff limpo.
+
 **Se for adicionar um novo módulo, o caminho mais previsível é repetir esse
 padrão**: modelos em `app/models/<modulo>.py`, enums novos em
 `app/models/enums.py` (reaproveite os que já existem quando o conceito for
